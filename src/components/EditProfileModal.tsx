@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { X, User, Briefcase, Building, Vote, Check, Loader2 } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { X, User, Briefcase, Building, Vote, Check, Loader2, Upload, Camera } from "lucide-react";
 import { UserProfile, UserCategory } from "../types.ts";
 
 interface EditProfileModalProps {
@@ -20,6 +20,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [location, setLocation] = useState(userProfile.location);
   const [bio, setBio] = useState(userProfile.bio);
   const [category, setCategory] = useState<UserCategory>(userProfile.category);
+  const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl);
 
   // Citizen
   const [occupation, setOccupation] = useState(userProfile.citizenDetails?.occupation || "");
@@ -33,9 +34,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [position, setPosition] = useState(userProfile.representativeDetails?.position || "");
   const [constituency, setConstituency] = useState(userProfile.representativeDetails?.constituency || "");
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAvatarUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +63,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         location,
         bio,
         category,
+        avatarUrl,
       };
 
       if (category === "citizen") {
@@ -99,17 +115,41 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleFormSubmit} className="p-5 overflow-y-auto custom-scrollbar space-y-3.5">
-          {/* Avatar Picture */}
-          <div className="flex flex-col items-center mb-4">
-            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-600/30 shadow-sm mb-2">
-              <img
-                src={userProfile.avatarUrl}
-                alt="Avatar"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+          {/* Avatar Picture with Direct File Upload / Camera */}
+          <div className="flex flex-col items-center mb-3">
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-600/40 shadow-sm">
+                <img
+                  src={avatarUrl || userProfile.avatarUrl}
+                  alt="Avatar"
+                  className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-6 h-6 text-white" />
+              </div>
             </div>
-            <span className="text-xs font-bold text-blue-600">Active Profile Image</span>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageFileChange}
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-2 text-xs font-extrabold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Change Profile Picture (Upload / CDN)</span>
+            </button>
           </div>
 
           {/* Full Name */}
@@ -127,7 +167,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
           {/* Username */}
           <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-            <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Username handle</label>
+            <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+              Username handle (@handle)
+            </label>
             <input
               id="edit-username-input"
               type="text"
@@ -152,7 +194,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
           {/* Bio */}
           <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-            <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Bio</label>
+            <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+              Bio / Constituency Vision
+            </label>
             <textarea
               id="edit-bio-input"
               rows={2}
@@ -214,7 +258,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           {/* Dynamic Category Extra Fields */}
           {category === "citizen" && (
             <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors animate-fadeIn">
-              <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Occupation / Vocation</label>
+              <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                Occupation / Vocation
+              </label>
               <input
                 type="text"
                 value={occupation}
@@ -228,7 +274,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           {category === "department" && (
             <div className="space-y-3 animate-fadeIn">
               <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Department Name</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                  Department Name
+                </label>
                 <input
                   type="text"
                   value={deptName}
@@ -239,7 +287,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
 
               <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Designation (Padh)</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                  Designation (Padh)
+                </label>
                 <input
                   type="text"
                   value={designation}
@@ -254,7 +304,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           {category === "representative" && (
             <div className="space-y-3 animate-fadeIn">
               <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Political Party Name</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                  Political Party Name
+                </label>
                 <input
                   type="text"
                   value={party}
@@ -265,23 +317,27 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
 
               <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Position (Padh)</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                  Position (Padh)
+                </label>
                 <input
                   type="text"
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}
-                  placeholder="e.g. Member of Parliament (MP), MLA"
+                  placeholder="e.g. Member of Legislative Assembly (MLA)"
                   className="w-full text-sm text-slate-900 bg-transparent focus:outline-none font-semibold"
                 />
               </div>
 
               <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 focus-within:bg-white focus-within:border-blue-500 transition-colors">
-                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">Constituency (Kshetr)</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-0.5">
+                  Constituency (Kshetr)
+                </label>
                 <input
                   type="text"
                   value={constituency}
                   onChange={(e) => setConstituency(e.target.value)}
-                  placeholder="e.g. Gurugram, New Delhi, Varanasi"
+                  placeholder="e.g. Gurugram, Ranchi East, New Delhi"
                   className="w-full text-sm text-slate-900 bg-transparent focus:outline-none font-semibold"
                 />
               </div>
@@ -294,12 +350,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               id="save-profile-btn"
               type="submit"
               disabled={isSaving}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving Profile Updates...</span>
+                  <span>Saving Profile Configuration...</span>
                 </>
               ) : (
                 <span>Save Profile Configuration</span>

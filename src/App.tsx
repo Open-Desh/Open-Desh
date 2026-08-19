@@ -12,6 +12,7 @@ import { EnterpriseTelemetryView } from "./components/EnterpriseTelemetryView.ts
 import { SearchHubView } from "./components/SearchHubView.tsx";
 import { ConnectHubView } from "./components/ConnectHubView.tsx";
 import { CreateReportModal } from "./components/CreateReportModal.tsx";
+import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import {
   UserProfile,
   ReportIssue,
@@ -79,10 +80,10 @@ export default function App() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  const navigateTo = (view: string) => {
+  const navigateTo = (view: string, resetProfile = true) => {
     setCurrentView(view);
     window.location.hash = `#${view}`;
-    if (view === "profile") {
+    if (view === "profile" && resetProfile) {
       setSelectedViewingProfile(null);
     }
   };
@@ -134,6 +135,11 @@ export default function App() {
     text: string;
     category: IssueCategory;
     imageUrl?: string;
+    images?: string[];
+    structuredDetails?: Record<string, string>;
+    taggedOfficers?: string[];
+    taggedLeaders?: string[];
+    urgencyLevel?: "Normal" | "High Priority" | "Critical Emergency";
     location: {
       lat: number;
       lng: number;
@@ -296,11 +302,38 @@ export default function App() {
     }
   };
 
+  const handleReplyToReview = async (reviewId: string, replyText: string) => {
+    const targetUserId = selectedViewingProfile ? selectedViewingProfile.id : userProfile.id;
+    try {
+      const res = await fetch(`/api/users/${targetUserId}/review/${reviewId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replyText }),
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Reply to review error:", err);
+    }
+  };
+
+  const handleToggleFollow = async (targetUserId: string) => {
+    try {
+      await fetch(`/api/users/${targetUserId}/follow`, {
+        method: "POST",
+      });
+      fetchData();
+    } catch (err) {
+      console.error("Follow error:", err);
+    }
+  };
+
   // Inspect any user's profile dynamically
   const handleSelectUserProfile = async (userId: string) => {
     if (userId === userProfile.id) {
       setSelectedViewingProfile(null);
-      navigateTo("profile");
+      navigateTo("profile", true);
       return;
     }
 
@@ -309,7 +342,7 @@ export default function App() {
       if (res.ok) {
         const targetProfile: UserProfile = await res.json();
         setSelectedViewingProfile(targetProfile);
-        navigateTo("profile");
+        navigateTo("profile", false);
       }
     } catch (err) {
       console.error("Failed to load user profile:", err);
@@ -334,18 +367,18 @@ export default function App() {
         termYears: "2024-2029",
         legislativeBody: "State Assembly",
       },
-      followersCount: 255000,
-      followingCount: 12,
+      followersCount: leader.category === "ruling" ? 380000 : 210000,
+      followingCount: 18,
       postsCount: 8235,
       systemScore: leader.systemScore,
       publicRating: leader.publicRating,
-      reviewsCount: leader.reviewsCount,
-      reviews: leader.reviews,
+      reviewsCount: leader.reviewsCount || 14000,
+      reviews: leader.reviews || [],
       verified: true,
       isFollowing: false,
     };
     setSelectedViewingProfile(leaderProfile);
-    navigateTo("profile");
+    navigateTo("profile", false);
   };
 
   const bookmarkedReports = reports.filter((r) =>
@@ -374,13 +407,15 @@ export default function App() {
           isCollapsed ? "md:ml-20" : "md:ml-[260px]"
         }`}
       >
-        {/* Navigation Header */}
-        <Header
-          currentView={currentView}
-          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-          onNavigate={navigateTo}
-          userProfile={userProfile}
-        />
+        {/* Navigation Header - Rendered on dashboard/infrastructure/connect etc., but Profile, Settings, Search & Compose uses their own integrated X-style header */}
+        {currentView !== "profile" && currentView !== "settings" && currentView !== "search" && currentView !== "compose" && (
+          <Header
+            currentView={currentView}
+            onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+            onNavigate={navigateTo}
+            userProfile={userProfile}
+          />
+        )}
 
         {/* View Switcher Routing */}
         <main id="app-root" className="flex-1 w-full bg-slate-100/50 min-h-screen">
@@ -393,9 +428,21 @@ export default function App() {
               onBookmark={handleBookmark}
               onReply={handleReply}
               onUpdateStatus={handleUpdateStatus}
-              onOpenCreateModal={() => setIsCreateModalOpen(true)}
+              onOpenCreateModal={() => navigateTo("compose")}
               onSelectUser={handleSelectUserProfile}
               loading={loadingReports}
+            />
+          )}
+
+          {currentView === "compose" && (
+            <ComposeGrievanceView
+              userProfile={userProfile}
+              leaders={leaders}
+              onCancel={() => navigateTo("dashboard")}
+              onSubmit={async (data) => {
+                await handleCreateReport(data);
+                navigateTo("dashboard");
+              }}
             />
           )}
 
@@ -428,6 +475,7 @@ export default function App() {
 
           {currentView === "profile" && (
             <ProfileView
+              key={activeProfileToRender.id}
               userProfile={activeProfileToRender}
               activeUser={userProfile}
               userReports={reports.filter(
@@ -444,6 +492,8 @@ export default function App() {
               onRateUser={async (rating, comment) => {
                 await handleRateUser(activeProfileToRender.id, rating, comment);
               }}
+              onReplyToReview={handleReplyToReview}
+              onToggleFollow={handleToggleFollow}
               onNavigateToPost={(reportId) => {
                 navigateTo("dashboard");
               }}
@@ -456,6 +506,11 @@ export default function App() {
               activeUser={userProfile}
               userReports={reports.filter((r) => r.authorId === userProfile.id)}
               onUpdateProfile={handleUpdateProfile}
+              onRateUser={async (rating, comment) => {
+                await handleRateUser(userProfile.id, rating, comment);
+              }}
+              onReplyToReview={handleReplyToReview}
+              onToggleFollow={handleToggleFollow}
             />
           )}
 
@@ -464,7 +519,15 @@ export default function App() {
               reports={reports}
               leaders={leaders}
               projects={infrastructure}
+              userProfile={userProfile}
               onNavigate={navigateTo}
+              onSelectUser={handleSelectUserProfile}
+              onSelectLeaderProfile={handleSelectLeaderProfile}
+              onLikeReport={handleLikeReport}
+              onReReport={handleReReport}
+              onBookmark={handleBookmark}
+              onReply={handleReply}
+              onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
             />
           )}
 
@@ -476,12 +539,14 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <BottomNav
-        currentView={currentView}
-        onNavigate={navigateTo}
-        onOpenCreateReport={() => setIsCreateModalOpen(true)}
-      />
+      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose) */}
+      {currentView !== "compose" && (
+        <BottomNav
+          currentView={currentView}
+          onNavigate={navigateTo}
+          onOpenCreateReport={() => navigateTo("compose")}
+        />
+      )}
 
       {/* Create Grievance Report Modal */}
       <CreateReportModal

@@ -1,6 +1,6 @@
 {
-  "name": "Omkun Orbit",
-  "description": "Enterprise-grade AI Civic Workspace, Leader Performance Tracker & Scalable Governance Platform.",
+  "name": "Open Nation",
+  "description": "Enterprise-grade Civic Governance Platform, Leader Performance Tracker & Transparency Hub.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

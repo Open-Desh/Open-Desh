@@ -16,6 +16,28 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "",
 });
 
+// Helper for resilient server-side Gemini content generation with multi-model fallback
+async function generateGeminiSafe(promptText: string): Promise<string | null> {
+  if (!process.env.GEMINI_API_KEY) return null;
+
+  const candidateModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.7-flash"];
+
+  for (const modelName of candidateModels) {
+    try {
+      const res = await ai.models.generateContent({
+        model: modelName,
+        contents: promptText,
+      });
+      if (res.text) {
+        return res.text;
+      }
+    } catch (err: any) {
+      console.warn(`Gemini model ${modelName} unavailable (${err?.status || err?.message}), trying next fallback...`);
+    }
+  }
+  return null;
+}
+
 // Primary In-Memory Database Store (Enterprise Scalable Cache)
 let currentUserProfile: UserProfile = {
   id: "user_nitesh_001",
@@ -361,6 +383,87 @@ let leadersDatabase: Leader[] = [
     recentPromises: [],
     reviews: [],
   },
+  {
+    id: "leader_banna",
+    name: "Banna Gupta",
+    username: "bannagupta_inc",
+    title: "Cabinet Minister (Health & Disaster Mgmt)",
+    party: "INC / Coalition",
+    partyColor: "bg-teal-600 text-white",
+    constituency: "Jamshedpur West, Jharkhand",
+    location: "Jharkhand",
+    websiteUrl: "https://health.jharkhand.gov.in",
+    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80",
+    coverImage: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&auto=format&fit=crop&q=80",
+    bio: "Supervising district hospital modernization, emergency trauma care units, and Ayushman Bharat claim disbursements.",
+    category: "ruling",
+    systemScore: 86,
+    publicRating: 4.5,
+    totalVotes: "195K",
+    reviewsCount: 195000,
+    promisesFulfilled: 28,
+    promisesInProgress: 9,
+    promisesUnfulfilled: 3,
+    promisesTotal: 40,
+    keyFocus: ["MGM Medical College Upgrade", "Dialysis Centers in 24 Districts", "108 Ambulance Network"],
+    recentPromises: [
+      {
+        id: "p_b1",
+        title: "Free Diagnostics in Sub-Divisional Hospitals",
+        description: "56 pathology tests made free of cost for all BPL & Ayushman families.",
+        status: "Fulfilled",
+        date: "Completed 2025",
+        budget: "₹85 Cr",
+      },
+    ],
+    reviews: [
+      {
+        id: "rev_bg_1",
+        authorId: "usr_201",
+        authorName: "Anjali Kumari",
+        rating: 5,
+        comment: "MGM hospital OPD response time improved dramatically after surprise inspection.",
+        date: "3 days ago",
+        verifiedVoter: true,
+      },
+    ],
+  },
+  {
+    id: "leader_cpsingh",
+    name: "C. P. Singh",
+    username: "cpsingh_mla",
+    title: "Senior MLA & Former Urban Minister",
+    party: "BJP",
+    partyColor: "bg-orange-600 text-white",
+    constituency: "Ranchi Urban, Jharkhand",
+    location: "Jharkhand",
+    websiteUrl: "https://twitter.com/cpsinghbjp",
+    image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80",
+    coverImage: "https://images.unsplash.com/photo-1477959858617-67f30bc75b82?w=1200&auto=format&fit=crop&q=80",
+    bio: "Advocating for urban drainage masterplan, municipal trade license reforms, and smart city infrastructure transparency.",
+    category: "opposition",
+    systemScore: 78,
+    publicRating: 4.0,
+    totalVotes: "160K",
+    reviewsCount: 160000,
+    promisesFulfilled: 18,
+    promisesInProgress: 6,
+    promisesUnfulfilled: 7,
+    promisesTotal: 31,
+    keyFocus: ["Harmu River Rejuvenation", "Flyover Quality Audit", "Municipal Property Tax Ease"],
+    recentPromises: [],
+    reviews: [
+      {
+        id: "rev_cp_1",
+        authorId: "usr_202",
+        authorName: "Sandeep Agarwal",
+        rating: 4,
+        comment: "Regular constituency jan-darbar hearings in Upper Bazar.",
+        date: "5 days ago",
+        verifiedVoter: true,
+      },
+    ],
+  },
 ];
 
 // Infrastructure Public Works Database
@@ -513,7 +616,7 @@ async function startServer() {
     res.json(user);
   });
 
-  // Rate a User / Leader
+  // Rate a User / Leader (Enforce 1 review per user, update average)
   app.post("/api/users/:identifier/rate", (req, res) => {
     const { identifier } = req.params;
     const { rating, comment } = req.body;
@@ -529,16 +632,31 @@ async function startServer() {
       verifiedVoter: true,
     };
 
-    if (currentUserProfile.id === identifier) {
-      currentUserProfile.reviews = [newReview, ...(currentUserProfile.reviews || [])];
-      currentUserProfile.reviewsCount = (currentUserProfile.reviewsCount || 0) + 1;
+    const targetUser = usersDatabase[identifier] || (currentUserProfile.id === identifier ? currentUserProfile : null);
+    if (targetUser) {
+      targetUser.reviews = targetUser.reviews || [];
+      const existingIdx = targetUser.reviews.findIndex((r) => r.authorId === currentUserProfile.id);
+      if (existingIdx >= 0) {
+        targetUser.reviews[existingIdx] = { ...targetUser.reviews[existingIdx], rating: Number(rating), comment: String(comment) };
+      } else {
+        targetUser.reviews = [newReview, ...targetUser.reviews];
+        targetUser.reviewsCount = (targetUser.reviewsCount || 0) + 1;
+      }
+      const totalStars = targetUser.reviews.reduce((acc, r) => acc + r.rating, 0);
+      targetUser.publicRating = Number((totalStars / targetUser.reviews.length).toFixed(1));
     }
 
     // Check leaders
     const leader = leadersDatabase.find((l) => l.id === identifier || l.username === identifier);
     if (leader) {
-      leader.reviews = [newReview, ...(leader.reviews || [])];
-      leader.reviewsCount = (leader.reviewsCount || 0) + 1;
+      leader.reviews = leader.reviews || [];
+      const existingIdx = leader.reviews.findIndex((r) => r.authorId === currentUserProfile.id);
+      if (existingIdx >= 0) {
+        leader.reviews[existingIdx] = { ...leader.reviews[existingIdx], rating: Number(rating), comment: String(comment) };
+      } else {
+        leader.reviews = [newReview, ...leader.reviews];
+        leader.reviewsCount = (leader.reviewsCount || 0) + 1;
+      }
       const totalStars = leader.reviews.reduce((acc, r) => acc + r.rating, 0);
       leader.publicRating = Number((totalStars / leader.reviews.length).toFixed(1));
     }
@@ -546,33 +664,88 @@ async function startServer() {
     res.json({ status: "ok", review: newReview });
   });
 
+  // Reply to Citizen Review (Official Representative Response)
+  app.post("/api/users/:identifier/review/:reviewId/reply", (req, res) => {
+    const { identifier, reviewId } = req.params;
+    const { replyText } = req.body;
+
+    const replyObj = {
+      text: replyText,
+      authorName: currentUserProfile.fullName,
+      date: "Just now",
+    };
+
+    const targetUser = usersDatabase[identifier] || (currentUserProfile.id === identifier ? currentUserProfile : null);
+    if (targetUser && targetUser.reviews) {
+      const review = targetUser.reviews.find((r) => r.id === reviewId);
+      if (review) {
+        review.adminReply = replyObj;
+      }
+    }
+
+    const leader = leadersDatabase.find((l) => l.id === identifier || l.username === identifier);
+    if (leader && leader.reviews) {
+      const review = leader.reviews.find((r) => r.id === reviewId);
+      if (review) {
+        review.adminReply = replyObj;
+      }
+    }
+
+    res.json({ status: "ok", reply: replyObj });
+  });
+
+  // Follow / Unfollow User
+  app.post("/api/users/:identifier/follow", (req, res) => {
+    const { identifier } = req.params;
+    const targetUser = usersDatabase[identifier];
+    let isFollowing = false;
+
+    if (targetUser) {
+      targetUser.isFollowing = !targetUser.isFollowing;
+      targetUser.followersCount = targetUser.isFollowing
+        ? (targetUser.followersCount || 0) + 1
+        : Math.max(0, (targetUser.followersCount || 1) - 1);
+      isFollowing = targetUser.isFollowing;
+    }
+
+    res.json({ status: "ok", isFollowing });
+  });
+
   // 3. Civic Reports Feed
   app.get("/api/reports", (req, res) => {
     res.json(reportsDatabase);
   });
 
-  // Create Report with Gemini AI Auto-Triage
+  // Create Report with Gemini AI Auto-Triage & Cloudflare R2 Multi-Image Evidence
   app.post("/api/reports", async (req, res) => {
     try {
-      const { text, category, imageUrl, location } = req.body;
+      const {
+        text,
+        category,
+        imageUrl,
+        images,
+        structuredDetails,
+        taggedOfficers,
+        taggedLeaders,
+        urgencyLevel,
+        location,
+      } = req.body;
       const newId = `rep_${Date.now()}`;
 
       // Run Server-side Gemini AI Triage
       let aiTriage = {
         departmentTag: `@${category || "PWD"}`,
-        urgencyScore: 7,
-        sentimentSummary: "Citizen grievance logged.",
-        relevantStatute: "Citizen Charter Municipal Act",
-        confidenceScore: 0.95,
+        urgencyScore: urgencyLevel === "Critical Emergency" ? 9 : 7,
+        sentimentSummary: "Citizen grievance logged with verified geo-tag and departmental routing.",
+        relevantStatute: "Citizen Charter Municipal SLA Act, Sec 4",
+        confidenceScore: 0.96,
       };
 
       try {
-        if (process.env.GEMINI_API_KEY) {
-          const aiResponse = await ai.models.generateContent({
-            model: "gemini-3.7-flash",
-            contents: `Analyze this Indian municipal citizen grievance and output a concise JSON object:
+        const rawText = await generateGeminiSafe(`Analyze this Indian municipal citizen grievance and output a concise JSON object:
 Text: "${text}"
 Category: "${category}"
+Location: "${location?.city || "Ranchi, Jharkhand"}"
 
 Format:
 {
@@ -580,16 +753,15 @@ Format:
   "urgencyScore": 1-10,
   "sentimentSummary": "1 concise sentence explaining the civic risk",
   "relevantStatute": "Legal/Civic statute standard"
-}`,
-          });
+}`);
 
-          const rawText = aiResponse.text || "";
+        if (rawText) {
           const jsonMatch = rawText.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
             aiTriage = {
               departmentTag: parsed.departmentTag || aiTriage.departmentTag,
-              urgencyScore: parsed.urgencyScore || 7,
+              urgencyScore: parsed.urgencyScore || (urgencyLevel === "Critical Emergency" ? 9 : 7),
               sentimentSummary: parsed.sentimentSummary || aiTriage.sentimentSummary,
               relevantStatute: parsed.relevantStatute || aiTriage.relevantStatute,
               confidenceScore: 0.98,
@@ -597,8 +769,11 @@ Format:
           }
         }
       } catch (aiErr) {
-        console.warn("AI Triage fallback used:", aiErr);
+        // Silent graceful fallback
       }
+
+      // Collect image array (if multiple passed or single fallback)
+      const imagesList = Array.isArray(images) && images.length > 0 ? images : imageUrl ? [imageUrl] : [];
 
       const newReport: ReportIssue = {
         id: newId,
@@ -615,7 +790,12 @@ Format:
             : "Verified Resident",
         category: category || "Infrastructure",
         text,
-        imageUrl,
+        imageUrl: imagesList[0] || undefined,
+        images: imagesList,
+        structuredDetails: structuredDetails || undefined,
+        taggedOfficers: taggedOfficers || [],
+        taggedLeaders: taggedLeaders || [],
+        urgencyLevel: urgencyLevel || "Normal",
         location: location || { lat: 23.3441, lng: 85.3096, city: "Jharkhand" },
         timestamp: "Just now",
         status: "Open",
@@ -728,6 +908,8 @@ Format:
       const attachRecursive = (list: ThreadedReply[]): boolean => {
         for (const item of list) {
           if (item.id === parentReplyId) {
+            newReply.replyToUsername = item.authorUsername;
+            newReply.replyToName = item.authorName;
             item.replies = [...(item.replies || []), newReply];
             return true;
           }
@@ -802,24 +984,22 @@ Format:
       const { prompt } = req.body;
       if (!prompt) return res.status(400).json({ error: "Prompt required" });
 
-      if (!process.env.GEMINI_API_KEY) {
+      const replyText = await generateGeminiSafe(`You are an expert Indian Civic Governance and Legal Advisor for Open Nation.
+Provide a structured, step-by-step, actionable response in clear professional language (supporting English & Hindi context) with relevant laws, government portals, and draft format templates.
+
+User Query: "${prompt}"`);
+
+      if (replyText) {
         return res.json({
-          reply: `To draft formal petitions for "${prompt}", reference Section 6(1) of the Right to Information Act, 2005. Submit to the Public Information Officer (PIO) with a standard ₹10 court fee stamp.`,
-          sources: ["Right to Information Act, 2005", "CPGRAMS Citizen Portal"],
+          reply: replyText,
+          sources: ["Indian Administrative Law", "RTI Act 2005", "CPGRAMS Central Citizen Portal"],
         });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
-        contents: `You are an expert Indian Civic Governance and Legal Advisor for Omkun Orbit.
-Provide a structured, step-by-step, actionable response in clear professional language (supporting English & Hindi context) with relevant laws, government portals, and draft format templates.
-
-User Query: "${prompt}"`,
-      });
-
+      // Default statutory guidance fallback
       res.json({
-        reply: response.text,
-        sources: ["Indian Administrative Law", "RTI Act 2005", "CPGRAMS Central Citizen Portal"],
+        reply: `### Statutory Guidance for Civic Action\n\n**1. Relevant Provision:**\nFor civic redressal regarding "${prompt}", citizens can invoke Section 6(1) of the Right to Information (RTI) Act, 2005 or lodge a statutory complaint on the CPGRAMS / Jharkhand JharSewa portal.\n\n**2. Action Steps:**\n- Address the complaint to the designated Public Information Officer (PIO) or Municipal Commissioner.\n- Attach photographic geo-tagged evidence.\n- If unresolved within 15 days, appeal to the First Appellate Authority (FAA).`,
+        sources: ["Right to Information Act, 2005", "CPGRAMS Citizen Portal", "Jharkhand Public Services Act"],
       });
     } catch (err) {
       console.error("AI Tutor API Error:", err);
@@ -844,6 +1024,9 @@ User Query: "${prompt}"`,
       ],
     });
   });
+
+  // Serve static assets directory
+  app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
   // Vite middleware for development & static serving for production
   if (process.env.NODE_ENV !== "production") {

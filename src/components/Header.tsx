@@ -1,5 +1,5 @@
 import React from "react";
-import { Briefcase, UserPlus, Sparkles, Activity } from "lucide-react";
+import { UserPlus, Sparkles, Activity } from "lucide-react";
 import { UserProfile } from "../types.ts";
 
 interface HeaderProps {
@@ -15,44 +15,17 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate,
   userProfile,
 }) => {
-  const getTitle = () => {
-    switch (currentView) {
-      case "dashboard":
-        return "Civic Feed & Reports";
-      case "aitutor":
-        return "AI Civic Legal Tutor";
-      case "leader":
-        return "Leader Performance Tracker";
-      case "infrastructure":
-        return "Infrastructure Projects";
-      case "bookmark":
-        return "Saved Civic Issues";
-      case "analytics":
-        return "100k User Scale & Telemetry";
-      case "profile":
-        return "Account & Role Dashboard";
-      case "settings":
-        return "Category & Preferences";
-      case "connect":
-        return "Public Townhall";
-      case "search":
-        return "Universal Governance Search";
-      default:
-        return "Omkun Orbit Workspace";
-    }
-  };
-
   return (
     <header
       id="main-header"
-      className="sticky top-0 z-40 bg-white/90 backdrop-blur-md h-[62px] border-b border-slate-200/80 flex items-center justify-between px-4 md:px-8 transition-transform duration-300 relative shadow-sm"
+      className="sticky top-0 z-40 bg-white/85 backdrop-blur-md h-[54px] md:h-[60px] border-none flex items-center justify-between px-3.5 md:px-6 transition-all duration-200 relative"
     >
-      {/* Left: Mobile Profile Icon & Desktop Title */}
-      <div className="flex items-center gap-3.5 min-w-0 z-10 flex-1 md:flex-none">
+      {/* Left: Mobile Profile Avatar or Desktop Quick Nav */}
+      <div className="flex items-center gap-3 min-w-0 z-10 flex-1">
         <button
           id="mobile-sidebar-open-btn"
           onClick={onOpenMobileSidebar}
-          className="md:hidden w-9 h-9 rounded-full overflow-hidden border border-slate-200 shadow-sm hover:scale-105 active:scale-95 transition-transform shrink-0"
+          className="md:hidden w-8 h-8 rounded-full overflow-hidden shadow-xs hover:scale-105 active:scale-95 transition-transform shrink-0 ring-1 ring-slate-200/60"
           title="Open Menu"
         >
           <img
@@ -63,78 +36,76 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </button>
 
-        <div className="hidden md:flex flex-col">
-          <h1 id="header-title" className="text-[15px] font-black text-slate-900 tracking-tight leading-none mb-1">
-            {getTitle()}
-          </h1>
-          <div className="flex items-center gap-1.5">
-            <Briefcase className="w-3 h-3 text-blue-600" />
-            <span
-              id="header-workspace-name"
-              className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest truncate max-w-[200px]"
-            >
-              Omkun Orbit Governance Grid
-            </span>
-          </div>
+        {/* Desktop Brand / Breadcrumb */}
+        <div className="hidden md:flex items-center gap-2">
+          <button
+            onClick={() => onNavigate("dashboard")}
+            className="flex items-center gap-2 text-left group"
+          >
+            <div className="flex flex-col">
+              <span className="text-[13px] font-black text-slate-900 tracking-tight leading-tight group-hover:text-blue-600 transition-colors">
+                Omkun Orbit
+              </span>
+              <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
+                Civic Workspace
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Mobile Center Title */}
-      <div className="md:hidden flex items-center justify-center pointer-events-none z-0">
-        <span className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5 pointer-events-auto">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-          Omkun Orbit
-        </span>
+      {/* Center: Custom Logo Image (X / Twitter style centered logo) */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center z-10">
+        <button
+          id="header-center-logo-btn"
+          onClick={() => onNavigate("dashboard")}
+          className="flex items-center justify-center py-1 px-2 rounded-xl hover:opacity-80 active:scale-95 transition-all cursor-pointer"
+          title="Omkun Orbit Home"
+        >
+          <img
+            src="/assets/logo.svg"
+            alt="Omkun Orbit Logo"
+            className="h-7 md:h-8 max-w-[150px] md:max-w-[180px] object-contain transition-transform duration-200"
+            referrerPolicy="no-referrer"
+          />
+        </button>
       </div>
 
-      {/* Right: Scale Indicator, AI Status & Profile Action */}
-      <div className="flex items-center gap-3 md:gap-4 z-10 flex-1 md:flex-none justify-end">
-        {/* Scale Telemetry Pill */}
+      {/* Right: Actions, AI Tutor & Profile Pill */}
+      <div className="flex items-center gap-2 md:gap-3 z-10 flex-1 justify-end">
+        {/* Scale Telemetry Pill (Desktop) */}
         <button
           id="header-scale-pill-btn"
           onClick={() => onNavigate("analytics")}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200/80 rounded-full transition-colors"
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-100/70 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-full transition-colors"
           title="View 100k Scalability Metrics"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-[11px] font-bold text-blue-900 tracking-tight flex items-center gap-1">
-            <Activity className="w-3 h-3 text-blue-600" /> 104.8k Users Active
+          <span className="text-[10px] font-extrabold tracking-tight flex items-center gap-1">
+            <Activity className="w-3 h-3 text-blue-600" /> 104.8k
           </span>
         </button>
 
-        {/* AI Tutor Pill */}
+        {/* AI Tutor Quick Pill */}
         <button
           id="header-ai-tutor-quick-btn"
           onClick={() => onNavigate("aitutor")}
-          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-[11px] font-bold shadow-sm hover:opacity-95 transition-opacity"
+          className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full text-[11px] font-bold transition-colors"
+          title="AI Civic Legal Tutor"
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>AI Civic Tutor</span>
+          <Sparkles className="w-3 h-3 text-blue-600" />
+          <span className="hidden md:inline">AI Tutor</span>
         </button>
 
-        {/* User Role Tag & Avatar Button */}
-        <div className="flex items-center gap-2.5">
-          <div className="hidden lg:flex flex-col items-end">
-            <span id="header-user-name" className="text-xs font-bold text-slate-800 truncate max-w-[120px]">
-              {userProfile.fullName}
-            </span>
-            <span
-              id="header-user-role"
-              className="text-[9px] font-black text-blue-700 uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded"
-            >
-              {userProfile.category}
-            </span>
-          </div>
-
-          <button
-            id="header-connect-btn"
-            onClick={() => onNavigate("connect")}
-            className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-slate-100 hover:bg-blue-50 text-slate-800 hover:text-blue-600 flex items-center justify-center transition-all hover:scale-105 active:scale-95 border border-slate-200/80 shadow-sm"
-            title="Public Townhall & Connect"
-          >
-            <UserPlus className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Connect / Townhall button */}
+        <button
+          id="header-connect-btn"
+          onClick={() => onNavigate("connect")}
+          className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-100/80 hover:bg-blue-50 text-slate-700 hover:text-blue-600 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          title="Public Townhall & Connect"
+        >
+          <UserPlus className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );

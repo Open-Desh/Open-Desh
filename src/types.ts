@@ -28,11 +28,53 @@ export interface UserReview {
   id: string;
   authorId: string;
   authorName: string;
+  authorUsername?: string;
   authorAvatar?: string;
   rating: number; // 1 to 5
   comment: string;
   date: string;
   verifiedVoter: boolean;
+  adminReply?: {
+    text: string;
+    date: string;
+    authorName: string;
+    authorRole?: string;
+  };
+}
+
+export interface CivicService {
+  id: string;
+  title: string;
+  category: "Civic Infrastructure" | "Sanitation & Waste" | "Water & Utilities" | "Public Redressal" | "Legislative Help" | "Welfare & Funds";
+  description: string;
+  sla: string; // e.g. "24 Hours SLA", "48 Hours Action"
+  citizenEntitlement: string; // e.g. "Free road pothole repair within ward"
+  nodalContact?: string;
+  status: "Active" | "High Demand" | "Scheduled";
+}
+
+export interface ScoreCriterion {
+  label: string;
+  weight: number; // e.g. 25
+  scoreAwarded: number; // e.g. 22
+  description: string;
+  publicSource: string;
+  sourceUrl: string;
+  sourceType: "CAG Gazette" | "State Legislative Hansard" | "Govt SLA Redressal Log" | "Geo-Tagged Audit" | "Verified Voter Index";
+}
+
+export interface SystemScoreBreakdown {
+  totalScore: number; // 0 to 100
+  lastAuditedDate: string;
+  auditCycle: string;
+  algorithmVersion: string;
+  criteria: ScoreCriterion[];
+  publicDomainDisclosures: {
+    title: string;
+    publisher: string;
+    gazetteRef: string;
+    url: string;
+  }[];
 }
 
 export interface UserProfile {
@@ -54,6 +96,8 @@ export interface UserProfile {
   publicRating: number; // 0 to 5.0
   reviewsCount: number;
   reviews?: UserReview[];
+  services?: CivicService[];
+  systemScoreBreakdown?: SystemScoreBreakdown;
   verified: boolean;
   savedReports?: string[];
   isFollowing?: boolean;
@@ -72,6 +116,8 @@ export interface ThreadedReply {
   likesCount: number;
   likedBy?: string[];
   parentReplyId?: string | null;
+  replyToUsername?: string;
+  replyToName?: string;
   replies?: ThreadedReply[];
   isOfficialIntervention?: boolean;
 }
@@ -111,6 +157,11 @@ export interface ReportIssue {
   category: IssueCategory;
   text: string;
   imageUrl?: string;
+  images?: string[]; // Multiple photos / Cloudflare R2 evidence array
+  structuredDetails?: Record<string, string>; // Category-specific structured inputs
+  taggedOfficers?: string[];
+  taggedLeaders?: string[];
+  urgencyLevel?: "Normal" | "High Priority" | "Critical Emergency";
   location: LocationGeo;
   timestamp: string;
   status: "Open" | "Under Dept Review" | "In Progress" | "Resolved";
