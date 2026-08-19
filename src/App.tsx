@@ -13,6 +13,9 @@ import { SearchHubView } from "./components/SearchHubView.tsx";
 import { ConnectHubView } from "./components/ConnectHubView.tsx";
 import { CreateReportModal } from "./components/CreateReportModal.tsx";
 import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
+import { SettingsView } from "./components/SettingsView.tsx";
+import { db, testFirestoreConnection } from "./firebase.ts";
+import { doc, setDoc, getDocs, collection } from "firebase/firestore";
 import {
   UserProfile,
   ReportIssue,
@@ -29,6 +32,7 @@ export default function App() {
 
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
+  const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
 
   // Core Data States
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -160,6 +164,32 @@ export default function App() {
           ...prev,
           postsCount: (prev.postsCount || 0) + 1,
         }));
+
+        // Sync report directly to Firebase Firestore
+        try {
+          await setDoc(doc(db, "reports", savedReport.id), {
+            id: savedReport.id,
+            authorId: savedReport.authorId,
+            authorName: savedReport.authorName,
+            authorUsername: savedReport.authorUsername,
+            category: savedReport.category,
+            text: savedReport.text,
+            imageUrl: savedReport.imageUrl || "",
+            images: savedReport.images || [],
+            taggedOfficers: savedReport.taggedOfficers || [],
+            taggedLeaders: savedReport.taggedLeaders || [],
+            urgencyLevel: savedReport.urgencyLevel || "Normal",
+            location: savedReport.location || {},
+            timestamp: savedReport.timestamp,
+            status: savedReport.status,
+            likesCount: savedReport.likesCount || 0,
+            likedBy: savedReport.likedBy || [],
+            reReportsCount: savedReport.reReportsCount || 0,
+            reReportedBy: savedReport.reReportedBy || [],
+          });
+        } catch (fsErr) {
+          console.warn("Firestore sync background notice:", fsErr);
+        }
       }
     } catch (err) {
       console.error("Error creating report:", err);
@@ -281,6 +311,25 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setUserProfile(data.profile);
+
+        // Sync profile to Firestore
+        try {
+          await setDoc(doc(db, "users", data.profile.id), {
+            id: data.profile.id,
+            fullName: data.profile.fullName,
+            username: data.profile.username,
+            bio: data.profile.bio || "",
+            location: data.profile.location || "",
+            websiteUrl: data.profile.websiteUrl || "",
+            avatarUrl: data.profile.avatarUrl || "",
+            category: data.profile.category,
+            postsCount: data.profile.postsCount || 0,
+            systemScore: data.profile.systemScore || 80,
+            publicRating: data.profile.publicRating || 4.5,
+          });
+        } catch (fsErr) {
+          console.warn("Firestore profile sync notice:", fsErr);
+        }
       }
     } catch (err) {
       console.error("Profile update error:", err);
@@ -414,6 +463,9 @@ export default function App() {
             onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
             onNavigate={navigateTo}
             userProfile={userProfile}
+            searchQuery={bookmarkSearchQuery}
+            onSearchQueryChange={setBookmarkSearchQuery}
+            bookmarkedCount={bookmarkedReports.length}
           />
         )}
 
@@ -466,8 +518,16 @@ export default function App() {
           {currentView === "bookmark" && (
             <BookmarksView
               bookmarkedReports={bookmarkedReports}
-              onRemoveBookmark={handleBookmark}
+              userProfile={userProfile}
+              onLike={handleLikeReport}
+              onReReport={handleReReport}
+              onBookmark={handleBookmark}
+              onReply={handleReply}
+              onUpdateStatus={handleUpdateStatus}
               onNavigate={navigateTo}
+              onSelectUser={handleSelectUserProfile}
+              searchQuery={bookmarkSearchQuery}
+              onSearchQueryChange={setBookmarkSearchQuery}
             />
           )}
 
@@ -501,16 +561,11 @@ export default function App() {
           )}
 
           {currentView === "settings" && (
-            <ProfileView
+            <SettingsView
               userProfile={userProfile}
-              activeUser={userProfile}
-              userReports={reports.filter((r) => r.authorId === userProfile.id)}
               onUpdateProfile={handleUpdateProfile}
-              onRateUser={async (rating, comment) => {
-                await handleRateUser(userProfile.id, rating, comment);
-              }}
-              onReplyToReview={handleReplyToReview}
-              onToggleFollow={handleToggleFollow}
+              onNavigate={navigateTo}
+              onBackToHome={() => navigateTo("dashboard")}
             />
           )}
 

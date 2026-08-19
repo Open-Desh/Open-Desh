@@ -1,19 +1,15 @@
 import React from "react";
 import {
-  Home,
   User,
   TrendingUp,
   Building2,
   Bookmark,
-  Bot,
-  Activity,
   Settings,
   HelpCircle,
   ChevronLeft,
   ChevronRight,
   Sun,
   Moon,
-  Users,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 
@@ -38,20 +34,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [darkMode, setDarkMode] = React.useState(false);
 
-  const primaryNav = [
-    { id: "dashboard", label: "Home Feed", icon: Home },
-    { id: "aitutor", label: "AI Civic Tutor", icon: Bot, badge: "Gemini" },
-    { id: "leader", label: "Leader Tracker", icon: TrendingUp },
+  // Exact requested 6 page links
+  const navItems = [
+    { id: "profile", label: "Profile", icon: User },
+    { id: "leader", label: "Leader", icon: TrendingUp },
     { id: "infrastructure", label: "Infrastructure", icon: Building2 },
-    { id: "bookmark", label: "Bookmarks", icon: Bookmark },
-    { id: "analytics", label: "100k Cloud Scale", icon: Activity, badge: "Live" },
-    { id: "profile", label: "My Profile", icon: User },
-    { id: "connect", label: "Public Townhall", icon: Users },
-  ];
-
-  const secondaryNav = [
-    { id: "settings", label: "Settings & Category", icon: Settings },
-    { id: "help", label: "Civic Help Centre", icon: HelpCircle },
+    { id: "bookmark", label: "Bookmark", icon: Bookmark },
+    { id: "settings", label: "Setting & Privacy", icon: Settings },
+    { id: "help", label: "Help Center", icon: HelpCircle },
   ];
 
   const getRoleBadge = (category: string) => {
@@ -74,27 +64,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div
           id="sidebar-overlay"
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] md:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[150] md:hidden transition-opacity duration-300"
         />
       )}
 
-      {/* Sidebar Aside */}
+      {/* Sidebar Aside (80% width on mobile) */}
       <aside
         id="sidebar"
         className={`fixed inset-y-0 left-0 bg-white border-r border-slate-200 z-[200] flex flex-col h-screen shadow-2xl md:shadow-none transition-all duration-300 ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        } ${isCollapsed ? "md:w-20" : "md:w-[260px]"} w-[260px]`}
+        } ${isCollapsed ? "md:w-20" : "md:w-[260px]"} w-[80vw] sm:w-[80%] max-w-[340px]`}
       >
         {/* Profile Card Header */}
-        <div className="px-5 pt-5 pb-3 shrink-0">
-          <div className="flex justify-between items-start mb-2">
+        <div className="px-5 pt-6 pb-4 shrink-0">
+          <div className="flex justify-between items-start mb-3">
             <button
               id="sidebar-profile-avatar-btn"
               onClick={() => {
                 onNavigate("profile");
                 onCloseMobile();
               }}
-              className="w-11 h-11 rounded-full overflow-hidden border-2 border-blue-600/30 shadow-sm hover:scale-105 transition-transform"
+              className="w-13 h-13 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-blue-600/30 shadow-xs hover:scale-105 active:scale-95 transition-transform cursor-pointer"
               title="Open Profile"
             >
               <img
@@ -105,7 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </button>
             <span
-              className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${role.bg} ${
+              className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${role.bg} ${
                 isCollapsed ? "hidden" : "block"
               }`}
             >
@@ -114,28 +104,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {!isCollapsed && (
-            <div className="mt-1 transition-opacity duration-200">
-              <h2 className="text-[17px] font-bold text-slate-900 leading-tight truncate">
+            <div className="mt-1 space-y-1">
+              <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate">
                 {userProfile.fullName}
               </h2>
-              <p className="text-slate-500 text-xs mb-2 truncate">@{userProfile.username}</p>
-              <div className="flex gap-3 text-xs text-slate-600">
+              <p className="text-slate-500 text-xs sm:text-sm truncate">@{userProfile.username}</p>
+              <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
                 <span>
-                  <strong className="text-slate-900 font-bold">{userProfile.followingCount}</strong> Following
+                  <strong className="text-slate-900 font-bold">{userProfile.followingCount || 0}</strong> Following
                 </span>
                 <span>
-                  <strong className="text-slate-900 font-bold">{userProfile.followersCount}</strong> Followers
+                  <strong className="text-slate-900 font-bold">{userProfile.followersCount || 0}</strong> Followers
                 </span>
               </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-200/70 my-1"></div>
+        <div className="border-t border-slate-200/80 mx-4"></div>
 
-        {/* Navigation Menu */}
-        <nav id="sidebar-menu" className="flex-1 overflow-y-auto no-scrollbar py-2 space-y-0.5">
-          {primaryNav.map((item) => {
+        {/* Navigation Menu (Larger Icons & Text) */}
+        <nav id="sidebar-menu" className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-1">
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
@@ -146,79 +136,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onNavigate(item.id);
                   onCloseMobile();
                 }}
-                className={`w-full flex items-center px-4 py-3 text-[15px] font-bold transition-colors group relative ${
+                className={`w-full flex items-center px-5 py-3.5 sm:py-4 text-[16px] sm:text-[17px] font-bold transition-all group relative cursor-pointer ${
                   isActive
-                    ? "bg-blue-50 text-blue-600 border-l-4 border-blue-600"
-                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-l-4 border-transparent"
+                    ? "bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-extrabold"
+                    : "text-slate-800 hover:bg-slate-50 hover:text-slate-900 border-l-4 border-transparent"
                 } ${isCollapsed ? "justify-center px-0" : ""}`}
                 title={isCollapsed ? item.label : undefined}
               >
                 <Icon
-                  className={`w-5 h-5 shrink-0 transition-transform group-hover:scale-110 ${
-                    isActive ? "text-blue-600" : "text-slate-600"
-                  } ${!isCollapsed ? "mr-3" : ""}`}
+                  className={`w-6 h-6 shrink-0 transition-transform group-hover:scale-110 ${
+                    isActive ? "text-blue-600 stroke-[2.4]" : "text-slate-600 stroke-[2]"
+                  } ${!isCollapsed ? "mr-4" : ""}`}
                 />
                 {!isCollapsed && (
                   <span className="truncate flex-1 text-left">{item.label}</span>
                 )}
-                {!isCollapsed && item.badge && (
-                  <span
-                    className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                      item.badge === "Gemini"
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
-                        : "bg-emerald-100 text-emerald-700 animate-pulse"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
               </button>
             );
           })}
-
-          <div className="border-t border-slate-200/70 my-2"></div>
-
-          {secondaryNav.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentView === item.id;
-            return (
-              <button
-                key={item.id}
-                id={`nav-item-${item.id}`}
-                onClick={() => {
-                  onNavigate(item.id);
-                  onCloseMobile();
-                }}
-                className={`w-full flex items-center px-4 py-2.5 text-[14px] font-medium transition-colors ${
-                  isActive
-                    ? "bg-blue-50 text-blue-600 border-l-4 border-blue-600"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-l-4 border-transparent"
-                } ${isCollapsed ? "justify-center px-0" : ""}`}
-                title={isCollapsed ? item.label : undefined}
-              >
-                <Icon
-                  className={`w-4 h-4 shrink-0 ${
-                    isActive ? "text-blue-600" : "text-slate-500"
-                  } ${!isCollapsed ? "mr-3" : ""}`}
-                />
-                {!isCollapsed && <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
-
-          {/* Dark / Light Mode Toggle Button */}
-          <div className={`px-4 py-2 mt-2 ${isCollapsed ? "flex justify-center px-0" : ""}`}>
-            <button
-              id="theme-toggle-btn"
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors flex items-center gap-2 text-xs font-semibold"
-              title="Toggle Theme"
-            >
-              {darkMode ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5" />}
-              {!isCollapsed && <span>{darkMode ? "Light Theme" : "Theme Preference"}</span>}
-            </button>
-          </div>
         </nav>
+
+        <div className="border-t border-slate-200/80 mx-4"></div>
+
+        {/* Theme Toggle Button at Bottom */}
+        <div className={`p-4 ${isCollapsed ? "flex justify-center p-2" : ""}`}>
+          <button
+            id="theme-toggle-btn"
+            onClick={() => setDarkMode(!darkMode)}
+            className="w-full p-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
+            title="Toggle Theme"
+          >
+            {darkMode ? (
+              <Sun className="w-5 h-5 text-amber-500 shrink-0" />
+            ) : (
+              <Moon className="w-5 h-5 text-slate-600 shrink-0" />
+            )}
+            {!isCollapsed && <span>{darkMode ? "Light Theme" : "Theme Preference"}</span>}
+          </button>
+        </div>
 
         {/* Desktop Collapse Toggle Button */}
         <button
