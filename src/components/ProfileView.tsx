@@ -24,7 +24,6 @@ import {
   Scale,
 } from "lucide-react";
 import { UserProfile, ReportIssue } from "../types.ts";
-import { EditProfileModal } from "./EditProfileModal.tsx";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
 
@@ -32,7 +31,9 @@ interface ProfileViewProps {
   userProfile: UserProfile;
   activeUser: UserProfile;
   userReports: ReportIssue[];
+  isLoggedIn?: boolean;
   onBack?: () => void;
+  onNavigateToEditProfile?: () => void;
   onUpdateProfile: (updated: Partial<UserProfile>) => Promise<void>;
   onRateUser?: (rating: number, comment: string) => Promise<void>;
   onReplyToReview?: (reviewId: string, replyText: string) => Promise<void>;
@@ -44,7 +45,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   userProfile,
   activeUser,
   userReports,
+  isLoggedIn = false,
   onBack,
+  onNavigateToEditProfile,
   onUpdateProfile,
   onRateUser,
   onReplyToReview,
@@ -54,14 +57,35 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [activeTab, setActiveTab] = useState<
     "Report" | "Services" | "Performance" | "Replies" | "Rereport"
   >("Report");
-  const [isEditOpen, setIsEditOpen] = useState(false);
   const [evaluationViewTab, setEvaluationViewTab] = useState<"score" | "reviews" | "writereview" | null>(null);
   const [isFollowing, setIsFollowing] = useState(userProfile.isFollowing || false);
   const [followersCount, setFollowersCount] = useState(userProfile.followersCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
 
-  const isOwnProfile = userProfile.id === activeUser.id;
+  const isOwnProfile = Boolean(isLoggedIn && activeUser && userProfile.id === activeUser.id);
+
+  const isLeadershipOrDept =
+    userProfile.category === "representative" || userProfile.category === "department";
+
+  const availableTabs = isLeadershipOrDept
+    ? ([
+        { id: "Report", label: "Reports" },
+        { id: "Services", label: "Services (Mind Map)" },
+        { id: "Performance", label: "Performance & Impact" },
+        { id: "Replies", label: "Replies" },
+        { id: "Rereport", label: "Rereports" },
+      ] as const)
+    : ([
+        { id: "Report", label: "Reports" },
+        { id: "Replies", label: "Replies" },
+        { id: "Rereport", label: "Rereports" },
+      ] as const);
+
+  const currentActiveTab =
+    !isLeadershipOrDept && (activeTab === "Services" || activeTab === "Performance")
+      ? "Report"
+      : activeTab;
 
   const handleToggleFollowAction = async () => {
     const nextFollowingState = !isFollowing;
@@ -333,60 +357,95 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* 3. Performance Scorecard Card (Click navigates to dedicated Evaluation page) */}
-        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
-          {/* System Score */}
-          <div
-            onClick={() => setEvaluationViewTab("score")}
-            className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
-            title="View 100-Pt Algorithm Breakdown"
-          >
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-blue-600 transition-colors">
-              SYSTEM SCORE
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
-              {userProfile.systemScore || 84}
-            </span>
-          </div>
+        {/* 3. Performance Scorecard Card (Rendered for Representative & Department only) OR Citizen Civic Summary */}
+        {isLeadershipOrDept ? (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
+            {/* System Score */}
+            <div
+              onClick={() => setEvaluationViewTab("score")}
+              className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
+              title="View 100-Pt Algorithm Breakdown"
+            >
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-blue-600 transition-colors">
+                SYSTEM SCORE
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
+                {userProfile.systemScore || 84}
+              </span>
+            </div>
 
-          {/* Public Rating */}
-          <div
-            onClick={() => setEvaluationViewTab("reviews")}
-            className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
-            title="View Verified Citizen Ratings"
-          >
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-amber-600 transition-colors">
-              PUBLIC RATING
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-slate-900 flex items-center justify-center gap-1 leading-tight">
-              {userProfile.publicRating || 4.4}
-              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-            </span>
-          </div>
+            {/* Public Rating */}
+            <div
+              onClick={() => setEvaluationViewTab("reviews")}
+              className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
+              title="View Verified Citizen Ratings"
+            >
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-amber-600 transition-colors">
+                PUBLIC RATING
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900 flex items-center justify-center gap-1 leading-tight">
+                {userProfile.publicRating || 4.4}
+                <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+              </span>
+            </div>
 
-          {/* Reviews */}
-          <div
-            onClick={() => setEvaluationViewTab("reviews")}
-            className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
-            title="View All Reviews"
-          >
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-slate-900 transition-colors">
-              REVIEWS
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
-              {userProfile.reviewsCount
-                ? `${(userProfile.reviewsCount / 1000).toFixed(1)}K`
-                : "142.8K"}
-            </span>
+            {/* Reviews */}
+            <div
+              onClick={() => setEvaluationViewTab("reviews")}
+              className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
+              title="View All Reviews"
+            >
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-slate-900 transition-colors">
+                REVIEWS
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
+                {userProfile.reviewsCount
+                  ? `${(userProfile.reviewsCount / 1000).toFixed(1)}K`
+                  : "142.8K"}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
+            <div className="px-2 text-center py-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
+                GRIEVANCES FILED
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
+                {userReports.length}
+              </span>
+            </div>
+
+            <div className="px-2 text-center py-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
+                RESOLVED CASES
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-600 block leading-tight">
+                {userReports.filter((r) => r.status === "Resolved").length}
+              </span>
+            </div>
+
+            <div className="px-2 text-center py-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
+                CIVIC IMPACT
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
+                {Math.max(12, (userReports.length * 10) + (userProfile.postsCount || 0))} pts
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* 4. Dynamic Action Buttons (Self: Edit & Share vs Other: Mention & Follow) */}
         {isOwnProfile ? (
           <div className="flex gap-2.5 pt-1">
             <button
               id="edit-my-profile-btn"
-              onClick={() => setIsEditOpen(true)}
+              onClick={() => {
+                if (onNavigateToEditProfile) {
+                  onNavigateToEditProfile();
+                }
+              }}
               className="flex-1 py-2.5 px-4 rounded-full border border-slate-300 text-slate-900 text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
             >
               <Edit3 className="w-4 h-4 text-slate-600" />
@@ -424,23 +483,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         )}
       </div>
 
-      {/* 5. Sub-Navigation Tabs: Reports | Services (Mind Map) | Performance | Replies | Rereport */}
+      {/* 5. Sub-Navigation Tabs */}
       <div className="border-b border-slate-200 bg-white sticky top-[53px] z-20">
         <div className="flex justify-between overflow-x-auto no-scrollbar px-2 sm:px-4">
-          {(
-            [
-              { id: "Report", label: "Reports" },
-              { id: "Services", label: "Services (Mind Map)" },
-              { id: "Performance", label: "Performance & Impact" },
-              { id: "Replies", label: "Replies" },
-              { id: "Rereport", label: "Rereports" },
-            ] as const
-          ).map((tab) => (
+          {availableTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-3 px-2 sm:px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-                activeTab === tab.id
+                currentActiveTab === tab.id
                   ? "border-blue-600 text-slate-900"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
@@ -628,14 +679,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         )}
       </div>
-
-      {/* Edit Profile Modal */}
-      <EditProfileModal
-        isOpen={isEditOpen}
-        onClose={() => setIsEditOpen(false)}
-        userProfile={userProfile}
-        onSave={onUpdateProfile}
-      />
     </div>
   );
 };

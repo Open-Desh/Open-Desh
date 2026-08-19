@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 
@@ -21,6 +23,9 @@ interface SidebarProps {
   isMobileOpen: boolean;
   onCloseMobile: () => void;
   userProfile: UserProfile;
+  isLoggedIn?: boolean;
+  onOpenLogin?: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -31,6 +36,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   onCloseMobile,
   userProfile,
+  isLoggedIn = false,
+  onOpenLogin,
+  onLogout,
 }) => {
   const [darkMode, setDarkMode] = React.useState(false);
 
@@ -77,46 +85,103 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {/* Profile Card Header */}
         <div className="px-5 pt-6 pb-4 shrink-0">
-          <div className="flex justify-between items-start mb-3">
-            <button
-              id="sidebar-profile-avatar-btn"
-              onClick={() => {
-                onNavigate("profile");
-                onCloseMobile();
-              }}
-              className="w-13 h-13 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-blue-600/30 shadow-xs hover:scale-105 active:scale-95 transition-transform cursor-pointer"
-              title="Open Profile"
-            >
-              <img
-                src={userProfile.avatarUrl}
-                alt={userProfile.fullName}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </button>
-            <span
-              className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${role.bg} ${
-                isCollapsed ? "hidden" : "block"
-              }`}
-            >
-              {role.label}
-            </span>
-          </div>
-
-          {!isCollapsed && (
-            <div className="mt-1 space-y-1">
-              <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate">
-                {userProfile.fullName}
-              </h2>
-              <p className="text-slate-500 text-xs sm:text-sm truncate">@{userProfile.username}</p>
-              <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
-                <span>
-                  <strong className="text-slate-900 font-bold">{userProfile.followingCount || 0}</strong> Following
-                </span>
-                <span>
-                  <strong className="text-slate-900 font-bold">{userProfile.followersCount || 0}</strong> Followers
-                </span>
+          {isLoggedIn ? (
+            <>
+              <div className="flex justify-between items-start mb-3">
+                <button
+                  id="sidebar-profile-avatar-btn"
+                  onClick={() => {
+                    onNavigate("profile");
+                    onCloseMobile();
+                  }}
+                  className="w-13 h-13 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-blue-600/30 shadow-xs hover:scale-105 active:scale-95 transition-transform cursor-pointer relative"
+                  title="Open Profile"
+                >
+                  <img
+                    src={
+                      userProfile.avatarUrl ||
+                      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"
+                    }
+                    alt={userProfile.fullName}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span
+                    className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white"
+                    title="Signed In"
+                  ></span>
+                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <span
+                    className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${role.bg} ${
+                      isCollapsed ? "hidden" : "block"
+                    }`}
+                  >
+                    {role.label}
+                  </span>
+                </div>
               </div>
+
+              {!isCollapsed && (
+                <div className="mt-1 space-y-1">
+                  <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate">
+                    {userProfile.fullName || "Citizen"}
+                  </h2>
+                  <p className="text-slate-500 text-xs sm:text-sm truncate">
+                    @{userProfile.username || "citizen"}
+                  </p>
+                  <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
+                    <span>
+                      <strong className="text-slate-900 font-bold">
+                        {userProfile.followingCount || 0}
+                      </strong>{" "}
+                      Following
+                    </span>
+                    <span>
+                      <strong className="text-slate-900 font-bold">
+                        {userProfile.followersCount || 0}
+                      </strong>{" "}
+                      Followers
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Guest / Unauthenticated State */
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-400 shrink-0">
+                  <User className="w-6 h-6" />
+                </div>
+                {!isCollapsed && (
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-black text-slate-900 truncate">
+                      Guest Citizen
+                    </h2>
+                    <p className="text-[11px] text-slate-500 truncate">Not signed in</p>
+                  </div>
+                )}
+              </div>
+
+              {!isCollapsed && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Sign in to track your grievances and access your verified profile.
+                  </p>
+                  <button
+                    id="sidebar-signin-header-btn"
+                    onClick={() => {
+                      onOpenLogin && onOpenLogin();
+                      onCloseMobile();
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Sign In to Account</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -133,6 +198,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 id={`nav-item-${item.id}`}
                 onClick={() => {
+                  if (item.id === "profile" && !isLoggedIn) {
+                    if (onOpenLogin) onOpenLogin();
+                    onCloseMobile();
+                    return;
+                  }
                   onNavigate(item.id);
                   onCloseMobile();
                 }}
@@ -158,8 +228,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="border-t border-slate-200/80 mx-4"></div>
 
-        {/* Theme Toggle Button at Bottom */}
-        <div className={`p-4 ${isCollapsed ? "flex justify-center p-2" : ""}`}>
+        {/* Bottom Auth & Theme Bar */}
+        <div className={`p-4 space-y-1.5 ${isCollapsed ? "flex flex-col items-center p-2" : ""}`}>
+          {isLoggedIn ? (
+            <button
+              id="sidebar-logout-btn"
+              onClick={onLogout}
+              className="w-full p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              {!isCollapsed && <span>Sign Out</span>}
+            </button>
+          ) : (
+            <button
+              id="sidebar-login-bottom-btn"
+              onClick={() => {
+                onOpenLogin && onOpenLogin();
+                onCloseMobile();
+              }}
+              className="w-full p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
+              title="Sign In / Register"
+            >
+              <LogIn className="w-5 h-5 shrink-0" />
+              {!isCollapsed && <span>Sign In</span>}
+            </button>
+          )}
+
           <button
             id="theme-toggle-btn"
             onClick={() => setDarkMode(!darkMode)}
@@ -192,3 +287,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
+

@@ -213,39 +213,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* Top Banner / Create Grievance Trigger Box */}
-      <div className="p-4 border-b border-slate-200 bg-white space-y-3">
-        <div
-          onClick={onOpenCreateModal}
-          className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-2xl cursor-pointer transition-all shadow-2xs group"
-        >
-          <img
-            src={userProfile.avatarUrl}
-            alt={userProfile.fullName}
-            className="w-10 h-10 rounded-full object-cover border border-slate-200"
-          />
-          <div className="flex-1 text-xs text-slate-400 font-medium group-hover:text-slate-600">
-            Log civic grievance with verified GPS & Cloudflare R2 evidence...
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenCreateModal();
-            }}
-            className="px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-xs flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Report</span>
-          </button>
-        </div>
-
-        {/* Category Horizontal Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      {/* Category Horizontal Filter Pills - Edge-to-Edge Fluid Scrolling */}
+      <div className="w-full bg-white border-b border-slate-100/90 overflow-hidden">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-3.5 sm:px-4 py-2.5 scroll-smooth overscroll-x-contain">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-black shrink-0 transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black shrink-0 transition-all cursor-pointer whitespace-nowrap ${
                 selectedCategory === cat
                   ? "bg-slate-900 text-white shadow-xs"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
@@ -254,11 +229,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
               {cat}
             </button>
           ))}
+          {/* Spacer so last item has proper breathing room at the right edge */}
+          <div className="shrink-0 w-2 h-1" aria-hidden="true" />
         </div>
       </div>
 
       {/* Reports Feed Container */}
-      <div className="divide-y divide-slate-200">
+      <div className="divide-y divide-slate-100">
         {filteredReports.map((report) => {
           const isLiked = report.likedBy?.includes(userProfile.id);
           const isReReported = report.reReportedBy?.includes(userProfile.id);
@@ -271,6 +248,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
           const imageList = report.images && report.images.length > 0 ? report.images : report.imageUrl ? [report.imageUrl] : [];
           const currentSlide = activeImageSlideIndex[report.id] || 0;
 
+          // Tagged departments list
+          const primaryDeptTag = report.taggedOfficers?.[0] || report.aiTriage?.departmentTag || "@MunicipalCorp";
+          const currentDeptLevel = report.departmentStatusLevel ?? (hasDeptClaimed ? 1 : 0);
+
           return (
             <article
               key={report.id}
@@ -279,43 +260,44 @@ export const FeedView: React.FC<FeedViewProps> = ({
             >
               {/* Header: Author + GPS + Status Badge */}
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <img
                     src={report.authorAvatar}
                     alt={report.authorName}
                     onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                    className="w-10 h-10 rounded-full object-cover border border-slate-200 cursor-pointer shadow-2xs"
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 cursor-pointer shadow-2xs shrink-0"
                   />
-                  <div>
-                    <div className="flex items-center gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <h3
                         onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                        className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline leading-none"
+                        className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px]"
+                        title={report.authorName}
                       >
                         {report.authorName}
                       </h3>
                       {report.authorBadge && (
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700">
+                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
                           {report.authorBadge}
                         </span>
                       )}
                       {report.urgencyLevel === "Critical Emergency" && (
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5">
+                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5 shrink-0">
                           <Flame className="w-2.5 h-2.5" /> Urgent
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-slate-400" />
-                      <span className="truncate max-w-[200px]">{report.location.city}</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 min-w-0">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="truncate max-w-[150px] sm:max-w-[220px]">{report.location.city}</span>
                       <span>•</span>
-                      <span>{report.timestamp}</span>
+                      <span className="shrink-0">{report.timestamp}</span>
                     </p>
                   </div>
                 </div>
 
                 <span
-                  className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${getStatusPill(
+                  className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ${getStatusPill(
                     report.status
                   )}`}
                 >
@@ -419,12 +401,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               ) : null}
 
-              {/* AI Triage Information Banner */}
+              {/* Statutory Triage Information Banner */}
               {report.aiTriage && (
                 <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-blue-600" /> AI Triage Routed: {report.aiTriage.departmentTag}
+                      <ShieldCheck className="w-3 h-3 text-blue-600" /> Statutory Triage: {report.aiTriage.departmentTag}
                     </span>
                     <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
                       Urgency Score: {report.aiTriage.urgencyScore}/10
@@ -436,59 +418,118 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               )}
 
-              {/* Department Official Claim / Action Lock Banner */}
-              {hasDeptClaimed && (
-                <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-amber-950 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-amber-600" /> Claimed by {report.claimedByDept}
-                    </span>
-                    <span className="text-[10px] font-bold text-amber-800">{report.claimedAt}</span>
-                  </div>
-                  {report.departmentNotes && (
-                    <p className="text-[11px] text-amber-900 font-medium">{report.departmentNotes}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Department Official Status Control Bar (If user is department) */}
-              {isDeptUser && (
-                <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-extrabold text-blue-900 uppercase">
-                      Department Resolution Control
-                    </span>
-                    <span className="text-[11px] font-bold text-blue-700">
-                      Current: Level {report.departmentStatusLevel}/3
+              {/* Official Department Action & Multi-Stage Progress Card */}
+              {(hasDeptClaimed || report.taggedOfficers?.length || isDeptUser) && (
+                <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                        Official Action Card: {report.claimedByDept || primaryDeptTag}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      {hasDeptClaimed ? `Stage ${currentDeptLevel}/3: ${report.status}` : "Pending Dept Action"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1.5">
+                  {/* 4-Stage Progress Timeline */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
                     {[
-                      { level: 0, label: "Open" },
-                      { level: 1, label: "Under Review" },
-                      { level: 2, label: "In Progress" },
+                      { level: 0, label: "Triaged" },
+                      { level: 1, label: "Inspection" },
+                      { level: 2, label: "Field Work" },
                       { level: 3, label: "Resolved" },
-                    ].map((step) => (
-                      <button
-                        key={step.level}
-                        onClick={() =>
-                          onUpdateStatus(
-                            report.id,
-                            step.level,
-                            statusUpdateNotes[report.id] || "Status updated by nodal desk."
-                          )
-                        }
-                        className={`py-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                          report.departmentStatusLevel === step.level
-                            ? "bg-blue-600 text-white shadow-2xs"
-                            : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        {step.label}
-                      </button>
-                    ))}
+                    ].map((step) => {
+                      const isComplete = currentDeptLevel >= step.level && hasDeptClaimed;
+                      const isCurrent = currentDeptLevel === step.level && hasDeptClaimed;
+                      return (
+                        <div
+                          key={step.level}
+                          className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
+                            isCurrent
+                              ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
+                              : isComplete
+                              ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
+                              : "bg-white text-slate-400 border-slate-200 font-medium"
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase tracking-tighter block leading-tight">
+                            {step.label}
+                          </span>
+                          <span className="text-[9px] mt-0.5">
+                            {isComplete ? "✓" : `Step ${step.level + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
+
+                  {/* Department Notes / Status Remarks */}
+                  {report.departmentNotes ? (
+                    <div className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
+                        <span>OFFICIAL DEPARTMENT REMARKS</span>
+                        <span>{report.claimedAt || "Verified SLA"}</span>
+                      </div>
+                      <p className="text-slate-700 font-normal leading-relaxed">{report.departmentNotes}</p>
+                    </div>
+                  ) : hasDeptClaimed ? (
+                    <p className="text-[11px] text-slate-500 italic">
+                      Action initiated by nodal desk. Field team is deployed on site.
+                    </p>
+                  ) : null}
+
+                  {/* Department User Controls: Claim or Advance Progress */}
+                  {(isDeptUser || !hasDeptClaimed) && (
+                    <div className="pt-1 flex items-center gap-2 flex-wrap">
+                      {!hasDeptClaimed ? (
+                        <button
+                          onClick={() =>
+                            onUpdateStatus(
+                              report.id,
+                              1,
+                              `Acknowledged by ${userProfile.departmentDetails?.name || primaryDeptTag}. Action initiated.`
+                            )
+                          }
+                          className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Take Official Action & Acknowledge Grievance</span>
+                        </button>
+                      ) : (
+                        <div className="w-full flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Add official progress update note..."
+                            value={statusUpdateNotes[report.id] || ""}
+                            onChange={(e) =>
+                              setStatusUpdateNotes((prev) => ({
+                                ...prev,
+                                [report.id]: e.target.value,
+                              }))
+                            }
+                            className="flex-1 text-xs px-3 py-1.5 bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => {
+                              const nextLevel = Math.min(3, currentDeptLevel + 1);
+                              onUpdateStatus(
+                                report.id,
+                                nextLevel,
+                                statusUpdateNotes[report.id] || `Progress updated to stage ${nextLevel}.`
+                              );
+                              setStatusUpdateNotes((prev) => ({ ...prev, [report.id]: "" }));
+                            }}
+                            disabled={currentDeptLevel >= 3}
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shrink-0 cursor-pointer"
+                          >
+                            Advance Stage →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

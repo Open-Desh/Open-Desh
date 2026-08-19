@@ -51,7 +51,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Account Settings States
   const [phone, setPhone] = useState<string>("+91 98765 43210");
-  const [email, setEmail] = useState<string>("citizen@opennation.in");
+  const [email, setEmail] = useState<string>("citizen@opendesh.in");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("English (India)");
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -93,7 +93,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsExporting(true);
     setTimeout(() => {
       const dataToExport = {
-        platform: "Open Nation Civic Governance & Accountability Platform",
+        platform: "Open Desh Civic Governance & Accountability Platform",
         exportTimestamp: new Date().toISOString(),
         dpdpComplianceReference: "DPDPA-2023-SEC-6(1)-RIGHT-TO-DATA-ACCESS",
         userProfile: {
@@ -109,7 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         dataProtectionOfficer: {
           officerName: "Shri Rajeshwar Verma (Legal & Grievance Officer)",
           jurisdiction: "New Delhi, Republic of India",
-          email: "grievance-officer@opennation.in",
+          email: "grievance-officer@opendesh.in",
         },
       };
 
@@ -119,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `open_nation_civic_archive_${userProfile.username}.json`;
+      a.download = `open_desh_civic_archive_${userProfile.username}.json`;
       a.click();
       URL.revokeObjectURL(url);
       setIsExporting(false);
@@ -172,7 +172,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         id: "privacy_safety",
         title: "Privacy and safety",
         description:
-          "Manage what information you see and share on Open Nation, location precision, and whistleblower protection.",
+          "Manage what information you see and share on Open Desh, location precision, and whistleblower protection.",
         icon: Shield,
       },
       {
@@ -191,7 +191,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       },
       {
         id: "about_platform",
-        title: "About Open Nation",
+        title: "About Open Desh",
         description:
           "Platform version 2.4.0, 100k cloud scale architecture, and representative scoring rubric.",
         icon: Info,
@@ -772,7 +772,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {renderHeader("Legal notices & compliance", "Indian Statutory Framework", () => setCurrentScreen("main"))}
 
         <div className="p-4 sm:p-5 text-xs text-slate-500 border-b border-slate-100">
-          Open Nation operates strictly under the legal frameworks of the Republic of India to ensure citizen rights and data privacy.
+          Open Desh operates strictly under the legal frameworks of the Republic of India to ensure citizen rights and data privacy.
         </div>
 
         <div className="divide-y divide-slate-100">
@@ -846,7 +846,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <h3 className="text-base font-extrabold text-slate-900 pt-2">1. Data Fiduciary Obligations</h3>
           <p>
-            Open Nation acts as a registered Data Fiduciary for Indian citizens. Personal information (Phone numbers, GPS Geotags, Identification records) is collected strictly under informed digital consent for the sole purpose of civic grievance redressal and legislative representative accountability.
+            Open Desh acts as a registered Data Fiduciary for Indian citizens. Personal information (Phone numbers, GPS Geotags, Identification records) is collected strictly under informed digital consent for the sole purpose of civic grievance redressal and legislative representative accountability.
           </p>
 
           <h3 className="text-base font-extrabold text-slate-900 pt-2">2. Rights of Data Principals (Citizens)</h3>
@@ -882,8 +882,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="text-sm font-extrabold text-slate-900">Resident Grievance Officer (India)</div>
             <div><strong>Name:</strong> Shri Rajeshwar Verma</div>
             <div><strong>Designation:</strong> Chief Legal & Compliance Officer</div>
-            <div><strong>Email:</strong> grievance-officer@opennation.in</div>
-            <div><strong>Address:</strong> Open Nation Civic Secretariat, Connaught Place, New Delhi - 110001</div>
+            <div><strong>Email:</strong> grievance-officer@opendesh.in</div>
+            <div><strong>Address:</strong> Open Desh Civic Secretariat, Connaught Place, New Delhi - 110001</div>
             <div><strong>Acknowledgment SLA:</strong> Within 24 hours of ticket receipt</div>
             <div><strong>Resolution SLA:</strong> Within 15 calendar days as mandated by Rule 3(2)</div>
           </div>
@@ -903,7 +903,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="p-5 space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed">
           <h3 className="text-base font-extrabold text-slate-900">Citizen Service Level Agreement (SLA) Matrix</h3>
           <p>
-            Grievances filed on Open Nation are automatically synchronized with municipal departments (PWD, Electricity Board, Water Board, Municipal Corporation) adhering to the following statutory escalation timelines:
+            Grievances filed on Open Desh are automatically synchronized with municipal departments (PWD, Electricity Board, Water Board, Municipal Corporation) adhering to the following statutory escalation timelines:
           </p>
 
           <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden text-xs">
@@ -943,24 +943,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   if (currentScreen === "about_platform") {
     return (
       <div className="w-full max-w-2xl mx-auto bg-white min-h-screen pb-24 md:pb-12 animate-fadeIn">
-        {renderHeader("About Open Nation", "Architecture & Mission", () => setCurrentScreen("main"))}
+        {renderHeader("About Open Desh", "Architecture & Mission", () => setCurrentScreen("main"))}
 
         <div className="p-5 space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed">
           <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-100">
             <img
               src="/assets/logo.svg"
-              alt="Open Nation Logo"
+              alt="Open Desh Logo"
               className="h-9 object-contain"
               referrerPolicy="no-referrer"
             />
             <div>
-              <div className="text-sm font-black text-slate-900">Open Nation Civic Platform</div>
+              <div className="text-sm font-black text-slate-900">Open Desh Civic Platform</div>
               <div className="text-xs text-blue-700 font-bold">Version 2.4.0 (Enterprise Cloud Edition)</div>
             </div>
           </div>
 
           <p>
-            Open Nation is an enterprise civic governance, elected leader accountability, and real-time grievance redressal ecosystem engineered for 100,000+ Indian citizens and public representatives.
+            Open Desh is an enterprise civic governance, elected leader accountability, and real-time grievance redressal ecosystem engineered for 100,000+ Indian citizens and public representatives.
           </p>
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
@@ -968,7 +968,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <ul className="list-disc pl-5 space-y-1">
               <li><strong>Database Layer:</strong> Cloud Firestore with Zero-Trust ABAC Security Rules.</li>
               <li><strong>Media Storage:</strong> Cloudflare R2 multi-image distributed bucket storage.</li>
-              <li><strong>AI Triage:</strong> Gemini multi-model fallback with statutory legal guidance.</li>
+              <li><strong>Statutory Triage:</strong> Automated departmental SLA and statutory routing engine.</li>
               <li><strong>Leader Scoring:</strong> 5-Pillar Public Performance Index (Max 100 pts).</li>
             </ul>
           </div>

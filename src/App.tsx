@@ -3,7 +3,7 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { Header } from "./components/Header.tsx";
 import { BottomNav } from "./components/BottomNav.tsx";
 import { FeedView } from "./components/FeedView.tsx";
-import { AITutorView } from "./components/AITutorView.tsx";
+import { HelpView } from "./components/HelpView.tsx";
 import { LeaderTrackerView } from "./components/LeaderTrackerView.tsx";
 import { InfrastructureView } from "./components/InfrastructureView.tsx";
 import { ProfileView } from "./components/ProfileView.tsx";
@@ -14,8 +14,10 @@ import { ConnectHubView } from "./components/ConnectHubView.tsx";
 import { CreateReportModal } from "./components/CreateReportModal.tsx";
 import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
-import { db, testFirestoreConnection } from "./firebase.ts";
-import { doc, setDoc, getDocs, collection } from "firebase/firestore";
+import { LoginView } from "./components/LoginView.tsx";
+import { EditProfileView } from "./components/EditProfileView.tsx";
+import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import {
   UserProfile,
   ReportIssue,
@@ -24,85 +26,249 @@ import {
   IssueCategory,
 } from "./types.ts";
 
+const defaultGuestProfile: UserProfile = {
+  id: "guest_citizen",
+  fullName: "Guest Citizen",
+  username: "guest_citizen",
+  bio: "Explore citizen grievances, leader performance, and infrastructure audits across India.",
+  location: "Jharkhand, India",
+  avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+  category: "citizen",
+  followersCount: 0,
+  followingCount: 0,
+  postsCount: 0,
+  systemScore: 80,
+  publicRating: 5.0,
+  reviewsCount: 0,
+  verified: false,
+  savedReports: [],
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState<string>("dashboard");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Authentication States
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authActionReason, setAuthActionReason] = useState<string | null>(null);
+
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
 
-  // Core Data States
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    id: "user_nitesh_001",
-    fullName: "Nitesh Gupta",
-    username: "niteshgupta950",
-    bio: "Public Representative & Civic Tech Advocate working for urban transparency and infrastructural acceleration in Jharkhand.",
-    location: "Jharkhand, India",
-    websiteUrl: "https://instagram.com/niteshgupta950",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
-    category: "representative",
-    representativeDetails: {
-      party: "Jharkhand Vikas Morcha",
-      position: "Elected Representative",
-      constituency: "Ranchi East, Jharkhand",
-      termYears: "2024-2029",
-      legislativeBody: "State Legislative Assembly",
-    },
-    followersCount: 255000,
-    followingCount: 12,
-    postsCount: 8235,
-    systemScore: 84,
-    publicRating: 4.4,
-    reviewsCount: 142800,
-    verified: true,
-    savedReports: ["rep_001", "rep_002"],
-  });
+  // Core Data States - defaults to guest citizen initially
+  const [userProfile, setUserProfile] = useState<UserProfile>(defaultGuestProfile);
 
   const [reports, setReports] = useState<ReportIssue[]>([]);
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [infrastructure, setInfrastructure] = useState<InfrastructureProject[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
 
-  // Hash route synchronization
+  // Clean Path route synchronization (no '#' in URLs)
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      if (hash) {
-        setCurrentView(hash);
+    const parseCurrentPath = () => {
+      const fullPath = window.location.pathname.replace(/^\/+/, "");
+      if (fullPath === "profile/edit") {
+        setCurrentView("profile_edit");
+        return;
+      }
+
+      const path = fullPath.split("/")[0];
+      if (window.location.hash) {
+        const hashView = window.location.hash.replace("#", "").replace(/^\/+/, "");
+        window.history.replaceState(null, "", hashView ? `/${hashView}` : "/");
+        if (hashView === "profile/edit") {
+          setCurrentView("profile_edit");
+          return;
+        }
+        if (hashView) {
+          setCurrentView(hashView);
+          return;
+        }
+      }
+
+      if (path && path !== "") {
+        setCurrentView(path);
+      } else {
+        setCurrentView("dashboard");
       }
     };
 
-    if (window.location.hash) {
-      handleHashChange();
-    }
+    parseCurrentPath();
 
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    const handlePopState = () => {
+      parseCurrentPath();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Sync / Load User Profile from Firestore on Auth Change
+  const syncUserProfileFromFirestore = async (firebaseUser: FirebaseUser) => {
+    try {
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const savedData = userDocSnap.data() as Partial<UserProfile>;
+        setUserProfile((prev) => ({
+          ...defaultGuestProfile,
+          ...prev,
+          ...savedData,
+          id: firebaseUser.uid,
+          fullName: savedData.fullName || firebaseUser.displayName || prev.fullName,
+          username: savedData.username || (firebaseUser.email ? firebaseUser.email.split("@")[0] : `citizen_${firebaseUser.uid.slice(0, 6)}`),
+          avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prev.avatarUrl,
+          verified: true,
+        }));
+      } else {
+        // Automatic New User Profile Generation & Firestore Provisioning
+        const displayName =
+          firebaseUser.displayName ||
+          (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Verified Citizen");
+        const username = firebaseUser.email
+          ? firebaseUser.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "")
+          : `citizen_${firebaseUser.uid.slice(0, 6)}`;
+
+        const newProfile: UserProfile = {
+          id: firebaseUser.uid,
+          fullName: displayName,
+          username: username,
+          bio: "Active citizen contributor in Open Desh civic governance.",
+          location: "Jharkhand, India",
+          websiteUrl: "",
+          avatarUrl:
+            firebaseUser.photoURL ||
+            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+          category: "citizen",
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          systemScore: 80,
+          publicRating: 5.0,
+          reviewsCount: 0,
+          verified: true,
+          savedReports: [],
+        };
+
+        setUserProfile(newProfile);
+
+        await setDoc(userDocRef, {
+          ...newProfile,
+          email: firebaseUser.email || "",
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      console.warn("User Firestore load notice:", err);
+      // Fallback local creation
+      const displayName =
+        firebaseUser.displayName ||
+        (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Verified Citizen");
+      const username = firebaseUser.email
+        ? firebaseUser.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "")
+        : `citizen_${firebaseUser.uid.slice(0, 6)}`;
+
+      setUserProfile((prev) => ({
+        ...prev,
+        id: firebaseUser.uid,
+        fullName: displayName,
+        username: username,
+        avatarUrl: firebaseUser.photoURL || prev.avatarUrl,
+        verified: true,
+      }));
+    }
+  };
+
+  // Firebase Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setCurrentUser(firebaseUser);
+        setIsLoggedIn(true);
+        await syncUserProfileFromFirestore(firebaseUser);
+      } else {
+        setCurrentUser(null);
+        setIsLoggedIn(false);
+        setUserProfile(defaultGuestProfile);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const navigateTo = (view: string, resetProfile = true) => {
-    setCurrentView(view);
-    window.location.hash = `#${view}`;
+    let targetView = view;
+    let newPath = `/${view}`;
+
+    if (view === "dashboard") {
+      newPath = "/";
+    } else if (view === "profile_edit") {
+      newPath = "/profile/edit";
+    }
+
+    // Protection: If unauthenticated guest tries to visit own profile or edit profile, redirect to login
+    if (!isLoggedIn && (view === "profile" || view === "profile_edit" || view === "settings") && resetProfile) {
+      setAuthActionReason("Sign in to access your personal verified profile and settings.");
+      targetView = "login";
+      newPath = "/login";
+    }
+
+    setCurrentView(targetView);
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, "", newPath);
+    }
     if (view === "profile" && resetProfile) {
       setSelectedViewingProfile(null);
     }
   };
 
-  // Fetch initial data
+  // Auth Guard Helper for interactive actions - Redirects to dedicated Login Page
+  const requireAuth = (callback: () => void | Promise<void>, actionName: string) => {
+    if (isLoggedIn || currentUser) {
+      callback();
+    } else {
+      setAuthActionReason(`Please sign in to ${actionName}.`);
+      navigateTo("login");
+    }
+  };
+
+  // Handle Login Success
+  const handleLoginSuccess = async (user: FirebaseUser) => {
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+    setAuthActionReason(null);
+    await syncUserProfileFromFirestore(user);
+    navigateTo("dashboard");
+  };
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      setUserProfile(defaultGuestProfile);
+      setSelectedViewingProfile(null);
+      navigateTo("dashboard");
+    } catch (err) {
+      console.error("Logout error:", err);
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      setUserProfile(defaultGuestProfile);
+      navigateTo("dashboard");
+    }
+  };
+
+  // Fetch initial feed & civic data
   const fetchData = async () => {
     try {
-      // 1. Profile
-      const profRes = await fetch("/api/user/profile");
-      if (profRes.ok) {
-        const profData = await profRes.json();
-        setUserProfile(profData);
-      }
-
-      // 2. Reports
+      // 1. Reports
       setLoadingReports(true);
       const repRes = await fetch("/api/reports");
       if (repRes.ok) {
@@ -110,14 +276,14 @@ export default function App() {
         setReports(repData);
       }
 
-      // 3. Leaders
+      // 2. Leaders
       const leadRes = await fetch("/api/leaders");
       if (leadRes.ok) {
         const leadData = await leadRes.json();
         setLeaders(leadData);
       }
 
-      // 4. Infra
+      // 3. Infra
       const infraRes = await fetch("/api/infrastructure");
       if (infraRes.ok) {
         const infraData = await infraRes.json();
@@ -169,9 +335,9 @@ export default function App() {
         try {
           await setDoc(doc(db, "reports", savedReport.id), {
             id: savedReport.id,
-            authorId: savedReport.authorId,
-            authorName: savedReport.authorName,
-            authorUsername: savedReport.authorUsername,
+            authorId: currentUser?.uid || savedReport.authorId,
+            authorName: userProfile.fullName || savedReport.authorName,
+            authorUsername: userProfile.username || savedReport.authorUsername,
             category: savedReport.category,
             text: savedReport.text,
             imageUrl: savedReport.imageUrl || "",
@@ -197,190 +363,205 @@ export default function App() {
   };
 
   const handleLikeReport = async (id: string) => {
-    // Optimistic UI update
-    setReports((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          const isLiked = r.likedBy?.includes(userProfile.id);
-          const newLikedBy = isLiked
-            ? r.likedBy.filter((uid) => uid !== userProfile.id)
-            : [...(r.likedBy || []), userProfile.id];
-          return {
-            ...r,
-            likedBy: newLikedBy,
-            likesCount: isLiked ? Math.max(0, r.likesCount - 1) : r.likesCount + 1,
-          };
-        }
-        return r;
-      })
-    );
+    requireAuth(async () => {
+      // Optimistic UI update
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === id) {
+            const isLiked = r.likedBy?.includes(userProfile.id);
+            const newLikedBy = isLiked
+              ? r.likedBy.filter((uid) => uid !== userProfile.id)
+              : [...(r.likedBy || []), userProfile.id];
+            return {
+              ...r,
+              likedBy: newLikedBy,
+              likesCount: isLiked ? Math.max(0, r.likesCount - 1) : r.likesCount + 1,
+            };
+          }
+          return r;
+        })
+      );
 
-    try {
-      await fetch(`/api/reports/${id}/like`, { method: "POST" });
-    } catch (err) {
-      console.error("Like API error:", err);
-    }
+      try {
+        await fetch(`/api/reports/${id}/like`, { method: "POST" });
+      } catch (err) {
+        console.error("Like API error:", err);
+      }
+    }, "like civic reports");
   };
 
   const handleReReport = async (id: string) => {
-    setReports((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          const hasReReported = r.reReportedBy?.includes(userProfile.id);
-          const newReReportedBy = hasReReported
-            ? r.reReportedBy.filter((uid) => uid !== userProfile.id)
-            : [...(r.reReportedBy || []), userProfile.id];
-          return {
-            ...r,
-            reReportedBy: newReReportedBy,
-            reReportsCount: hasReReported
-              ? Math.max(0, (r.reReportsCount || 1) - 1)
-              : (r.reReportsCount || 0) + 1,
-          };
-        }
-        return r;
-      })
-    );
+    requireAuth(async () => {
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === id) {
+            const hasReReported = r.reReportedBy?.includes(userProfile.id);
+            const newReReportedBy = hasReReported
+              ? r.reReportedBy.filter((uid) => uid !== userProfile.id)
+              : [...(r.reReportedBy || []), userProfile.id];
+            return {
+              ...r,
+              reReportedBy: newReReportedBy,
+              reReportsCount: hasReReported
+                ? Math.max(0, (r.reReportsCount || 1) - 1)
+                : (r.reReportsCount || 0) + 1,
+            };
+          }
+          return r;
+        })
+      );
 
-    try {
-      await fetch(`/api/reports/${id}/rereport`, { method: "POST" });
-    } catch (err) {
-      console.error("Re-report API error:", err);
-    }
+      try {
+        await fetch(`/api/reports/${id}/rereport`, { method: "POST" });
+      } catch (err) {
+        console.error("Re-report API error:", err);
+      }
+    }, "re-report this grievance");
   };
 
   const handleBookmark = async (id: string) => {
-    const isBookmarked = userProfile.savedReports?.includes(id);
-    const newSaved = isBookmarked
-      ? (userProfile.savedReports || []).filter((rid) => rid !== id)
-      : [...(userProfile.savedReports || []), id];
+    requireAuth(async () => {
+      const isBookmarked = userProfile.savedReports?.includes(id);
+      const newSaved = isBookmarked
+        ? (userProfile.savedReports || []).filter((rid) => rid !== id)
+        : [...(userProfile.savedReports || []), id];
 
-    setUserProfile((prev) => ({ ...prev, savedReports: newSaved }));
+      setUserProfile((prev) => ({ ...prev, savedReports: newSaved }));
 
-    try {
-      await fetch(`/api/reports/${id}/bookmark`, { method: "POST" });
-    } catch (err) {
-      console.error("Bookmark API error:", err);
-    }
+      try {
+        await fetch(`/api/reports/${id}/bookmark`, { method: "POST" });
+      } catch (err) {
+        console.error("Bookmark API error:", err);
+      }
+    }, "save bookmarks");
   };
 
   const handleReply = async (id: string, text: string, parentReplyId?: string) => {
-    try {
-      const res = await fetch(`/api/reports/${id}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, parentReplyId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // Replace full report to preserve nested tree state & department claimed status
-        setReports((prev) =>
-          prev.map((r) => (r.id === id ? data.report : r))
-        );
+    requireAuth(async () => {
+      try {
+        const res = await fetch(`/api/reports/${id}/reply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, parentReplyId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setReports((prev) =>
+            prev.map((r) => (r.id === id ? data.report : r))
+          );
+        }
+      } catch (err) {
+        console.error("Reply API error:", err);
       }
-    } catch (err) {
-      console.error("Reply API error:", err);
-    }
+    }, "reply and comment on reports");
   };
 
   const handleUpdateStatus = async (id: string, level: number, notes?: string) => {
-    try {
-      const res = await fetch(`/api/reports/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ level, notes }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setReports((prev) =>
-          prev.map((r) => (r.id === id ? data.report : r))
-        );
+    requireAuth(async () => {
+      try {
+        const res = await fetch(`/api/reports/${id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ level, notes }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setReports((prev) =>
+            prev.map((r) => (r.id === id ? data.report : r))
+          );
+        }
+      } catch (err) {
+        console.error("Status update error:", err);
       }
-    } catch (err) {
-      console.error("Status update error:", err);
-    }
+    }, "update grievance status");
   };
 
   const handleUpdateProfile = async (updated: Partial<UserProfile>) => {
+    if (!isLoggedIn) {
+      navigateTo("login");
+      return;
+    }
+
+    const updatedProfile: UserProfile = {
+      ...userProfile,
+      ...updated,
+    };
+    setUserProfile(updatedProfile);
+
+    // Sync to backend and Firestore
     try {
-      const res = await fetch("/api/user/profile", {
+      await fetch("/api/user/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUserProfile(data.profile);
 
-        // Sync profile to Firestore
-        try {
-          await setDoc(doc(db, "users", data.profile.id), {
-            id: data.profile.id,
-            fullName: data.profile.fullName,
-            username: data.profile.username,
-            bio: data.profile.bio || "",
-            location: data.profile.location || "",
-            websiteUrl: data.profile.websiteUrl || "",
-            avatarUrl: data.profile.avatarUrl || "",
-            category: data.profile.category,
-            postsCount: data.profile.postsCount || 0,
-            systemScore: data.profile.systemScore || 80,
-            publicRating: data.profile.publicRating || 4.5,
-          });
-        } catch (fsErr) {
-          console.warn("Firestore profile sync notice:", fsErr);
-        }
-      }
+      const uid = currentUser?.uid || userProfile.id;
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          ...updatedProfile,
+          id: uid,
+          lastUpdated: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     } catch (err) {
-      console.error("Profile update error:", err);
+      console.warn("Profile Firestore sync notice:", err);
     }
   };
 
   const handleRateUser = async (userId: string, rating: number, comment: string) => {
-    try {
-      const res = await fetch(`/api/users/${userId}/rate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
-      });
-      if (res.ok) {
-        fetchData();
+    requireAuth(async () => {
+      try {
+        const res = await fetch(`/api/users/${userId}/rate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating, comment }),
+        });
+        if (res.ok) {
+          fetchData();
+        }
+      } catch (err) {
+        console.error("Rate user error:", err);
       }
-    } catch (err) {
-      console.error("Rate user error:", err);
-    }
+    }, "submit a leader rating");
   };
 
   const handleReplyToReview = async (reviewId: string, replyText: string) => {
-    const targetUserId = selectedViewingProfile ? selectedViewingProfile.id : userProfile.id;
-    try {
-      const res = await fetch(`/api/users/${targetUserId}/review/${reviewId}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ replyText }),
-      });
-      if (res.ok) {
-        fetchData();
+    requireAuth(async () => {
+      const targetUserId = selectedViewingProfile ? selectedViewingProfile.id : userProfile.id;
+      try {
+        const res = await fetch(`/api/users/${targetUserId}/review/${reviewId}/reply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ replyText }),
+        });
+        if (res.ok) {
+          fetchData();
+        }
+      } catch (err) {
+        console.error("Reply to review error:", err);
       }
-    } catch (err) {
-      console.error("Reply to review error:", err);
-    }
+    }, "reply to reviews");
   };
 
   const handleToggleFollow = async (targetUserId: string) => {
-    try {
-      await fetch(`/api/users/${targetUserId}/follow`, {
-        method: "POST",
-      });
-      fetchData();
-    } catch (err) {
-      console.error("Follow error:", err);
-    }
+    requireAuth(async () => {
+      try {
+        await fetch(`/api/users/${targetUserId}/follow`, {
+          method: "POST",
+        });
+        fetchData();
+      } catch (err) {
+        console.error("Follow error:", err);
+      }
+    }, "follow users and representatives");
   };
 
   // Inspect any user's profile dynamically
   const handleSelectUserProfile = async (userId: string) => {
-    if (userId === userProfile.id) {
+    if (isLoggedIn && userId === userProfile.id) {
       setSelectedViewingProfile(null);
       navigateTo("profile", true);
       return;
@@ -430,6 +611,10 @@ export default function App() {
     navigateTo("profile", false);
   };
 
+  const handleOpenCompose = () => {
+    requireAuth(() => navigateTo("compose"), "file and report a civic grievance");
+  };
+
   const bookmarkedReports = reports.filter((r) =>
     userProfile.savedReports?.includes(r.id)
   );
@@ -438,36 +623,59 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white">
-      {/* Sidebar */}
-      <Sidebar
-        currentView={currentView}
-        onNavigate={navigateTo}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        userProfile={userProfile}
-      />
+      {/* Sidebar (Hidden on Login View & Full Compose) */}
+      {currentView !== "login" && (
+        <Sidebar
+          currentView={currentView}
+          onNavigate={navigateTo}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          userProfile={userProfile}
+          isLoggedIn={isLoggedIn}
+          onOpenLogin={() => {
+            setAuthActionReason("Sign in to unlock verified citizen actions.");
+            navigateTo("login");
+          }}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Main Content Area */}
       <div
         id="main-content"
         className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${
-          isCollapsed ? "md:ml-20" : "md:ml-[260px]"
+          currentView === "login"
+            ? "w-full"
+            : isCollapsed
+            ? "md:ml-20"
+            : "md:ml-[260px]"
         }`}
       >
-        {/* Navigation Header - Rendered on dashboard/infrastructure/connect etc., but Profile, Settings, Search & Compose uses their own integrated X-style header */}
-        {currentView !== "profile" && currentView !== "settings" && currentView !== "search" && currentView !== "compose" && (
-          <Header
-            currentView={currentView}
-            onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-            onNavigate={navigateTo}
-            userProfile={userProfile}
-            searchQuery={bookmarkSearchQuery}
-            onSearchQueryChange={setBookmarkSearchQuery}
-            bookmarkedCount={bookmarkedReports.length}
-          />
-        )}
+        {/* Navigation Header - Rendered on dashboard/infrastructure etc., but Profile, Settings, Search, Compose, Login, Connect & Edit Profile use their own custom X-style header */}
+        {currentView !== "profile" &&
+          currentView !== "profile_edit" &&
+          currentView !== "login" &&
+          currentView !== "settings" &&
+          currentView !== "search" &&
+          currentView !== "compose" &&
+          currentView !== "connect" && (
+            <Header
+              currentView={currentView}
+              onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+              onNavigate={navigateTo}
+              userProfile={userProfile}
+              searchQuery={bookmarkSearchQuery}
+              onSearchQueryChange={setBookmarkSearchQuery}
+              bookmarkedCount={bookmarkedReports.length}
+              isLoggedIn={isLoggedIn}
+              onOpenLogin={() => {
+                setAuthActionReason("Sign in to your Open Desh account.");
+                navigateTo("login");
+              }}
+            />
+          )}
 
         {/* View Switcher Routing */}
         <main id="app-root" className="flex-1 w-full bg-slate-100/50 min-h-screen">
@@ -480,9 +688,27 @@ export default function App() {
               onBookmark={handleBookmark}
               onReply={handleReply}
               onUpdateStatus={handleUpdateStatus}
-              onOpenCreateModal={() => navigateTo("compose")}
+              onOpenCreateModal={handleOpenCompose}
               onSelectUser={handleSelectUserProfile}
               loading={loadingReports}
+            />
+          )}
+
+          {/* DEDICATED LOGIN PAGE (No Modal) */}
+          {currentView === "login" && (
+            <LoginView
+              onSuccess={handleLoginSuccess}
+              onCancel={() => navigateTo("dashboard")}
+              actionReason={authActionReason}
+            />
+          )}
+
+          {/* DEDICATED EDIT PROFILE PAGE (No Modal) */}
+          {currentView === "profile_edit" && (
+            <EditProfileView
+              userProfile={userProfile}
+              onSave={handleUpdateProfile}
+              onCancel={() => navigateTo("profile")}
             />
           )}
 
@@ -498,7 +724,7 @@ export default function App() {
             />
           )}
 
-          {currentView === "aitutor" && <AITutorView />}
+          {currentView === "aitutor" && <HelpView />}
 
           {currentView === "leader" && (
             <LeaderTrackerView
@@ -538,6 +764,7 @@ export default function App() {
               key={activeProfileToRender.id}
               userProfile={activeProfileToRender}
               activeUser={userProfile}
+              isLoggedIn={isLoggedIn}
               userReports={reports.filter(
                 (r) =>
                   r.authorId === activeProfileToRender.id ||
@@ -548,6 +775,7 @@ export default function App() {
                 setSelectedViewingProfile(null);
                 navigateTo("dashboard");
               }}
+              onNavigateToEditProfile={() => navigateTo("profile_edit")}
               onUpdateProfile={handleUpdateProfile}
               onRateUser={async (rating, comment) => {
                 await handleRateUser(activeProfileToRender.id, rating, comment);
@@ -587,19 +815,24 @@ export default function App() {
           )}
 
           {currentView === "connect" && (
-            <ConnectHubView userProfile={userProfile} />
+            <ConnectHubView
+              userProfile={userProfile}
+              onBack={() => navigateTo("dashboard")}
+              onSelectUser={handleSelectUserProfile}
+              onToggleFollow={handleToggleFollow}
+            />
           )}
 
-          {currentView === "help" && <AITutorView />}
+          {currentView === "help" && <HelpView />}
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose) */}
-      {currentView !== "compose" && (
+      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose and Login) */}
+      {currentView !== "compose" && currentView !== "login" && currentView !== "profile_edit" && (
         <BottomNav
           currentView={currentView}
           onNavigate={navigateTo}
-          onOpenCreateReport={() => navigateTo("compose")}
+          onOpenCreateReport={handleOpenCompose}
         />
       )}
 
@@ -613,3 +846,5 @@ export default function App() {
     </div>
   );
 }
+
+

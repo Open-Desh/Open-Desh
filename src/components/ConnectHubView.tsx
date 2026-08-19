@@ -1,201 +1,226 @@
-import React, { useState } from "react";
-import { Users, MessageSquare, Video, Calendar, Sparkles, Send } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { ArrowLeft, CheckCircle2, Users } from "lucide-react";
 import { UserProfile } from "../types.ts";
+import { db } from "../firebase.ts";
+import { collection, getDocs } from "firebase/firestore";
 
 interface ConnectHubViewProps {
   userProfile: UserProfile;
+  onBack: () => void;
+  onSelectUser: (userId: string) => void;
+  onToggleFollow?: (userId: string) => void;
 }
 
-export const ConnectHubView: React.FC<ConnectHubViewProps> = ({ userProfile }) => {
-  const [activeTab, setActiveTab] = useState<"townhalls" | "discussions">("townhalls");
-  const [discussionPost, setDiscussionPost] = useState("");
-  const [discussions, setDiscussions] = useState([
-    {
-      id: "disc_1",
-      author: "Vikas Aggarwal",
-      authorRole: "Citizen Activist",
-      title: "Proposal for dedicated bicycle corridors along Golf Course Extension Rd",
-      text: "We should formally petition GMDA to carve out safe segregated bicycle tracks before the next road resurfacing cycle. Thoughts on collective signature submission?",
-      votes: 84,
-      replies: 19,
-      timestamp: "2 hours ago",
-    },
-    {
-      id: "disc_2",
-      author: "Dr. Meenakshi S.",
-      authorRole: "Environmental Scientist",
-      title: "Groundwater recharge pits mandate for residential apartments",
-      text: "With summer approaching, auditing functional status of rainwater harvesting pits across Sector 45-57 is vital. Let's create an open data registry.",
-      votes: 112,
-      replies: 26,
-      timestamp: "5 hours ago",
-    },
-  ]);
+export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
+  userProfile,
+  onBack,
+  onSelectUser,
+  onToggleFollow,
+}) => {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
 
-  const townhalls = [
-    {
-      id: "th_1",
-      title: "Old Gurugram Metro Rail Line: Public Consultation & Land Alignment",
-      host: "DMRC & Municipal Joint Committee",
-      date: "Saturday, 22 Aug 2026 • 11:00 AM IST",
-      type: "Hybrid Live Townhall",
-      attendees: 1240,
-      status: "Upcoming",
-    },
-    {
-      id: "th_2",
-      title: "Monsoon Preparedness & Badshahpur Stormwater Drainage Audit",
-      host: "Executive Engineer, PWD & Jal Board",
-      date: "Wednesday, 26 Aug 2026 • 04:00 PM IST",
-      type: "Virtual Broadcast & Q/A",
-      attendees: 860,
-      status: "Registration Open",
-    },
-  ];
+  // Fetch real users from Firebase Firestore and backend database
+  useEffect(() => {
+    let isMounted = true;
 
-  const handlePostDiscussion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!discussionPost.trim()) return;
+    async function loadRealUsers() {
+      setLoading(true);
+      const userMap: Record<string, UserProfile> = {};
 
-    const newDisc = {
-      id: `disc_${Date.now()}`,
-      author: userProfile.fullName,
-      authorRole: `${userProfile.category.toUpperCase()} • Verified`,
-      title: discussionPost.slice(0, 50) + "...",
-      text: discussionPost,
-      votes: 1,
-      replies: 0,
-      timestamp: "Just now",
+      // 1. Fetch from Firestore users collection
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data() as UserProfile;
+          if (data && (data.id || docSnap.id)) {
+            const uid = data.id || docSnap.id;
+            userMap[uid] = {
+              ...data,
+              id: uid,
+            };
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore users query notice:", err);
+      }
+
+      // 2. Fetch from /api/users to complement/hydrate with registered backend entities
+      try {
+        const res = await fetch("/api/users");
+        if (res.ok) {
+          const apiUsers: UserProfile[] = await res.json();
+          apiUsers.forEach((u) => {
+            if (u && u.id && !userMap[u.id]) {
+              userMap[u.id] = u;
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("API users fetch notice:", err);
+      }
+
+      if (isMounted) {
+        // Exclude current user from suggestions
+        const list = Object.values(userMap).filter((u) => u.id !== userProfile.id);
+        setUsers(list);
+
+        // Initialize follow status map
+        const initialFollowMap: Record<string, boolean> = {};
+        list.forEach((u) => {
+          initialFollowMap[u.id] = Boolean(u.isFollowing);
+        });
+        setFollowingMap(initialFollowMap);
+        setLoading(false);
+      }
+    }
+
+    loadRealUsers();
+
+    return () => {
+      isMounted = false;
     };
+  }, [userProfile.id]);
 
-    setDiscussions([newDisc, ...discussions]);
-    setDiscussionPost("");
+  const handleFollowClick = (e: React.MouseEvent, targetUserId: string) => {
+    e.stopPropagation();
+    setFollowingMap((prev) => ({
+      ...prev,
+      [targetUserId]: !prev[targetUserId],
+    }));
+
+    if (onToggleFollow) {
+      onToggleFollow(targetUserId);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-24 md:pb-12 animate-fadeIn space-y-4">
-      {/* Banner */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-extrabold text-slate-900">Public Townhall & Civic Assembly</h1>
-            <p className="text-xs text-slate-500">
-              Live consultation sessions between citizens, elected representatives, and departmental engineers.
-            </p>
-          </div>
+    <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
+      {/* 1. Dedicated Fixed/Sticky Header Bar: Back Button + Connect Title (No right counter, fixed on top) */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 flex items-center px-4 h-14">
+        <button
+          onClick={onBack}
+          className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-slate-900 transition-colors cursor-pointer mr-3"
+          title="Back"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="text-lg font-black text-slate-900 tracking-tight">Connect</h1>
+      </div>
+
+      {/* 2. Section Header: Suggested for you */}
+      <div className="px-4 pt-4 pb-2">
+        <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
+          Suggested for you
+        </h2>
+      </div>
+
+      {/* 3. Real Profiles List */}
+      {loading ? (
+        <div className="p-8 text-center space-y-3">
+          <div className="w-8 h-8 border-3 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-medium">Loading profiles...</p>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setActiveTab("townhalls")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === "townhalls"
-              ? "bg-slate-900 text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Live Virtual Townhalls ({townhalls.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("discussions")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === "discussions"
-              ? "bg-slate-900 text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Community Policy Debates ({discussions.length})
-        </button>
-      </div>
-
-      {/* Content */}
-      {activeTab === "townhalls" ? (
-        <div className="space-y-3">
-          {townhalls.map((th) => (
-            <div
-              key={th.id}
-              className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-3 hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
-                  {th.type}
-                </span>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  {th.status}
-                </span>
-              </div>
-
-              <h3 className="text-base font-black text-slate-900">{th.title}</h3>
-              <p className="text-xs text-slate-500 font-medium">Conducted by: {th.host}</p>
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                  <span>{th.date}</span>
-                </span>
-                <button
-                  onClick={() => alert("You have been registered for this Townhall session. Joining link dispatched.")}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all"
-                >
-                  Join Public Room
-                </button>
-              </div>
-            </div>
-          ))}
+      ) : users.length === 0 ? (
+        <div className="p-8 text-center space-y-2 border-t border-slate-100">
+          <Users className="w-10 h-10 text-slate-300 mx-auto mb-1" />
+          <p className="text-sm font-bold text-slate-800">No profiles found</p>
+          <p className="text-xs text-slate-500">
+            No other registered users found in the database.
+          </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {/* Post Box */}
-          <form
-            onSubmit={handlePostDiscussion}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 space-y-3"
-          >
-            <h3 className="text-xs font-black uppercase text-slate-600 tracking-wider">
-              Start Citizen Debate / Policy Petition
-            </h3>
-            <textarea
-              rows={2}
-              value={discussionPost}
-              onChange={(e) => setDiscussionPost(e.target.value)}
-              placeholder="Present your civic proposal or municipal improvement idea..."
-              className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white resize-none"
-            />
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={!discussionPost.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all"
-              >
-                Publish Proposal
-              </button>
-            </div>
-          </form>
+        <div className="divide-y divide-slate-100">
+          {users.map((profile) => {
+            const isFollowing = followingMap[profile.id] || false;
+            const isVerified =
+              profile.verified ||
+              profile.category === "representative" ||
+              profile.category === "department";
 
-          {/* List */}
-          <div className="space-y-3">
-            {discussions.map((d) => (
+            return (
               <div
-                key={d.id}
-                className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 space-y-2"
+                key={profile.id}
+                onClick={() => onSelectUser(profile.id)}
+                className="p-4 hover:bg-slate-50/90 transition-colors cursor-pointer flex items-start gap-3 group"
               >
-                <div className="flex justify-between items-center text-[11px] text-slate-500">
-                  <span className="font-bold text-slate-900">{d.author} • {d.authorRole}</span>
-                  <span>{d.timestamp}</span>
+                {/* Avatar */}
+                <img
+                  src={
+                    profile.avatarUrl ||
+                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"
+                  }
+                  alt={profile.fullName}
+                  className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs group-hover:scale-105 transition-transform"
+                />
+
+                {/* Info Container */}
+                <div className="flex-1 min-w-0 pr-2">
+                  {/* Name + Verified Badge */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-sm font-black text-slate-900 hover:underline leading-tight truncate">
+                      {profile.fullName}
+                    </h3>
+                    {isVerified && (
+                      <CheckCircle2 className="w-4 h-4 text-sky-500 fill-sky-500 text-white shrink-0" />
+                    )}
+                    {profile.category === "representative" && (
+                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                        {profile.representativeDetails?.position || "Representative"}
+                      </span>
+                    )}
+                    {profile.category === "department" && (
+                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200 shrink-0">
+                        {profile.departmentDetails?.officialBadge || "Official Dept"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Handle */}
+                  <p className="text-xs text-slate-500 font-medium">
+                    @{profile.username.replace(/^@/, "")}
+                  </p>
+
+                  {/* Bio */}
+                  {profile.bio && (
+                    <p className="text-xs text-slate-800 mt-1 line-clamp-2 leading-relaxed">
+                      {profile.bio}
+                    </p>
+                  )}
+
+                  {/* Additional Context Tags (Constituency / Department / Location) */}
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500 flex-wrap">
+                    {profile.representativeDetails?.constituency && (
+                      <span className="font-bold text-slate-600">
+                        📍 {profile.representativeDetails.constituency}
+                      </span>
+                    )}
+                    {profile.departmentDetails?.name && (
+                      <span className="font-bold text-slate-600">
+                        🏛️ {profile.departmentDetails.name}
+                      </span>
+                    )}
+                    {profile.location && !profile.representativeDetails?.constituency && (
+                      <span>📍 {profile.location}</span>
+                    )}
+                  </div>
                 </div>
-                <h4 className="text-sm font-extrabold text-slate-900">{d.title}</h4>
-                <p className="text-xs text-slate-700 leading-relaxed">{d.text}</p>
-                <div className="flex items-center gap-4 text-xs font-bold text-slate-500 pt-2 border-t border-slate-100">
-                  <button className="hover:text-blue-600">👍 {d.votes} Endorsements</button>
-                  <button className="hover:text-blue-600">💬 {d.replies} Arguments</button>
-                </div>
+
+                {/* Follow / Following Button (Exact Reference Style) */}
+                <button
+                  onClick={(e) => handleFollowClick(e, profile.id)}
+                  className={`px-5 py-1.5 rounded-full text-xs font-extrabold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
+                    isFollowing
+                      ? "bg-white hover:bg-rose-50 text-slate-900 hover:text-rose-600 border border-slate-300 hover:border-rose-300"
+                      : "bg-slate-950 hover:bg-slate-800 text-white"
+                  }`}
+                >
+                  {isFollowing ? "Following" : "Follow"}
+                </button>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>

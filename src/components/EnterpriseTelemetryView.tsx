@@ -51,7 +51,7 @@ export const EnterpriseTelemetryView: React.FC = () => {
             High-Scalability Cloud Telemetry & Node Health
           </h1>
           <p className="text-slate-500 text-xs md:text-sm mt-0.5">
-            Distributed multi-region caching, P95 latency monitors, sub-second Gemini AI pipelines, and auto-scaling queues.
+            Distributed multi-region caching, P95 latency monitors, sub-second statutory triage engines, and auto-scaling queues.
           </p>
         </div>
 
@@ -175,20 +175,20 @@ export const EnterpriseTelemetryView: React.FC = () => {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
           <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-            <Cloud className="w-4 h-4 text-indigo-600" /> Gemini 3.7 Flash AI Pipeline Specs
+            <Cloud className="w-4 h-4 text-indigo-600" /> Statutory & Department Triage Specs
           </h3>
           <ul className="text-xs text-slate-600 space-y-2">
             <li className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
-              <span className="font-medium">AI Triage Model:</span>
-              <span className="font-black text-indigo-700">gemini-3.7-flash</span>
+              <span className="font-medium">Triage Engine:</span>
+              <span className="font-black text-indigo-700">Open Desh Statutory Rule Engine</span>
             </li>
             <li className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
               <span className="font-medium">Average Categorization Time:</span>
-              <span className="font-black text-slate-900">{metrics?.geminiAiAuditLatencyMs || 240} ms</span>
+              <span className="font-black text-slate-900">{metrics?.triageLatencyMs || 4.2} ms</span>
             </li>
             <li className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
-              <span className="font-medium">Server-Side Key Vault:</span>
-              <span className="font-black text-emerald-600">Encrypted in Memory</span>
+              <span className="font-medium">High Availability SLA:</span>
+              <span className="font-black text-emerald-600">Active High-Speed Edge</span>
             </li>
           </ul>
         </div>

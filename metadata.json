@@ -1,6 +1,6 @@
 {
-  "name": "Open Nation",
-  "description": "Enterprise-grade Civic Governance Platform, Leader Performance Tracker & Transparency Hub.",
+  "name": "Open Desh",
+  "description": "Open Voice, Open Desh — Civic governance, leader accountability, and real-time grievance redressal ecosystem.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

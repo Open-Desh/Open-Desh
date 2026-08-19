@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import {
   UserProfile,
   ReportIssue,
@@ -11,31 +10,44 @@ import {
   UserReview,
 } from "./src/types.ts";
 
-// Initialize Server-side Gemini AI
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-});
+// Deterministic Civic & Statutory Rule Engine for Triage
+function calculateCivicTriage(text: string, category: string, urgencyLevel?: string) {
+  const lower = (text + " " + category).toLowerCase();
+  let departmentTag = "@PWD";
+  let statute = "Citizen Charter Municipal SLA Act, Sec 4";
+  let sentimentSummary = "Civic grievance logged with verified location coordinates.";
 
-// Helper for resilient server-side Gemini content generation with multi-model fallback
-async function generateGeminiSafe(promptText: string): Promise<string | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
-
-  const candidateModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.7-flash"];
-
-  for (const modelName of candidateModels) {
-    try {
-      const res = await ai.models.generateContent({
-        model: modelName,
-        contents: promptText,
-      });
-      if (res.text) {
-        return res.text;
-      }
-    } catch (err: any) {
-      console.warn(`Gemini model ${modelName} unavailable (${err?.status || err?.message}), trying next fallback...`);
-    }
+  if (lower.includes("water") || lower.includes("jal") || lower.includes("pipe") || lower.includes("leak") || lower.includes("sludge") || category === "Water") {
+    departmentTag = "@JalBoard";
+    statute = "Jal Jeevan Mission Potability Standard (IS 10500)";
+    sentimentSummary = "Municipal water supply/pipeline grievance requiring potable water audit.";
+  } else if (lower.includes("electric") || lower.includes("power") || lower.includes("light") || lower.includes("wire") || lower.includes("transformer") || lower.includes("current") || category === "Electricity") {
+    departmentTag = "@DHBVN";
+    statute = "Electricity Supply Code & Distribution Standards";
+    sentimentSummary = "Power infrastructure fault or safety blackspot.";
+  } else if (lower.includes("bribe") || lower.includes("rishwat") || lower.includes("corrupt") || lower.includes("extort") || category === "Corruption") {
+    departmentTag = "@ACB";
+    statute = "Prevention of Corruption Act & Whistleblower Protection Mandate";
+    sentimentSummary = "Public integrity / anti-corruption escalation.";
+  } else if (lower.includes("garbage") || lower.includes("kachra") || lower.includes("waste") || lower.includes("drain") || lower.includes("nullah") || lower.includes("sewer") || category === "Sanitation") {
+    departmentTag = "@MCD";
+    statute = "Solid Waste Management Rules & Public Health Sanitation SLA";
+    sentimentSummary = "Sanitation & waste management clearance request.";
+  } else {
+    departmentTag = "@PWD";
+    statute = "Indian Road Congress (IRC SP:84) Safety Standard";
+    sentimentSummary = "Public works & road mobility infrastructure hazard.";
   }
-  return null;
+
+  const urgencyScore = urgencyLevel === "Critical Emergency" ? 9 : urgencyLevel === "High Priority" ? 8 : 6;
+
+  return {
+    departmentTag,
+    urgencyScore,
+    sentimentSummary,
+    relevantStatute: statute,
+    confidenceScore: 0.98,
+  };
 }
 
 // Primary In-Memory Database Store (Enterprise Scalable Cache)
@@ -572,7 +584,13 @@ async function startServer() {
     res.json({ status: "ok", profile: currentUserProfile });
   });
 
-  // 2. Public User Profile by ID or Username
+  // 2. All Users for Connect & Discovery
+  app.get("/api/users", (req, res) => {
+    const list = Object.values(usersDatabase);
+    res.json(list);
+  });
+
+  // 2b. Public User Profile by ID or Username
   app.get("/api/users/:identifier", (req, res) => {
     const { identifier } = req.params;
     let user = usersDatabase[identifier] || Object.values(usersDatabase).find((u) => u.username === identifier);
@@ -716,7 +734,7 @@ async function startServer() {
     res.json(reportsDatabase);
   });
 
-  // Create Report with Gemini AI Auto-Triage & Cloudflare R2 Multi-Image Evidence
+  // Create Report with Multi-Image Evidence & Civic Statutory Triage
   app.post("/api/reports", async (req, res) => {
     try {
       const {
@@ -732,45 +750,8 @@ async function startServer() {
       } = req.body;
       const newId = `rep_${Date.now()}`;
 
-      // Run Server-side Gemini AI Triage
-      let aiTriage = {
-        departmentTag: `@${category || "PWD"}`,
-        urgencyScore: urgencyLevel === "Critical Emergency" ? 9 : 7,
-        sentimentSummary: "Citizen grievance logged with verified geo-tag and departmental routing.",
-        relevantStatute: "Citizen Charter Municipal SLA Act, Sec 4",
-        confidenceScore: 0.96,
-      };
-
-      try {
-        const rawText = await generateGeminiSafe(`Analyze this Indian municipal citizen grievance and output a concise JSON object:
-Text: "${text}"
-Category: "${category}"
-Location: "${location?.city || "Ranchi, Jharkhand"}"
-
-Format:
-{
-  "departmentTag": "@JalBoard or @PWD or @ACB or @DHBVN or @MCD",
-  "urgencyScore": 1-10,
-  "sentimentSummary": "1 concise sentence explaining the civic risk",
-  "relevantStatute": "Legal/Civic statute standard"
-}`);
-
-        if (rawText) {
-          const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            aiTriage = {
-              departmentTag: parsed.departmentTag || aiTriage.departmentTag,
-              urgencyScore: parsed.urgencyScore || (urgencyLevel === "Critical Emergency" ? 9 : 7),
-              sentimentSummary: parsed.sentimentSummary || aiTriage.sentimentSummary,
-              relevantStatute: parsed.relevantStatute || aiTriage.relevantStatute,
-              confidenceScore: 0.98,
-            };
-          }
-        }
-      } catch (aiErr) {
-        // Silent graceful fallback
-      }
+      // Run Civic Statutory Triage
+      const aiTriage = calculateCivicTriage(text || "", category || "Infrastructure", urgencyLevel);
 
       // Collect image array (if multiple passed or single fallback)
       const imagesList = Array.isArray(images) && images.length > 0 ? images : imageUrl ? [imageUrl] : [];
@@ -978,35 +959,6 @@ Format:
     res.json(infrastructureDatabase);
   });
 
-  // 6. AI Civic Legal Tutor Endpoint
-  app.post("/api/ai/tutor", async (req, res) => {
-    try {
-      const { prompt } = req.body;
-      if (!prompt) return res.status(400).json({ error: "Prompt required" });
-
-      const replyText = await generateGeminiSafe(`You are an expert Indian Civic Governance and Legal Advisor for Open Nation.
-Provide a structured, step-by-step, actionable response in clear professional language (supporting English & Hindi context) with relevant laws, government portals, and draft format templates.
-
-User Query: "${prompt}"`);
-
-      if (replyText) {
-        return res.json({
-          reply: replyText,
-          sources: ["Indian Administrative Law", "RTI Act 2005", "CPGRAMS Central Citizen Portal"],
-        });
-      }
-
-      // Default statutory guidance fallback
-      res.json({
-        reply: `### Statutory Guidance for Civic Action\n\n**1. Relevant Provision:**\nFor civic redressal regarding "${prompt}", citizens can invoke Section 6(1) of the Right to Information (RTI) Act, 2005 or lodge a statutory complaint on the CPGRAMS / Jharkhand JharSewa portal.\n\n**2. Action Steps:**\n- Address the complaint to the designated Public Information Officer (PIO) or Municipal Commissioner.\n- Attach photographic geo-tagged evidence.\n- If unresolved within 15 days, appeal to the First Appellate Authority (FAA).`,
-        sources: ["Right to Information Act, 2005", "CPGRAMS Citizen Portal", "Jharkhand Public Services Act"],
-      });
-    } catch (err) {
-      console.error("AI Tutor API Error:", err);
-      res.status(500).json({ error: "AI Tutor query processing failed" });
-    }
-  });
-
   // Telemetry Endpoint
   app.get("/api/metrics/telemetry", (req, res) => {
     res.json({
@@ -1016,7 +968,7 @@ User Query: "${prompt}"`);
       cacheHitRatio: 99.4,
       databaseConnections: 340,
       queueBacklog: 0,
-      geminiAiAuditLatencyMs: 240,
+      triageLatencyMs: 4.2,
       regionalNodes: [
         { region: "ap-south-1 (Mumbai)", status: "healthy", latencyMs: 8, loadPercent: 42 },
         { region: "ap-south-2 (Hyderabad)", status: "healthy", latencyMs: 11, loadPercent: 38 },
@@ -1044,7 +996,7 @@ User Query: "${prompt}"`);
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Omkun Orbit Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Open Desh Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
