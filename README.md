@@ -1,21 +1,20 @@
-# Open Nation — repository initialized
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-This repository was initialized by GitHub Copilot to start a Cloudflare-only deployment workflow for the "Open Nation" app.
+# Run and deploy your AI Studio app
 
-What I will do next (on branch `deploy/cloudflare`):
+This contains everything you need to run your app locally.
 
-- Add Cloudflare Pages configuration to build and deploy the frontend (`vite build`) to Cloudflare Pages.
-- Convert the Express backend (server.ts) into Cloudflare Workers / Pages Functions (requires code changes). I will add a `workers/` folder with the adapted server entry and a build step.
-- Add GitHub Actions workflows to run tests, build, and publish artifacts to Cloudflare via the CF API token.
-- Update README with exact secret names and one-line deploy steps.
+View your app in AI Studio: https://ai.studio/apps/32bdf426-fda3-435d-abe2-f1262ae48739
 
-Required Cloudflare secrets (you must add these in repo Settings → Secrets):
-- CF_ACCOUNT_ID
-- CF_API_TOKEN (token with permissions for Pages & Workers)
-- GEMINI_API_KEY (for server-side Gemini calls)
+## Run Locally
 
-Notes:
-- Do NOT commit any secret or service account key to the repository.
-- Converting Express to Cloudflare Workers may require changes and some small compatibility shims. I will create the conversion in a separate branch and open a Pull Request.
+**Prerequisites:**  Node.js
 
-If you want me to proceed and push changes to your repository, reply with "proceed". If you prefer a PR instead of direct push, reply "pr".
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

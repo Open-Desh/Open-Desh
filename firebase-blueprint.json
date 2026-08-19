@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile with role-based attributes for Citizens, Departments, and Leaders.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "username": { "type": "string", "maxLength": 50 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "location": { "type": "string", "maxLength": 100 },
+        "websiteUrl": { "type": "string", "maxLength": 200 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "enum": ["citizen", "department", "representative"] },
+        "systemScore": { "type": "number" },
+        "publicRating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "followersCount": { "type": "number" },
+        "followingCount": { "type": "number" },
+        "postsCount": { "type": "number" },
+        "verified": { "type": "boolean" },
+        "savedReports": { "type": "array" }
+      },
+      "required": ["id", "fullName", "username", "category"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Civic grievance or infrastructure report with threaded replies and department workflow.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "authorUsername": { "type": "string", "maxLength": 50 },
+        "authorAvatar": { "type": "string", "maxLength": 500 },
+        "authorCategory": { "type": "string", "enum": ["citizen", "department", "representative"] },
+        "category": { "type": "string" },
+        "text": { "type": "string", "maxLength": 2000 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Open", "Under Dept Review", "In Progress", "Resolved"] },
+        "departmentStatusLevel": { "type": "number" },
+        "claimedByDept": { "type": "string", "maxLength": 100 },
+        "likesCount": { "type": "number" },
+        "reReportsCount": { "type": "number" },
+        "repliesCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "authorId", "text", "category"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile records."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Public civic reports and grievance submissions."
+    }
+  }
+}
