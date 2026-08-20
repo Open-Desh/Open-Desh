@@ -1056,6 +1056,63 @@ async function startServer() {
     res.json(infrastructureDatabase);
   });
 
+  // 6. Gemini AI Civic & Legal Advisor Endpoint
+  app.post("/api/gemini", async (req, res) => {
+    try {
+      const { prompt, systemInstruction, category } = req.body;
+      if (!prompt || typeof prompt !== "string") {
+        return res.status(400).json({ error: "Prompt string is required" });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey && apiKey.trim().length > 10) {
+        try {
+          const { GoogleGenAI } = await import("@google/genai");
+          const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              systemInstruction:
+                systemInstruction ||
+                "You are the official Civic AI Legal Advisor for Open Nation (Open Desh), India's premier civic tech governance and leader accountability platform. Provide structured, empathetic, legally accurate advice in Hindi/Hinglish or English covering RTI Act 2005, CPGRAMS, Citizen SLA Charters, and Municipal Acts.",
+              temperature: 0.4,
+              maxOutputTokens: 1200,
+            },
+          });
+
+          if (response.text) {
+            return res.json({
+              success: true,
+              reply: response.text,
+              source: "gemini-2.5-flash",
+            });
+          }
+        } catch (apiErr) {
+          console.warn("Server-side Gemini call notice:", apiErr);
+        }
+      }
+
+      // Built-in resilient Civic Knowledge Engine Fallback
+      let fallbackText = `⚖️ **नागरिक अधिकार व समाधान प्रक्रिया (Open Nation Civic Guidance)**\n\n1. **शिकायत दर्ज करें:** Open Nation पर फोटो और GPS के साथ अपनी समस्या पोस्ट करें।\n2. **विभाग का निर्धारण:** सड़क हेतु PWD / नगर निगम, बिजली हेतु विद्युत बोर्ड, पानी हेतु जल संस्थान।\n3. **सूचना का अधिकार (RTI 2005):** 30 दिन में कार्रवाई न होने पर PIO को ₹10 शुल्क के साथ आवेदन देकर ऑडिट व बिल रिपोर्ट माँगें।`;
+      
+      const q = prompt.toLowerCase();
+      if (q.includes("sadak") || q.includes("road") || q.includes("gaddha") || q.includes("pothole")) {
+        fallbackText = `📋 **सड़क व गड्ढे से संबंधित कानूनी सलाह (Road Maintenance & PWD)**\n\n1. **नागरिक अधिकार:** Supreme Court दिशा-निर्देशों के अनुसार सुरक्षित व गड्ढा-मुक्त सड़क पाना मौलिक अधिकार है।\n2. **SLA समय-सीमा:** आपातकालीन सड़क गड्ढों का पैचवर्क 48 घंटे के भीतर करना अनिवार्य है।\n3. **ज़िम्मेदार विभाग:** मुख्य मार्ग = State PWD (@PWD), कॉलोनी की सड़क = Municipal Corporation (@MunicipalCorp).\n4. **कानूनी कदम:** 7 दिन में हल न होने पर Executive Engineer को RTI Act 2005 की धारा 6(1) के तहत टेंडर व ठेकेदार के नाम का नोटिस दें।`;
+      } else if (q.includes("bijli") || q.includes("transformer") || q.includes("light") || q.includes("current")) {
+        fallbackText = `⚡ **विद्युत आपूर्ति व ट्रांसफार्मर खराबी (Electricity Standards)**\n\n1. **SLA समय-सीमा:** SERC नियमों के अनुसार 24 से 48 घंटे के भीतर जला हुआ ट्रांसफार्मर बदलना अनिवार्य है।\n2. **हेल्पलाइन:** 1912 पर कंप्लेंट नंबर लें।\n3. **अधिकारी:** संबंधित सब-डिवीजन के SDO (विद्युत) को लिखित ज्ञापन सौंपें।`;
+      }
+
+      return res.json({
+        success: true,
+        reply: fallbackText,
+        source: "civic-knowledge-engine",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to process AI query" });
+    }
+  });
+
   // Telemetry Endpoint
   app.get("/api/metrics/telemetry", (req, res) => {
     res.json({
