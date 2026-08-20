@@ -10,7 +10,6 @@ import { BookmarksView } from "./components/BookmarksView.tsx";
 import { EnterpriseTelemetryView } from "./components/EnterpriseTelemetryView.tsx";
 import { SearchHubView } from "./components/SearchHubView.tsx";
 import { ConnectHubView } from "./components/ConnectHubView.tsx";
-import { CreateReportModal } from "./components/CreateReportModal.tsx";
 import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { LoginView } from "./components/LoginView.tsx";
@@ -70,7 +69,6 @@ export default function App() {
   const [currentView, setCurrentView] = useState<string>("dashboard");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Authentication States
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -1402,14 +1400,6 @@ export default function App() {
             unreadNotificationsCount={unreadNotificationsCount}
           />
         )}
-
-      {/* Create Grievance Report Modal */}
-      <CreateReportModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateReport}
-        userProfile={userProfile}
-      />
 
       {/* Global Indian Language Selection Modal */}
       <LanguageSelectModal />

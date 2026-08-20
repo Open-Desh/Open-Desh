@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import {
   Search,
@@ -7,24 +7,19 @@ import {
   Check,
   Loader2,
   X,
-  Crosshair,
-  Compass,
 } from "lucide-react";
 
 // Fix default Leaflet marker icon asset issue by using custom SVG DivIcon
 const createCustomPinIcon = () => {
   return L.divIcon({
-    className: "custom-map-pin",
+    className: "custom-leaflet-marker",
     html: `
-      <div style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; transform: translate(-50%, -100%);">
-        <div style="width: 32px; height: 32px; background-color: #2563eb; border: 3px solid #ffffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center;">
-          <div style="width: 10px; height: 10px; background-color: #ffffff; border-radius: 50%; transform: rotate(45deg);"></div>
-        </div>
-        <div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 10px; height: 4px; background: rgba(0,0,0,0.3); border-radius: 50%; filter: blur(1px);"></div>
+      <div style="width: 34px; height: 34px; background-color: #2563eb; border: 3px solid #ffffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 12px rgba(37,99,235,0.45); display: flex; align-items: center; justify-content: center; cursor: grab;">
+        <div style="width: 10px; height: 10px; background-color: #ffffff; border-radius: 50%; transform: rotate(45deg);"></div>
       </div>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 36],
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
   });
 };
 
@@ -33,6 +28,7 @@ interface LocationPickerMapProps {
   initialAddress: string;
   onLocationChange: (coords: { lat: number; lng: number }, address: string) => void;
   onClose?: () => void;
+  className?: string;
 }
 
 export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
@@ -40,10 +36,12 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   initialAddress,
   onLocationChange,
   onClose,
+  className,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const isMountedRef = useRef<boolean>(true);
 
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number }>(initialCoords);
   const [currentAddress, setCurrentAddress] = useState<string>(initialAddress);
@@ -53,8 +51,17 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
+  // Keep track of mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Reverse geocoding helper (OpenStreetMap Nominatim Free API)
-  const reverseGeocode = async (lat: number, lng: number) => {
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    if (!isMountedRef.current) return;
     setIsReverseGeocoding(true);
     try {
       const res = await fetch(
@@ -75,31 +82,49 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
         const formatted = [road, ward, city, state].filter(Boolean).join(", ");
         const finalAddr = formatted || `Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`;
-        setCurrentAddress(finalAddr);
-        onLocationChange({ lat, lng }, finalAddr);
+        if (isMountedRef.current) {
+          setCurrentAddress(finalAddr);
+          onLocationChange({ lat, lng }, finalAddr);
+        }
       } else {
         const fallback = `Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`;
+        if (isMountedRef.current) {
+          setCurrentAddress(fallback);
+          onLocationChange({ lat, lng }, fallback);
+        }
+      }
+    } catch {
+      const fallback = `Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`;
+      if (isMountedRef.current) {
         setCurrentAddress(fallback);
         onLocationChange({ lat, lng }, fallback);
       }
-    } catch (err) {
-      const fallback = `Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`;
-      setCurrentAddress(fallback);
-      onLocationChange({ lat, lng }, fallback);
     } finally {
-      setIsReverseGeocoding(false);
+      if (isMountedRef.current) {
+        setIsReverseGeocoding(false);
+      }
     }
-  };
+  }, [onLocationChange]);
 
   // Initialize Leaflet Map
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
+    // Check if container already has Leaflet instance attached to avoid duplicate init
+    if ((container as any)._leaflet_id) {
+      delete (container as any)._leaflet_id;
+    }
+
+    let map: L.Map | null = null;
+    let marker: L.Marker | null = null;
+
+    try {
+      map = L.map(container, {
         center: [initialCoords.lat, initialCoords.lng],
         zoom: 16,
         zoomControl: false,
+        trackResize: true,
       });
 
       // Free OpenStreetMap Tiles
@@ -110,51 +135,103 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
       // Add custom draggable marker
       const pinIcon = createCustomPinIcon();
-      const marker = L.marker([initialCoords.lat, initialCoords.lng], {
+      marker = L.marker([initialCoords.lat, initialCoords.lng], {
         icon: pinIcon,
         draggable: true,
+        autoPan: true,
       }).addTo(map);
 
-      // Drag event
+      // Drag events
       marker.on("dragend", () => {
-        const position = marker.getLatLng();
-        setCurrentCoords({ lat: position.lat, lng: position.lng });
-        reverseGeocode(position.lat, position.lng);
+        if (!marker || !isMountedRef.current) return;
+        try {
+          const position = marker.getLatLng();
+          setCurrentCoords({ lat: position.lat, lng: position.lng });
+          reverseGeocode(position.lat, position.lng);
+        } catch (e) {
+          console.warn("Marker dragend error:", e);
+        }
       });
 
       // Map Click event: Tap anywhere to place pin
       map.on("click", (e: L.LeafletMouseEvent) => {
-        const { lat, lng } = e.latlng;
-        marker.setLatLng([lat, lng]);
-        setCurrentCoords({ lat, lng });
-        reverseGeocode(lat, lng);
+        if (!marker || !map || !isMountedRef.current) return;
+        try {
+          const { lat, lng } = e.latlng;
+          marker.setLatLng([lat, lng]);
+          setCurrentCoords({ lat, lng });
+          reverseGeocode(lat, lng);
+        } catch (e) {
+          console.warn("Map click positioning error:", e);
+        }
       });
 
       mapInstanceRef.current = map;
       markerRef.current = marker;
 
-      // Invalidate map size after animation render
+      // Invalidate map size after initial render
       setTimeout(() => {
-        map.invalidateSize();
-      }, 200);
-    }
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.invalidateSize();
+          } catch {
+            // Ignore if map unmounted
+          }
+        }
+      }, 150);
 
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+      // ResizeObserver to automatically resize map when container size changes
+      const resizeObserver = new ResizeObserver(() => {
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.invalidateSize();
+          } catch {
+            // Ignore
+          }
+        }
+      });
+      resizeObserver.observe(container);
+
+      return () => {
+        resizeObserver.disconnect();
+        if (marker) {
+          try {
+            marker.off();
+            if (marker.dragging) {
+              marker.dragging.disable();
+            }
+          } catch {
+            // Ignore cleanup error
+          }
+        }
+        if (map) {
+          try {
+            map.off();
+            map.stop();
+            map.remove();
+          } catch {
+            // Ignore cleanup error
+          }
+        }
         mapInstanceRef.current = null;
         markerRef.current = null;
-      }
-    };
-  }, []);
+      };
+    } catch (err) {
+      console.error("Leaflet initialization failed:", err);
+    }
+  }, [initialCoords.lat, initialCoords.lng, reverseGeocode]);
 
   // Update map and marker when current coordinates change from search/GPS
   const updateMapPosition = (lat: number, lng: number, zoomLevel = 17) => {
     if (mapInstanceRef.current && markerRef.current) {
-      mapInstanceRef.current.setView([lat, lng], zoomLevel, { animate: true });
-      markerRef.current.setLatLng([lat, lng]);
-      setCurrentCoords({ lat, lng });
-      reverseGeocode(lat, lng);
+      try {
+        mapInstanceRef.current.setView([lat, lng], zoomLevel, { animate: true });
+        markerRef.current.setLatLng([lat, lng]);
+        setCurrentCoords({ lat, lng });
+        reverseGeocode(lat, lng);
+      } catch (e) {
+        console.warn("Error updating map position:", e);
+      }
     }
   };
 
@@ -177,12 +254,16 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       );
       if (res.ok) {
         const data = await res.json();
-        setSearchResults(data);
+        if (isMountedRef.current) {
+          setSearchResults(data);
+        }
       }
     } catch (err) {
       console.error("Search geocoding error:", err);
     } finally {
-      setIsSearching(false);
+      if (isMountedRef.current) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -207,11 +288,15 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           updateMapPosition(lat, lng, 18);
-          setIsLocatingGPS(false);
+          if (isMountedRef.current) {
+            setIsLocatingGPS(false);
+          }
         },
         (err) => {
           console.warn("GPS error:", err);
-          setIsLocatingGPS(false);
+          if (isMountedRef.current) {
+            setIsLocatingGPS(false);
+          }
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
@@ -221,7 +306,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   };
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm animate-fadeIn flex flex-col h-80 sm:h-96">
+    <div className={`relative w-full h-full flex-1 overflow-hidden bg-slate-100 flex flex-col ${className || ""}`}>
       {/* 1. Map Search Overlay Bar on top of map */}
       <div className="absolute top-2.5 left-2.5 right-2.5 z-[1000] space-y-1">
         <form
@@ -282,7 +367,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       </div>
 
       {/* 2. Primary Leaflet Map Container */}
-      <div ref={mapContainerRef} className="w-full h-full z-[10]" />
+      <div ref={mapContainerRef} className="w-full h-full min-h-0 flex-1 z-[10]" />
 
       {/* 3. Floating Map Controls (GPS Re-center & Zoom) */}
       <div className="absolute right-2.5 bottom-16 z-[1000] flex flex-col gap-1.5">
