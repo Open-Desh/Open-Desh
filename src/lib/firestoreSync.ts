@@ -207,6 +207,39 @@ export async function submitUserReviewInFirestore(userId: string, review: UserRe
   }
 }
 
+// 9. Update Report Official Action Status in Firestore
+export async function updateReportStatusInFirestore(
+  reportId: string,
+  level: number,
+  status: string,
+  notes?: string,
+  claimedByDept?: string,
+  claimedByOfficer?: string
+): Promise<void> {
+  try {
+    const repDoc = doc(db, "reports", reportId);
+    const updatePayload: Record<string, any> = {
+      departmentStatusLevel: level,
+      status: status,
+    };
+    if (notes) {
+      updatePayload.departmentNotes = notes;
+    }
+    if (claimedByDept) {
+      updatePayload.claimedByDept = claimedByDept;
+    }
+    if (claimedByOfficer) {
+      updatePayload.claimedByOfficer = claimedByOfficer;
+    }
+    if (level > 0) {
+      updatePayload.claimedAt = "Just now";
+    }
+    await updateDoc(repDoc, updatePayload);
+  } catch (err) {
+    console.warn("Firestore status update notice:", err);
+  }
+}
+
 // 10. Explicit Seeder that writes all collections immediately to Firestore
 export async function seedAllCollectionsToFirestore(): Promise<void> {
   try {

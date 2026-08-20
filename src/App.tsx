@@ -34,6 +34,7 @@ import {
   updateReportRepliesInFirestore,
   submitLeaderReviewInFirestore,
   submitUserReviewInFirestore,
+  updateReportStatusInFirestore,
   seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
@@ -853,43 +854,76 @@ export default function App() {
 
   const handleUpdateStatus = async (id: string, level: number, notes?: string) => {
     requireAuth(async () => {
+      const statusLabels: ("Open" | "Under Dept Review" | "In Progress" | "Resolved")[] = [
+        "Open",
+        "Under Dept Review",
+        "In Progress",
+        "Resolved",
+      ];
+      const newStatus = statusLabels[level] || "Under Dept Review";
+      const claimingDept =
+        userProfile.departmentDetails?.name ||
+        (userProfile.category === "department" ? userProfile.fullName : "Municipal Corp / PWD");
+      const claimingOfficer = userProfile.fullName;
+
+      // 1. Optimistic Local State Update for Instant Visual Feedback
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === id) {
+            return {
+              ...r,
+              departmentStatusLevel: level as 0 | 1 | 2 | 3,
+              status: newStatus,
+              claimedByDept: r.claimedByDept || claimingDept,
+              claimedByOfficer: r.claimedByOfficer || claimingOfficer,
+              claimedAt: r.claimedAt || "Just now",
+              departmentNotes: notes || r.departmentNotes || `Status updated to ${newStatus} by ${claimingDept}.`,
+            };
+          }
+          return r;
+        })
+      );
+
+      // 2. Direct Firestore Database Persistence
+      await updateReportStatusInFirestore(
+        id,
+        level,
+        newStatus,
+        notes,
+        claimingDept,
+        claimingOfficer
+      );
+
+      // 3. Trigger live notification alert for status update
+      const targetRep = reports.find((r) => r.id === id);
+      triggerNotification({
+        recipientId: targetRep?.authorId || "citizen_guest",
+        type: "status_update",
+        actorId: userProfile.id,
+        actorName: userProfile.fullName,
+        actorUsername: userProfile.username,
+        actorAvatar: userProfile.avatarUrl,
+        actorCategory: userProfile.category,
+        actorBadge: userProfile.verified ? "Authority" : undefined,
+        title: `Report Status: ${newStatus}`,
+        message: `${userProfile.fullName} updated ticket #${id.slice(-6).toUpperCase()} to ${newStatus}.${notes ? ` Note: "${notes}"` : ""}`,
+        targetReportId: id,
+        timestamp: "Just now",
+        metadata: {
+          newStatus: newStatus,
+          category: targetRep?.category,
+        },
+      });
+
+      // 4. Server Route Proxy (Optional / Non-blocking)
       try {
-        const res = await fetch(`/api/reports/${id}/status`, {
+        await fetch(`/api/reports/${id}/status`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ level, notes }),
+          body: JSON.stringify({ level, notes, claimedByDept: claimingDept, claimedByOfficer: claimingOfficer }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          setReports((prev) =>
-            prev.map((r) => (r.id === id ? data.report : r))
-          );
-
-          // Trigger live notification alert for status update
-          const targetRep = reports.find((r) => r.id === id);
-          const statusLabels = ["Open", "Under Dept Review", "In Progress", "Resolved"];
-          const newStatusLabel = statusLabels[level] || "Updated";
-          triggerNotification({
-            recipientId: targetRep?.authorId || "citizen_guest",
-            type: "status_update",
-            actorId: userProfile.id,
-            actorName: userProfile.fullName,
-            actorUsername: userProfile.username,
-            actorAvatar: userProfile.avatarUrl,
-            actorCategory: userProfile.category,
-            actorBadge: userProfile.verified ? "Authority" : undefined,
-            title: `Report Status: ${newStatusLabel}`,
-            message: `${userProfile.fullName} updated ticket #${id.slice(-6).toUpperCase()} to ${newStatusLabel}.${notes ? ` Note: "${notes}"` : ""}`,
-            targetReportId: id,
-            timestamp: "Just now",
-            metadata: {
-              newStatus: newStatusLabel,
-              category: targetRep?.category,
-            },
-          });
-        }
       } catch (err) {
-        console.error("Status update error:", err);
+        // Safe fallback for serverless
       }
     }, "update grievance status");
   };
