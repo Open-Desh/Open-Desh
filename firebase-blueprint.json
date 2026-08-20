@@ -63,6 +63,12 @@
     "/reports/{reportId}": {
       "schema": { "$ref": "ReportIssue" },
       "description": "Public civic complaints and grievance reports."
+    },
+    "/leaders/{leaderId}": {
+      "description": "Public database of elected leaders and representatives."
+    },
+    "/infrastructure/{projectId}": {
+      "description": "Public infrastructure monitoring database."
     }
   }
 }

@@ -30,5 +30,19 @@ service cloud.firestore {
       allow update: if isValidId(reportId);
       allow delete: if false;
     }
+
+    // Leaders performance database
+    match /leaders/{leaderId} {
+      allow read: if isValidId(leaderId);
+      allow create, update: if isValidId(leaderId);
+      allow delete: if false;
+    }
+
+    // Infrastructure projects database
+    match /infrastructure/{projectId} {
+      allow read: if isValidId(projectId);
+      allow create, update: if isValidId(projectId);
+      allow delete: if false;
+    }
   }
 }

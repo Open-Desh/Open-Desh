@@ -21,11 +21,22 @@ import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import {
+  getReportsDirect,
+  getLeadersDirect,
+  getInfrastructureDirect,
+  saveReportToFirestore,
+  toggleLikeInFirestore,
+  toggleReReportInFirestore,
+  addReplyInFirestore,
+  submitLeaderReviewInFirestore,
+} from "./lib/firestoreSync.ts";
+import {
   UserProfile,
   ReportIssue,
   Leader,
   InfrastructureProject,
   IssueCategory,
+  UserReview,
 } from "./types.ts";
 
 const defaultGuestProfile: UserProfile = {
@@ -267,32 +278,36 @@ export default function App() {
     }
   };
 
-  // Fetch initial feed & civic data
+  // Fetch initial feed & civic data (Directly from Firestore database + Server proxy fallback)
   const fetchData = async () => {
     try {
-      // 1. Reports
       setLoadingReports(true);
-      const repRes = await fetch("/api/reports");
-      if (repRes.ok) {
-        const repData = await repRes.json();
-        setReports(repData);
-      }
 
-      // 2. Leaders
-      const leadRes = await fetch("/api/leaders");
-      if (leadRes.ok) {
-        const leadData = await leadRes.json();
-        setLeaders(leadData);
-      }
+      // 1. Fetch Reports directly from Firestore
+      const reportsList = await getReportsDirect();
+      setReports(reportsList);
 
-      // 3. Infra
-      const infraRes = await fetch("/api/infrastructure");
-      if (infraRes.ok) {
-        const infraData = await infraRes.json();
-        setInfrastructure(infraData);
-      }
+      // 2. Fetch Leaders directly from Firestore
+      const leadersList = await getLeadersDirect();
+      setLeaders(leadersList);
+
+      // 3. Fetch Infrastructure directly from Firestore
+      const infraList = await getInfrastructureDirect();
+      setInfrastructure(infraList);
     } catch (err) {
-      console.error("Initial data load error:", err);
+      console.warn("Direct Firestore fetch exception, attempting fallback:", err);
+      try {
+        const [repRes, leadRes, infraRes] = await Promise.all([
+          fetch("/api/reports"),
+          fetch("/api/leaders"),
+          fetch("/api/infrastructure"),
+        ]);
+        if (repRes.ok) setReports(await repRes.json());
+        if (leadRes.ok) setLeaders(await leadRes.json());
+        if (infraRes.ok) setInfrastructure(await infraRes.json());
+      } catch (fbErr) {
+        console.error("All fetch sources failed:", fbErr);
+      }
     } finally {
       setLoadingReports(false);
     }
@@ -319,60 +334,68 @@ export default function App() {
       address?: string;
     };
   }) => {
+    const reportId = `rep_${Date.now()}`;
+    const newReport: ReportIssue = {
+      id: reportId,
+      authorId: currentUser?.uid || userProfile.id,
+      authorName: userProfile.fullName,
+      authorUsername: userProfile.username,
+      authorAvatar: userProfile.avatarUrl,
+      authorCategory: userProfile.category,
+      authorBadge: userProfile.verified ? "Verified Citizen" : undefined,
+      category: newReportData.category,
+      text: newReportData.text,
+      imageUrl: newReportData.imageUrl || (newReportData.images && newReportData.images[0]) || "",
+      images: newReportData.images || (newReportData.imageUrl ? [newReportData.imageUrl] : []),
+      structuredDetails: newReportData.structuredDetails || {},
+      taggedOfficers: newReportData.taggedOfficers || [],
+      taggedLeaders: newReportData.taggedLeaders || [],
+      urgencyLevel: newReportData.urgencyLevel || "Normal",
+      location: newReportData.location,
+      timestamp: "Just now",
+      status: "Open",
+      departmentStatusLevel: 0,
+      likesCount: 0,
+      likedBy: [],
+      reReportsCount: 0,
+      reReportedBy: [],
+      repliesCount: 0,
+      replies: [],
+    };
+
+    // Optimistic UI update
+    setReports((prev) => [newReport, ...prev]);
+    setUserProfile((prev) => ({
+      ...prev,
+      postsCount: (prev.postsCount || 0) + 1,
+    }));
+
+    // Save directly to Firestore Database
+    await saveReportToFirestore(newReport);
+
+    // Optional backend proxy call if running
     try {
-      const res = await fetch("/api/reports", {
+      await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newReportData),
       });
-      if (res.ok) {
-        const savedReport = await res.json();
-        setReports((prev) => [savedReport, ...prev]);
-        setUserProfile((prev) => ({
-          ...prev,
-          postsCount: (prev.postsCount || 0) + 1,
-        }));
-
-        // Sync report directly to Firebase Firestore
-        try {
-          await setDoc(doc(db, "reports", savedReport.id), {
-            id: savedReport.id,
-            authorId: currentUser?.uid || savedReport.authorId,
-            authorName: userProfile.fullName || savedReport.authorName,
-            authorUsername: userProfile.username || savedReport.authorUsername,
-            category: savedReport.category,
-            text: savedReport.text,
-            imageUrl: savedReport.imageUrl || "",
-            images: savedReport.images || [],
-            taggedOfficers: savedReport.taggedOfficers || [],
-            taggedLeaders: savedReport.taggedLeaders || [],
-            urgencyLevel: savedReport.urgencyLevel || "Normal",
-            location: savedReport.location || {},
-            timestamp: savedReport.timestamp,
-            status: savedReport.status,
-            likesCount: savedReport.likesCount || 0,
-            likedBy: savedReport.likedBy || [],
-            reReportsCount: savedReport.reReportsCount || 0,
-            reReportedBy: savedReport.reReportedBy || [],
-          });
-        } catch (fsErr) {
-          console.warn("Firestore sync background notice:", fsErr);
-        }
-      }
-    } catch (err) {
-      console.error("Error creating report:", err);
+    } catch {
+      // Ignore if purely serverless
     }
   };
 
   const handleLikeReport = async (id: string) => {
     requireAuth(async () => {
+      const target = reports.find((r) => r.id === id);
+      const isLiked = target?.likedBy?.includes(userProfile.id) || false;
+
       // Optimistic UI update
       setReports((prev) =>
         prev.map((r) => {
           if (r.id === id) {
-            const isLiked = r.likedBy?.includes(userProfile.id);
             const newLikedBy = isLiked
-              ? r.likedBy.filter((uid) => uid !== userProfile.id)
+              ? (r.likedBy || []).filter((uid) => uid !== userProfile.id)
               : [...(r.likedBy || []), userProfile.id];
             return {
               ...r,
@@ -384,22 +407,28 @@ export default function App() {
         })
       );
 
+      // Firestore Database Sync
+      await toggleLikeInFirestore(id, userProfile.id, isLiked);
+
       try {
         await fetch(`/api/reports/${id}/like`, { method: "POST" });
-      } catch (err) {
-        console.error("Like API error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "like civic reports");
   };
 
   const handleReReport = async (id: string) => {
     requireAuth(async () => {
+      const target = reports.find((r) => r.id === id);
+      const hasReReported = target?.reReportedBy?.includes(userProfile.id) || false;
+
+      // Optimistic UI update
       setReports((prev) =>
         prev.map((r) => {
           if (r.id === id) {
-            const hasReReported = r.reReportedBy?.includes(userProfile.id);
             const newReReportedBy = hasReReported
-              ? r.reReportedBy.filter((uid) => uid !== userProfile.id)
+              ? (r.reReportedBy || []).filter((uid) => uid !== userProfile.id)
               : [...(r.reReportedBy || []), userProfile.id];
             return {
               ...r,
@@ -413,10 +442,13 @@ export default function App() {
         })
       );
 
+      // Firestore Database Sync
+      await toggleReReportInFirestore(id, userProfile.id, hasReReported);
+
       try {
         await fetch(`/api/reports/${id}/rereport`, { method: "POST" });
-      } catch (err) {
-        console.error("Re-report API error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "re-report this grievance");
   };
@@ -428,32 +460,66 @@ export default function App() {
         ? (userProfile.savedReports || []).filter((rid) => rid !== id)
         : [...(userProfile.savedReports || []), id];
 
-      setUserProfile((prev) => ({ ...prev, savedReports: newSaved }));
+      const updatedProfile = { ...userProfile, savedReports: newSaved };
+      setUserProfile(updatedProfile);
+
+      // Sync user profile bookmark to Firestore
+      try {
+        const uid = currentUser?.uid || userProfile.id;
+        await setDoc(doc(db, "users", uid), { savedReports: newSaved }, { merge: true });
+      } catch (err) {
+        console.warn("Bookmark Firestore notice:", err);
+      }
 
       try {
         await fetch(`/api/reports/${id}/bookmark`, { method: "POST" });
-      } catch (err) {
-        console.error("Bookmark API error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "save bookmarks");
   };
 
   const handleReply = async (id: string, text: string, parentReplyId?: string) => {
     requireAuth(async () => {
+      const replyObj = {
+        id: `reply_${Date.now()}`,
+        authorId: currentUser?.uid || userProfile.id,
+        authorName: userProfile.fullName,
+        authorUsername: userProfile.username,
+        authorAvatar: userProfile.avatarUrl,
+        authorCategory: userProfile.category,
+        authorBadge: userProfile.verified ? "Citizen" : undefined,
+        text,
+        timestamp: "Just now",
+        likesCount: 0,
+        parentReplyId: parentReplyId || null,
+      };
+
+      // Optimistic UI update
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === id) {
+            return {
+              ...r,
+              repliesCount: (r.repliesCount || 0) + 1,
+              replies: [...(r.replies || []), replyObj],
+            };
+          }
+          return r;
+        })
+      );
+
+      // Firestore Direct Sync
+      await addReplyInFirestore(id, replyObj);
+
       try {
-        const res = await fetch(`/api/reports/${id}/reply`, {
+        await fetch(`/api/reports/${id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, parentReplyId }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          setReports((prev) =>
-            prev.map((r) => (r.id === id ? data.report : r))
-          );
-        }
-      } catch (err) {
-        console.error("Reply API error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "reply and comment on reports");
   };
@@ -515,17 +581,46 @@ export default function App() {
 
   const handleRateUser = async (userId: string, rating: number, comment: string) => {
     requireAuth(async () => {
+      const reviewObj: UserReview = {
+        id: `rev_${Date.now()}`,
+        authorId: currentUser?.uid || userProfile.id,
+        authorName: userProfile.fullName,
+        authorUsername: userProfile.username,
+        authorAvatar: userProfile.avatarUrl,
+        rating,
+        comment,
+        date: "Just now",
+        verifiedVoter: true,
+      };
+
+      // Optimistic update for leaders
+      setLeaders((prev) =>
+        prev.map((l) => {
+          if (l.userId === userId || l.id === userId) {
+            return {
+              ...l,
+              reviewsCount: (l.reviewsCount || 0) + 1,
+              reviews: [reviewObj, ...(l.reviews || [])],
+            };
+          }
+          return l;
+        })
+      );
+
+      // Firestore direct sync
+      const matchedLeader = leaders.find((l) => l.userId === userId || l.id === userId);
+      if (matchedLeader) {
+        await submitLeaderReviewInFirestore(matchedLeader.id, reviewObj);
+      }
+
       try {
-        const res = await fetch(`/api/users/${userId}/rate`, {
+        await fetch(`/api/users/${userId}/rate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rating, comment }),
         });
-        if (res.ok) {
-          fetchData();
-        }
-      } catch (err) {
-        console.error("Rate user error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "submit a leader rating");
   };
