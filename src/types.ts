@@ -194,6 +194,8 @@ export interface ReportIssue {
   claimedByOfficer?: string;
   claimedAt?: string;
   departmentNotes?: string;
+  resolvedImageUrl?: string;
+  resolutionProof?: string;
   aiTriage?: AiTriageMeta;
   likesCount: number;
   likedBy?: string[];

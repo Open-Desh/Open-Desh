@@ -9,6 +9,8 @@ import {
   arrayRemove,
   increment,
   onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import {
@@ -215,7 +217,8 @@ export async function updateReportStatusInFirestore(
   status: string,
   notes?: string,
   claimedByDept?: string,
-  claimedByOfficer?: string
+  claimedByOfficer?: string,
+  resolvedImageUrl?: string
 ): Promise<void> {
   try {
     const repDoc = doc(db, "reports", reportId);
@@ -231,6 +234,9 @@ export async function updateReportStatusInFirestore(
     }
     if (claimedByOfficer) {
       updatePayload.claimedByOfficer = claimedByOfficer;
+    }
+    if (resolvedImageUrl) {
+      updatePayload.resolvedImageUrl = resolvedImageUrl;
     }
     if (level > 0) {
       updatePayload.claimedAt = "Just now";
@@ -382,5 +388,131 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   }
 
   return Array.from(authoritiesMap.values());
+}
+
+// 12. Check Real-Time Username Uniqueness against Firestore users, leaders & system seeds
+export async function checkUsernameAvailability(
+  username: string,
+  currentUserId: string,
+  currentUsername?: string
+): Promise<{ available: boolean; reason?: string }> {
+  const clean = username.trim().toLowerCase().replace(/^@/, "");
+
+  if (!clean) {
+    return { available: false, reason: "Username cannot be empty." };
+  }
+
+  // Format validation: 3 to 30 characters, alphanumeric and underscore only
+  const usernameRegex = /^[a-z0-9_]{3,30}$/;
+  if (!usernameRegex.test(clean)) {
+    if (clean.length < 3) {
+      return {
+        available: false,
+        reason: "Username must be at least 3 characters long.",
+      };
+    }
+    if (clean.length > 30) {
+      return {
+        available: false,
+        reason: "Username cannot exceed 30 characters.",
+      };
+    }
+    return {
+      available: false,
+      reason:
+        "Username can only contain lowercase letters, numbers, and underscores (_). No spaces or special symbols.",
+    };
+  }
+
+  // If user is keeping their current username, it's always valid
+  if (
+    currentUsername &&
+    clean === currentUsername.trim().toLowerCase().replace(/^@/, "")
+  ) {
+    return { available: true };
+  }
+
+  // 1. Check local seed users
+  for (const [uid, uProf] of Object.entries(INITIAL_USERS)) {
+    if (
+      uid !== currentUserId &&
+      uProf.username?.toLowerCase() === clean
+    ) {
+      return {
+        available: false,
+        reason: `@${clean} is already registered in the system. Please choose another handle.`,
+      };
+    }
+  }
+
+  // 2. Check local seed leaders
+  for (const leader of INITIAL_LEADERS) {
+    if (
+      leader.id !== currentUserId &&
+      (leader as any).userId !== currentUserId &&
+      leader.username?.toLowerCase() === clean
+    ) {
+      return {
+        available: false,
+        reason: `@${clean} is reserved for an official representative profile.`,
+      };
+    }
+  }
+
+  // 3. Check Firestore `users` collection
+  try {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("username", "==", clean));
+    const snap = await getDocs(q);
+    for (const docSnap of snap.docs) {
+      if (docSnap.id !== currentUserId) {
+        return {
+          available: false,
+          reason: `@${clean} is already taken by another registered citizen/official.`,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Firestore username query warning:", err);
+  }
+
+  // 4. Check Firestore `leaders` collection
+  try {
+    const leadersRef = collection(db, "leaders");
+    const qLeaders = query(leadersRef, where("username", "==", clean));
+    const snapLeaders = await getDocs(qLeaders);
+    for (const docSnap of snapLeaders.docs) {
+      if (docSnap.id !== currentUserId) {
+        return {
+          available: false,
+          reason: `@${clean} is already taken by an official leader profile.`,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Firestore leader query warning:", err);
+  }
+
+  // 5. Query Express API backend validation if available
+  try {
+    const res = await fetch(
+      `/api/users/check-username/${encodeURIComponent(clean)}?currentUserId=${encodeURIComponent(
+        currentUserId
+      )}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.available) {
+        return {
+          available: false,
+          reason: data.reason || `@${clean} is already taken.`,
+        };
+      }
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+
+  return { available: true };
 }
 

@@ -852,7 +852,12 @@ export default function App() {
     }, "re-report this reply");
   };
 
-  const handleUpdateStatus = async (id: string, level: number, notes?: string) => {
+  const handleUpdateStatus = async (
+    id: string,
+    level: number,
+    notes?: string,
+    resolvedImageUrl?: string
+  ) => {
     requireAuth(async () => {
       const statusLabels: ("Open" | "Under Dept Review" | "In Progress" | "Resolved")[] = [
         "Open",
@@ -878,6 +883,7 @@ export default function App() {
               claimedByOfficer: r.claimedByOfficer || claimingOfficer,
               claimedAt: r.claimedAt || "Just now",
               departmentNotes: notes || r.departmentNotes || `Status updated to ${newStatus} by ${claimingDept}.`,
+              resolvedImageUrl: resolvedImageUrl || r.resolvedImageUrl,
             };
           }
           return r;
@@ -891,7 +897,8 @@ export default function App() {
         newStatus,
         notes,
         claimingDept,
-        claimingOfficer
+        claimingOfficer,
+        resolvedImageUrl
       );
 
       // 3. Trigger live notification alert for status update

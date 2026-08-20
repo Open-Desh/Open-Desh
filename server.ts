@@ -660,10 +660,70 @@ async function startServer() {
     res.json(currentUserProfile);
   });
 
+  // Check Username Availability
+  app.get("/api/users/check-username/:username", (req, res) => {
+    const usernameParam = (req.params.username || "").toLowerCase().trim().replace(/^@/, "");
+    const currentUserId = (req.query.currentUserId as string) || "";
+
+    if (!usernameParam) {
+      return res.json({ available: false, reason: "Username cannot be empty." });
+    }
+
+    const regex = /^[a-z0-9_]{3,30}$/;
+    if (!regex.test(usernameParam)) {
+      return res.json({
+        available: false,
+        reason: "Username must be 3-30 characters with lowercase letters, numbers, or underscores.",
+      });
+    }
+
+    // Check users database
+    const existingUser = Object.values(usersDatabase).find(
+      (u) => u.username.toLowerCase() === usernameParam && u.id !== currentUserId
+    );
+    if (existingUser) {
+      return res.json({
+        available: false,
+        reason: `@${usernameParam} is already taken by another user.`,
+      });
+    }
+
+    // Check leaders database
+    const existingLeader = leadersDatabase.find(
+      (l) => l.username.toLowerCase() === usernameParam && l.id !== currentUserId && l.userId !== currentUserId
+    );
+    if (existingLeader) {
+      return res.json({
+        available: false,
+        reason: `@${usernameParam} is reserved for an official representative.`,
+      });
+    }
+
+    res.json({ available: true });
+  });
+
   app.put("/api/user/profile", (req, res) => {
+    const updatedUsername = req.body.username ? String(req.body.username).toLowerCase().trim().replace(/^@/, "") : undefined;
+
+    if (updatedUsername && updatedUsername !== currentUserProfile.username.toLowerCase()) {
+      // Validate format
+      if (!/^[a-z0-9_]{3,30}$/.test(updatedUsername)) {
+        return res.status(400).json({ error: "Invalid username format. Must be 3-30 chars, alphanumeric and underscore only." });
+      }
+
+      // Check collision
+      const collision = Object.values(usersDatabase).find(
+        (u) => u.username.toLowerCase() === updatedUsername && u.id !== currentUserProfile.id
+      );
+      if (collision) {
+        return res.status(400).json({ error: `@${updatedUsername} is already taken.` });
+      }
+    }
+
     currentUserProfile = {
       ...currentUserProfile,
       ...req.body,
+      ...(updatedUsername ? { username: updatedUsername } : {}),
     };
     usersDatabase[currentUserProfile.id] = currentUserProfile;
 
@@ -671,6 +731,7 @@ async function startServer() {
     const matchingLeader = leadersDatabase.find((l) => l.userId === currentUserProfile.id);
     if (matchingLeader) {
       matchingLeader.name = currentUserProfile.fullName;
+      if (updatedUsername) matchingLeader.username = updatedUsername;
       matchingLeader.bio = currentUserProfile.bio;
       matchingLeader.location = currentUserProfile.location;
       matchingLeader.websiteUrl = currentUserProfile.websiteUrl;

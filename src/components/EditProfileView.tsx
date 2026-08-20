@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   ArrowLeft,
   Camera,
@@ -15,9 +15,13 @@ import {
   HelpCircle,
   Clock,
   ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  AtSign,
 } from "lucide-react";
 import { UserProfile, UserCategory, CivicService } from "../types.ts";
 import { getSmartDefaultServices } from "../utils/serviceTemplates.ts";
+import { checkUsernameAvailability } from "../lib/firestoreSync.ts";
 
 interface EditProfileViewProps {
   userProfile: UserProfile;
@@ -121,6 +125,12 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 }) => {
   // Basic Profile Info
   const [fullName, setFullName] = useState(userProfile.fullName || "");
+  const [username, setUsername] = useState(userProfile.username || "");
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [usernameSuccess, setUsernameSuccess] = useState<boolean>(false);
+  const checkTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const [location, setLocation] = useState(userProfile.location || "");
   const [age, setAge] = useState<string>(
     userProfile.age ? String(userProfile.age) : ""
@@ -131,6 +141,74 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
   const [category, setCategory] = useState<UserCategory>(
     userProfile.category || "citizen"
   );
+
+  // Debounced live username availability check
+  const handleUsernameChange = (val: string) => {
+    const rawVal = val.replace(/^@/, "").toLowerCase().trim();
+    // Allow typing only lowercase alphanumeric and underscore
+    const sanitizedVal = rawVal.replace(/[^a-z0-9_]/g, "");
+    setUsername(sanitizedVal);
+    setUsernameSuccess(false);
+
+    if (checkTimerRef.current) {
+      clearTimeout(checkTimerRef.current);
+    }
+
+    if (!sanitizedVal) {
+      setUsernameError("Username cannot be empty.");
+      return;
+    }
+
+    if (sanitizedVal.length < 3) {
+      setUsernameError("Username must be at least 3 characters.");
+      return;
+    }
+
+    if (sanitizedVal.length > 30) {
+      setUsernameError("Username cannot exceed 30 characters.");
+      return;
+    }
+
+    // If matches user's existing username
+    if (sanitizedVal === userProfile.username?.toLowerCase()) {
+      setUsernameError(null);
+      setUsernameSuccess(false);
+      return;
+    }
+
+    setUsernameError(null);
+    setIsCheckingUsername(true);
+
+    checkTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await checkUsernameAvailability(
+          sanitizedVal,
+          userProfile.id,
+          userProfile.username
+        );
+        if (!result.available) {
+          setUsernameError(result.reason || `@${sanitizedVal} is already taken.`);
+          setUsernameSuccess(false);
+        } else {
+          setUsernameError(null);
+          setUsernameSuccess(true);
+        }
+      } catch {
+        setUsernameError(null);
+      } finally {
+        setIsCheckingUsername(false);
+      }
+    }, 400);
+  };
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (checkTimerRef.current) {
+        clearTimeout(checkTimerRef.current);
+      }
+    };
+  }, []);
 
   // Citizen Specific Field
   const [occupation, setOccupation] = useState(
