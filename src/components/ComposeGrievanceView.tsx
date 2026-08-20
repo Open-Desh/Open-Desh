@@ -594,7 +594,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   const charProgress = Math.min(100, (charLength / maxChars) * 100);
 
   return (
-    <div className="fixed inset-0 z-[300] bg-white flex flex-col h-screen overflow-hidden animate-fadeIn">
+    <div className="fixed inset-0 z-[300] bg-white flex flex-col h-[100dvh] max-h-[100dvh] w-full overflow-hidden animate-fadeIn">
       {/* 1. Top Twitter/X Bar: (✕ Close on left, Royal Blue Post button on right) */}
       <header className="h-14 px-4 flex items-center justify-between bg-white shrink-0 border-b border-slate-200">
         <button
@@ -1013,16 +1013,17 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       </main>
 
       {/* 5. Bottom Twitter/X Toolbar: [Gallery] [Camera] [Poll] [Sliders] [Location] [Circle] */}
-      <footer className="h-13 border-t border-slate-200 px-4 flex items-center justify-between bg-white shrink-0">
-        <div className="flex items-center gap-4 text-blue-600">
+      <footer className="shrink-0 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between bg-white z-30 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center gap-3.5 text-blue-600">
           {/* 1. Gallery Image Upload */}
           <button
+            type="button"
             onClick={() => {
               setActiveMediaMode("photos");
               fileInputRef.current?.click();
             }}
             id="toolbar-gallery-btn"
-            className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
               activeMediaMode === "photos" && images.length > 0 ? "bg-blue-100 text-blue-700" : "hover:bg-blue-50 text-blue-600"
             }`}
             title="Add Evidence Photos"
@@ -1032,22 +1033,24 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
           {/* 2. Camera Snapshot */}
           <button
+            type="button"
             onClick={() => {
               setActiveMediaMode("photos");
               cameraInputRef.current?.click();
             }}
             id="toolbar-camera-btn"
-            className="p-1.5 hover:bg-blue-50 rounded-full transition-colors cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center hover:bg-blue-50 text-blue-600 rounded-full transition-colors cursor-pointer"
             title="Capture Photo"
           >
-            <Camera className="w-5 h-5 text-blue-600" />
+            <Camera className="w-5 h-5" />
           </button>
 
           {/* 3. Quick-fill structured parameters */}
           <button
+            type="button"
             onClick={() => setShowQuickForm(!showQuickForm)}
             id="toolbar-poll-btn"
-            className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
               showQuickForm ? "bg-blue-100 text-blue-700" : "hover:bg-blue-50 text-blue-600"
             }`}
             title="Quick Audit Parameters"
@@ -1057,9 +1060,10 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
           {/* 4. Category Selector */}
           <button
+            type="button"
             onClick={() => setShowCategoryMenu(!showCategoryMenu)}
             id="toolbar-sliders-btn"
-            className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
               showCategoryMenu ? "bg-blue-100 text-blue-700" : "hover:bg-blue-50 text-blue-600"
             }`}
             title="Select Category"
@@ -1069,6 +1073,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
           {/* 5. GPS Location & Interactive Map Toggle */}
           <button
+            type="button"
             onClick={() => {
               setActiveMediaMode(activeMediaMode === "map" ? "photos" : "map");
               if (activeMediaMode !== "map") {
@@ -1076,13 +1081,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               }
             }}
             id="toolbar-location-btn"
-            className={`p-1.5 rounded-full transition-colors cursor-pointer relative ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer relative ${
               activeMediaMode === "map" ? "bg-blue-600 text-white shadow-xs" : "hover:bg-blue-50 text-blue-600"
             }`}
             title="Pin Location on Interactive Map"
           >
             <MapPin className="w-5 h-5" />
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full absolute top-1 right-1"></span>
+            <span className="w-2 h-2 bg-emerald-500 rounded-full absolute top-1.5 right-1.5 border border-white"></span>
           </button>
         </div>
 
