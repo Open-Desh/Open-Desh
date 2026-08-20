@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header
       id="main-header"
-      className={`sticky top-0 z-40 bg-white h-[58px] md:h-[64px] flex items-center justify-between px-3 md:px-6 transition-transform duration-300 ease-in-out ${
+      className={`sticky top-0 z-40 bg-white h-[60px] md:h-[66px] flex items-center justify-between px-3 md:px-6 transition-transform duration-300 ease-in-out ${
         isVisible ? "translate-y-0" : "-translate-y-full"
       }`}
     >
@@ -69,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="mobile-sidebar-open-btn"
           onClick={onOpenMobileSidebar}
-          className="md:hidden w-9 h-9 rounded-full overflow-hidden shadow-2xs hover:scale-105 active:scale-95 transition-transform shrink-0 relative cursor-pointer"
+          className="md:hidden w-10 h-10 rounded-full overflow-hidden shadow-2xs hover:scale-105 active:scale-95 transition-transform shrink-0 relative cursor-pointer"
           title="Open Menu"
         >
           <img
@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 text-left group cursor-pointer"
           >
             <div className="flex flex-col">
-              <span className="text-[14px] font-black text-slate-900 tracking-tight leading-tight group-hover:text-blue-600 transition-colors">
+              <span className="text-[15px] font-black text-slate-900 tracking-tight leading-tight group-hover:text-blue-600 transition-colors">
                 Open Desh
               </span>
               <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
@@ -147,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }
               }}
               alt="Open Desh Logo"
-              className="h-8 md:h-10 max-w-[170px] md:max-w-[210px] object-contain transition-transform duration-200"
+              className="h-9 md:h-11 max-w-[185px] md:max-w-[230px] object-contain transition-transform duration-200"
               referrerPolicy="no-referrer"
             />
           </button>
@@ -202,14 +202,14 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden md:inline">Help</span>
         </button>
 
-        {/* Connect & Discover People button without borders */}
+        {/* Connect & Discover People button matching DP size */}
         <button
           id="header-connect-btn"
           onClick={() => onNavigate("connect")}
-          className="w-9 h-9 rounded-full text-slate-700 hover:text-blue-600 hover:bg-blue-50/80 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className="w-10 h-10 rounded-full text-slate-800 hover:text-blue-600 hover:bg-blue-50/80 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
           title="Connect & Discover People"
         >
-          <UserPlus className="w-5 h-5" />
+          <UserPlus className="w-6 h-6 stroke-[2.2]" />
         </button>
       </div>
     </header>
