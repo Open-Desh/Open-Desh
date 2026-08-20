@@ -328,13 +328,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               )}
 
-              {/* Cloudflare R2 Multi-Image Carousel / Slide */}
+              {/* Cloudflare R2 Multi-Image Carousel / Natural Size Display */}
               {imageList.length > 0 && (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video flex items-center justify-center group">
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group">
                   <img
                     src={imageList[currentSlide]}
                     alt={`Evidence ${currentSlide + 1}`}
-                    className="w-full h-full object-contain"
+                    className="w-full h-auto object-contain rounded-2xl"
                     referrerPolicy="no-referrer"
                   />
 

@@ -1,6 +1,7 @@
 import React from "react";
 import {
   User,
+  IndianRupee,
   TrendingUp,
   Building2,
   Bookmark,
@@ -12,8 +13,10 @@ import {
   Moon,
   LogIn,
   LogOut,
+  Languages,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
+import { useLanguage } from "../context/LanguageContext.tsx";
 
 interface SidebarProps {
   currentView: string;
@@ -41,15 +44,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const [darkMode, setDarkMode] = React.useState(false);
+  const { t, currentLanguageInfo, openLanguageModal } = useLanguage();
 
-  // Exact requested 6 page links
+  // Navigation links with Budget below Profile and Language below Setting & Privacy
   const navItems = [
-    { id: "profile", label: "Profile", icon: User },
-    { id: "leader", label: "Leader", icon: TrendingUp },
-    { id: "infrastructure", label: "Infrastructure", icon: Building2 },
-    { id: "bookmark", label: "Bookmark", icon: Bookmark },
-    { id: "settings", label: "Setting & Privacy", icon: Settings },
-    { id: "help", label: "Help Center", icon: HelpCircle },
+    { id: "profile", label: t("nav.profile", "Profile"), icon: User },
+    { id: "budget", label: t("nav.budget", "National Budget"), icon: IndianRupee },
+    { id: "leader", label: t("nav.leader", "Leader"), icon: TrendingUp },
+    { id: "infrastructure", label: t("nav.infrastructure", "Infrastructure"), icon: Building2 },
+    { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
+    { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
+    {
+      id: "language",
+      label: `${t("nav.language", "Language")} (${currentLanguageInfo.nativeName})`,
+      icon: Languages,
+      isAction: true,
+      badge: currentLanguageInfo.nativeName,
+    },
+    { id: "help", label: t("nav.help", "Help Center"), icon: HelpCircle },
   ];
 
   const getRoleBadge = (category: string) => {
@@ -135,13 +147,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <strong className="text-slate-900 font-bold">
                         {userProfile.followingCount || 0}
                       </strong>{" "}
-                      Following
+                      {t("nav.following", "Following")}
                     </span>
                     <span>
                       <strong className="text-slate-900 font-bold">
                         {userProfile.followersCount || 0}
                       </strong>{" "}
-                      Followers
+                      {t("nav.followers", "Followers")}
                     </span>
                   </div>
                 </div>
@@ -157,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {!isCollapsed && (
                   <div className="min-w-0">
                     <h2 className="text-sm font-black text-slate-900 truncate">
-                      Guest Citizen
+                      {t("nav.guest", "Guest Citizen")}
                     </h2>
                     <p className="text-[11px] text-slate-500 truncate">Not signed in</p>
                   </div>
@@ -167,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && (
                 <div className="space-y-2">
                   <p className="text-[11px] text-slate-500 leading-snug">
-                    Sign in to track your grievances and access your verified profile.
+                    {t("nav.signInPrompt", "Sign in to track your grievances and access your verified profile.")}
                   </p>
                   <button
                     id="sidebar-signin-header-btn"
@@ -178,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
                   >
                     <LogIn className="w-3.5 h-3.5" />
-                    <span>Sign In to Account</span>
+                    <span>{t("nav.signInBtn", "Sign In to Account")}</span>
                   </button>
                 </div>
               )}
@@ -198,6 +210,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 id={`nav-item-${item.id}`}
                 onClick={() => {
+                  if (item.id === "language") {
+                    openLanguageModal();
+                    onCloseMobile();
+                    return;
+                  }
                   if (item.id === "profile" && !isLoggedIn) {
                     if (onOpenLogin) onOpenLogin();
                     onCloseMobile();
@@ -219,7 +236,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   } ${!isCollapsed ? "mr-4" : ""}`}
                 />
                 {!isCollapsed && (
-                  <span className="truncate flex-1 text-left">{item.label}</span>
+                  <div className="flex-1 flex items-center justify-between min-w-0 pr-1">
+                    <span className="truncate text-left">{item.label}</span>
+                    {item.badge && (
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 shrink-0 border border-sky-200">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
                 )}
               </button>
             );
@@ -235,10 +259,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id="sidebar-logout-btn"
               onClick={onLogout}
               className="w-full p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
-              title="Sign Out"
+              title={t("nav.signOut", "Sign Out")}
             >
               <LogOut className="w-5 h-5 shrink-0" />
-              {!isCollapsed && <span>Sign Out</span>}
+              {!isCollapsed && <span>{t("nav.signOut", "Sign Out")}</span>}
             </button>
           ) : (
             <button
@@ -248,10 +272,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onCloseMobile();
               }}
               className="w-full p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
-              title="Sign In / Register"
+              title={t("nav.signIn", "Sign In")}
             >
               <LogIn className="w-5 h-5 shrink-0" />
-              {!isCollapsed && <span>Sign In</span>}
+              {!isCollapsed && <span>{t("nav.signIn", "Sign In")}</span>}
             </button>
           )}
 
@@ -266,7 +290,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               <Moon className="w-5 h-5 text-slate-600 shrink-0" />
             )}
-            {!isCollapsed && <span>{darkMode ? "Light Theme" : "Theme Preference"}</span>}
+            {!isCollapsed && <span>{darkMode ? "Light Theme" : t("nav.theme", "Theme Preference")}</span>}
           </button>
         </div>
 

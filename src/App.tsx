@@ -16,6 +16,8 @@ import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { LoginView } from "./components/LoginView.tsx";
 import { EditProfileView } from "./components/EditProfileView.tsx";
+import { BudgetView } from "./components/BudgetView.tsx";
+import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import {
@@ -653,14 +655,17 @@ export default function App() {
             : "md:ml-[260px]"
         }`}
       >
-        {/* Navigation Header - Rendered on dashboard/infrastructure etc., but Profile, Settings, Search, Compose, Login, Connect & Edit Profile use their own custom X-style header */}
+        {/* Navigation Header - Rendered on dashboard/aitutor etc., but Profile, Settings, Search, Compose, Login, Connect, Budget, Leader, Infrastructure & Edit Profile use their own custom X-style header */}
         {currentView !== "profile" &&
           currentView !== "profile_edit" &&
           currentView !== "login" &&
           currentView !== "settings" &&
           currentView !== "search" &&
           currentView !== "compose" &&
-          currentView !== "connect" && (
+          currentView !== "connect" &&
+          currentView !== "budget" &&
+          currentView !== "leader" &&
+          currentView !== "infrastructure" && (
             <Header
               currentView={currentView}
               onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
@@ -730,6 +735,7 @@ export default function App() {
             <LeaderTrackerView
               leaders={leaders}
               activeUser={userProfile}
+              onBack={() => navigateTo("dashboard")}
               onSelectLeaderProfile={handleSelectLeaderProfile}
               onRateLeader={async (leaderId, rating, comment) => {
                 await handleRateUser(leaderId, rating, comment);
@@ -738,7 +744,12 @@ export default function App() {
           )}
 
           {currentView === "infrastructure" && (
-            <InfrastructureView projects={infrastructure} reports={reports} />
+            <InfrastructureView
+              projects={infrastructure}
+              reports={reports}
+              onBack={() => navigateTo("dashboard")}
+              onSelectUser={handleSelectUserProfile}
+            />
           )}
 
           {currentView === "bookmark" && (
@@ -823,6 +834,10 @@ export default function App() {
             />
           )}
 
+          {currentView === "budget" && (
+            <BudgetView onBack={() => navigateTo("dashboard")} />
+          )}
+
           {currentView === "help" && <HelpView />}
         </main>
       </div>
@@ -843,6 +858,9 @@ export default function App() {
         onSubmit={handleCreateReport}
         userProfile={userProfile}
       />
+
+      {/* Global Indian Language Selection Modal */}
+      <LanguageSelectModal />
     </div>
   );
 }

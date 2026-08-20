@@ -279,8 +279,8 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
             </label>
 
             {imagePreview ? (
-              <div className="relative rounded-2xl overflow-hidden border border-slate-200 max-h-56 bg-slate-900 flex items-center justify-center">
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover max-h-56" />
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
+                <img src={imagePreview} alt="Preview" className="w-full h-auto max-h-64 object-contain rounded-2xl" />
                 <button
                   type="button"
                   onClick={() => setImagePreview(null)}

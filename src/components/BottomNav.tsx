@@ -1,5 +1,6 @@
 import React from "react";
 import { Home, Search, Plus, TrendingUp, Building2 } from "lucide-react";
+import { useLanguage } from "../context/LanguageContext.tsx";
 
 interface BottomNavProps {
   currentView: string;
@@ -12,6 +13,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onNavigate,
   onOpenCreateReport,
 }) => {
+  const { t } = useLanguage();
+
   return (
     <nav
       id="bottom-nav"
@@ -27,7 +30,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <Home className="w-5 h-5" />
-          <span className="text-[10px] mt-1">Home</span>
+          <span className="text-[10px] mt-1">{t("bottom.home", "Home")}</span>
         </button>
 
         {/* 2. Search */}
@@ -39,7 +42,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <Search className="w-5 h-5" />
-          <span className="text-[10px] mt-1">Search</span>
+          <span className="text-[10px] mt-1">{t("bottom.search", "Search")}</span>
         </button>
 
         {/* 3. Center Highlighted (+) Create Button */}
@@ -47,7 +50,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <button
             id="bottom-nav-create-report-btn"
             onClick={onOpenCreateReport}
-            className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-700 text-white rounded-full shadow-[0_6px_20px_rgba(37,99,235,0.45)] border-4 border-white active:scale-95 transition-transform"
+            className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-700 text-white rounded-full shadow-[0_6px_20px_rgba(37,99,235,0.45)] border-4 border-white active:scale-95 transition-transform cursor-pointer"
             title="Create New Report"
           >
             <Plus className="w-7 h-7 stroke-[2.8]" />
@@ -63,7 +66,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <TrendingUp className="w-5 h-5" />
-          <span className="text-[10px] mt-1">Leader</span>
+          <span className="text-[10px] mt-1">{t("bottom.leader", "Leader")}</span>
         </button>
 
         {/* 5. Infrastructure */}
@@ -75,7 +78,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           }`}
         >
           <Building2 className="w-5 h-5" />
-          <span className="text-[10px] mt-1">Infra</span>
+          <span className="text-[10px] mt-1">{t("bottom.infra", "Infra")}</span>
         </button>
       </div>
     </nav>

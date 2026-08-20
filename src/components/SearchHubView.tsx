@@ -569,11 +569,11 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                 </div>
                 <p className="text-xs sm:text-sm text-slate-900">{report.text}</p>
                 {report.imageUrl && (
-                  <div className="rounded-xl overflow-hidden max-h-60 bg-slate-900">
+                  <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
                     <img
                       src={report.imageUrl}
                       alt="Civic Issue"
-                      className="w-full h-full object-cover max-h-60"
+                      className="w-full h-auto object-contain rounded-2xl"
                     />
                   </div>
                 )}

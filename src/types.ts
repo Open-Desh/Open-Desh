@@ -226,8 +226,15 @@ export interface InfrastructureProject {
   budgetAllocated: string;
   budgetSpent: string;
   contractor: string;
+  contractorId?: string;
+  contractorUsername?: string;
+  contractorAvatar?: string;
   contractorLicense: string;
+  contractorRating?: number;
+  contractorSystemScore?: number;
+  contractorProjectsCompleted?: number;
   supervisingOfficer: string;
+  supervisingOfficerId?: string;
   supervisingDept: string;
   status: "Planning" | "Active" | "Delayed" | "Completed";
   deadline: string;

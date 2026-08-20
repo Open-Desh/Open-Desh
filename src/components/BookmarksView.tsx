@@ -334,18 +334,18 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                   </div>
                 )}
 
-                {/* Multi-Image Evidence Carousel */}
+                {/* Multi-Image Evidence Carousel / Natural Dimensions */}
                 {imageList.length > 0 && (
-                  <div className="relative rounded-2xl overflow-hidden border border-slate-200/90 bg-slate-950 aspect-video max-h-[360px] group shadow-inner">
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group shadow-xs">
                     <img
                       src={imageList[currentImgIndex]}
                       alt="Civic Evidence"
-                      className="w-full h-full object-contain"
+                      className="w-full h-auto object-contain rounded-2xl"
                       referrerPolicy="no-referrer"
                     />
 
                     {/* Image Counter Badge */}
-                    <div className="absolute top-2.5 right-2.5 bg-slate-900/85 backdrop-blur-md text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1.5">
+                    <div className="absolute top-2.5 right-2.5 bg-black/60 backdrop-blur-md text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1.5">
                       <span>
                         {currentImgIndex + 1} / {imageList.length}
                       </span>
@@ -362,7 +362,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                               [report.id]: (currentImgIndex - 1 + imageList.length) % imageList.length,
                             }));
                           }}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-900/80 hover:bg-slate-900 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
+                          className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
                         >
                           <ChevronLeft className="w-5 h-5" />
                         </button>
@@ -374,7 +374,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                               [report.id]: (currentImgIndex + 1) % imageList.length,
                             }));
                           }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-900/80 hover:bg-slate-900 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
                         >
                           <ChevronRight className="w-5 h-5" />
                         </button>

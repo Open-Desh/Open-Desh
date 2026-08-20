@@ -31,6 +31,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
+import { useLanguage, INDIAN_LANGUAGES } from "../context/LanguageContext.tsx";
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -45,6 +46,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onNavigate,
   onBackToHome,
 }) => {
+  const { language, setLanguage, currentLanguageInfo, t } = useLanguage();
+
   // Navigation stack for full-screen drilldown (No popups!)
   const [currentScreen, setCurrentScreen] = useState<string>("main");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -52,7 +55,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Account Settings States
   const [phone, setPhone] = useState<string>("+91 98765 43210");
   const [email, setEmail] = useState<string>("citizen@opendesh.in");
-  const [selectedLanguage, setSelectedLanguage] = useState<string>("English (India)");
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
@@ -664,7 +666,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <Languages className="w-5 h-5 text-slate-600 group-hover:text-blue-600 shrink-0" />
               <div>
                 <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Regional Indian Languages</h3>
-                <p className="text-xs text-slate-500">Currently: {selectedLanguage}</p>
+                <p className="text-xs text-slate-500">Currently: {currentLanguageInfo.name} ({currentLanguageInfo.nativeName})</p>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-slate-400" />
@@ -740,20 +742,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {renderHeader("Languages of India", "Select App Language", () => setCurrentScreen("accessibility_display"))}
 
         <div className="divide-y divide-slate-100">
-          {indianLanguages.map((lang) => (
+          {INDIAN_LANGUAGES.map((lang) => (
             <button
               key={lang.code}
               onClick={() => {
-                setSelectedLanguage(lang.name);
+                setLanguage(lang.code);
                 setCurrentScreen("accessibility_display");
               }}
               className="w-full p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left cursor-pointer"
             >
               <div>
-                <div className="text-sm font-bold text-slate-900">{lang.name}</div>
-                <div className="text-xs text-slate-500">{lang.native}</div>
+                <div className="text-sm font-bold text-slate-900">{lang.nativeName} ({lang.name})</div>
+                <div className="text-xs text-slate-500">{lang.region}</div>
               </div>
-              {selectedLanguage === lang.name && (
+              {language === lang.code && (
                 <Check className="w-5 h-5 text-blue-600 stroke-[2.5]" />
               )}
             </button>
