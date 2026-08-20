@@ -28,6 +28,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
   const [fullName, setFullName] = useState(userProfile.fullName || "");
   const [username, setUsername] = useState(userProfile.username || "");
   const [location, setLocation] = useState(userProfile.location || "");
+  const [age, setAge] = useState<string>(userProfile.age ? String(userProfile.age) : "");
   const [bio, setBio] = useState(userProfile.bio || "");
   const [websiteUrl, setWebsiteUrl] = useState(userProfile.websiteUrl || "");
   const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl || "");
@@ -97,6 +98,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         fullName: fullName.trim() || userProfile.fullName,
         username: username.trim().replace(/^@/, "") || userProfile.username,
         location: location.trim(),
+        age: age.trim() ? parseInt(age, 10) : undefined,
         bio: bio.trim(),
         websiteUrl: websiteUrl.trim(),
         avatarUrl: avatarUrl.trim() || userProfile.avatarUrl,
@@ -284,6 +286,23 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Ranchi East, Jharkhand, India"
+              className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
+            />
+          </div>
+
+          {/* Citizen Age */}
+          <div className="relative rounded-2xl border border-slate-300 focus-within:border-slate-950 focus-within:ring-2 focus-within:ring-blue-600/20 transition-all bg-slate-50/50">
+            <label className="absolute -top-2.5 left-4 bg-white px-1.5 text-[11px] font-bold text-slate-800 rounded">
+              Age (उम्र)
+            </label>
+            <input
+              id="edit-age-input"
+              type="number"
+              min={10}
+              max={120}
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              placeholder="e.g. 25"
               className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
             />
           </div>

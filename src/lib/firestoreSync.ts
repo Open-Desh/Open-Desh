@@ -182,19 +182,28 @@ export async function submitLeaderReviewInFirestore(leaderId: string, review: Us
   }
 }
 
-// 9. Fetch User Profile
-export async function getUserProfileDirect(userId: string): Promise<UserProfile | null> {
+// 10. Explicit Seeder that writes all collections immediately to Firestore
+export async function seedAllCollectionsToFirestore(): Promise<void> {
   try {
-    const userDocSnap = await getDoc(doc(db, "users", userId));
-    if (userDocSnap.exists()) {
-      return userDocSnap.data() as UserProfile;
+    // Seed Leaders
+    for (const leader of INITIAL_LEADERS) {
+      await setDoc(doc(db, "leaders", leader.id), sanitizeData(leader), { merge: true });
     }
-    if (INITIAL_USERS[userId]) {
-      return INITIAL_USERS[userId];
+    // Seed Reports
+    for (const rep of INITIAL_REPORTS) {
+      await setDoc(doc(db, "reports", rep.id), sanitizeData(rep), { merge: true });
     }
-    return null;
+    // Seed Infrastructure
+    for (const proj of INITIAL_INFRASTRUCTURE) {
+      await setDoc(doc(db, "infrastructure", proj.id), sanitizeData(proj), { merge: true });
+    }
+    // Seed System Users
+    for (const [uid, uProf] of Object.entries(INITIAL_USERS)) {
+      await setDoc(doc(db, "users", uid), sanitizeData(uProf), { merge: true });
+    }
+    console.log("Firestore: All collections successfully populated in Asia database!");
   } catch (err) {
-    console.warn("Error fetching user profile:", err);
-    return INITIAL_USERS[userId] || null;
+    console.warn("Firestore seeding notice:", err);
   }
 }
+

@@ -16,6 +16,7 @@ import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { LoginView } from "./components/LoginView.tsx";
 import { EditProfileView } from "./components/EditProfileView.tsx";
+import { AgePromptModal } from "./components/AgePromptModal.tsx";
 import { BudgetView } from "./components/BudgetView.tsx";
 import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
@@ -29,6 +30,7 @@ import {
   toggleReReportInFirestore,
   addReplyInFirestore,
   submitLeaderReviewInFirestore,
+  seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
   UserProfile,
@@ -67,6 +69,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authActionReason, setAuthActionReason] = useState<string | null>(null);
+  const [showAgeModal, setShowAgeModal] = useState(false);
 
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
@@ -137,7 +140,11 @@ export default function App() {
           username: savedData.username || (firebaseUser.email ? firebaseUser.email.split("@")[0] : `citizen_${firebaseUser.uid.slice(0, 6)}`),
           avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prev.avatarUrl,
           verified: true,
+          age: savedData.age,
         }));
+        if (!savedData.age) {
+          setShowAgeModal(true);
+        }
       } else {
         // Automatic New User Profile Generation & Firestore Provisioning
         const displayName =
@@ -169,6 +176,7 @@ export default function App() {
         };
 
         setUserProfile(newProfile);
+        setShowAgeModal(true);
 
         await setDoc(userDocRef, {
           ...newProfile,
@@ -283,15 +291,18 @@ export default function App() {
     try {
       setLoadingReports(true);
 
-      // 1. Fetch Reports directly from Firestore
+      // 1. Proactively seed all collections into Firestore if needed
+      seedAllCollectionsToFirestore().catch((err) => console.warn("Seed notice:", err));
+
+      // 2. Fetch Reports directly from Firestore
       const reportsList = await getReportsDirect();
       setReports(reportsList);
 
-      // 2. Fetch Leaders directly from Firestore
+      // 3. Fetch Leaders directly from Firestore
       const leadersList = await getLeadersDirect();
       setLeaders(leadersList);
 
-      // 3. Fetch Infrastructure directly from Firestore
+      // 4. Fetch Infrastructure directly from Firestore
       const infraList = await getInfrastructureDirect();
       setInfrastructure(infraList);
     } catch (err) {
@@ -956,6 +967,16 @@ export default function App() {
 
       {/* Global Indian Language Selection Modal */}
       <LanguageSelectModal />
+
+      {/* Age Capture Modal for Verified Citizen Profile */}
+      <AgePromptModal
+        isOpen={showAgeModal && isLoggedIn}
+        userId={currentUser?.uid || userProfile.id}
+        onSaveAge={(newAge) => {
+          setUserProfile((prev) => ({ ...prev, age: newAge }));
+          setShowAgeModal(false);
+        }}
+      />
     </div>
   );
 }

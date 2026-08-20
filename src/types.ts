@@ -86,6 +86,7 @@ export interface UserProfile {
   websiteUrl?: string;
   avatarUrl: string;
   category: UserCategory;
+  age?: number;
   citizenDetails?: CitizenDetails;
   departmentDetails?: DepartmentDetails;
   representativeDetails?: RepresentativeDetails;

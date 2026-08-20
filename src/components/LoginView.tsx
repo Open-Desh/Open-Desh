@@ -1,22 +1,22 @@
 import React, { useState } from "react";
 import {
   ArrowLeft,
-  Phone,
   AlertCircle,
   Loader2,
-  Sparkles,
-  CheckCircle2,
   Shield,
-  HelpCircle,
+  User as UserIcon,
+  Mail,
   Lock,
+  Calendar,
 } from "lucide-react";
 import {
   loginWithGoogle,
   loginWithEmail,
   signUpWithEmail,
-  loginAsGuest,
   FirebaseUser,
+  db,
 } from "../firebase.ts";
+import { doc, setDoc } from "firebase/firestore";
 
 interface LoginViewProps {
   onSuccess: (user: FirebaseUser) => void;
@@ -29,64 +29,30 @@ export const LoginView: React.FC<LoginViewProps> = ({
   onCancel,
   actionReason = null,
 }) => {
-  const [screen, setScreen] = useState<"welcome" | "email" | "phone">("welcome");
+  const [screen, setScreen] = useState<"welcome" | "email">("welcome");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [age, setAge] = useState<string>("");
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [showConfigTip, setShowConfigTip] = useState(false);
-
-  // Custom Open Desh Two-Tone Smiling Logo Badge matching reference
-  const OpenDeshBadge = ({ size = "lg" }: { size?: "sm" | "lg" }) => {
-    const isLarge = size === "lg";
-    return (
-      <div
-        className={`flex items-center justify-center ${
-          isLarge ? "w-20 h-14" : "w-14 h-10"
-        } rounded-3xl overflow-hidden shadow-sm select-none transition-transform hover:scale-105 mx-auto`}
-      >
-        {/* Left Orange Half with Smiling Eyes */}
-        <div className="w-1/2 h-full bg-gradient-to-br from-amber-400 to-amber-500 flex flex-col items-center justify-center gap-1.5 pl-1 rounded-l-2xl">
-          <div className="flex gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-950"></span>
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-950"></span>
-          </div>
-        </div>
-
-        {/* Right Blue Half with D Cutout */}
-        <div className="w-1/2 h-full bg-[#0066FF] flex items-center justify-center rounded-r-2xl pr-0.5">
-          <div className="w-5 h-7 bg-white rounded-r-full ml-1"></div>
-        </div>
-      </div>
-    );
-  };
+  const [imgError, setImgError] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setErrorMsg(null);
-    setShowConfigTip(false);
     try {
       const user = await loginWithGoogle();
       onSuccess(user);
     } catch (err: any) {
       console.warn("Google login notice:", err);
       if (err?.code === "auth/popup-blocked") {
-        setErrorMsg("Browser popup was blocked. Please enable popups or use 1-Click Instant Login below.");
+        setErrorMsg("Browser popup was blocked. Please enable popups or log in via Email.");
       } else if (err?.code === "auth/popup-closed-by-user") {
-        setErrorMsg("Google sign-in window was closed. You can try again or use 1-Click login below.");
-      } else if (err?.code === "auth/unauthorized-domain") {
-        setErrorMsg(
-          "Firebase Notice: Current Cloud Run domain requires whitelisting in Firebase Console (Authentication > Settings > Authorized Domains). Use 1-Click Citizen Login below to sign in instantly!"
-        );
-        setShowConfigTip(true);
+        setErrorMsg("Google sign-in window was closed. Please try again.");
       } else {
-        setErrorMsg(
-          "Google OAuth requires Authorized domain in Firebase Authentication settings. You can log in instantly with Email or 1-Click login below!"
-        );
-        setShowConfigTip(true);
+        setErrorMsg("Google authentication service notice. You can log in directly with Email below!");
       }
     } finally {
       setLoading(false);
@@ -100,93 +66,55 @@ export const LoginView: React.FC<LoginViewProps> = ({
       return;
     }
 
+    if (isSignUpMode && !age.trim()) {
+      setErrorMsg("Please enter your age (उम्र).");
+      return;
+    }
+
+    const parsedAge = parseInt(age, 10);
+    if (isSignUpMode && (isNaN(parsedAge) || parsedAge < 10 || parsedAge > 120)) {
+      setErrorMsg("Please enter a valid age between 10 and 120.");
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
-    setShowConfigTip(false);
 
     try {
       const pwd = password.trim() || "OpenDesh@2026";
       let user: FirebaseUser;
       if (isSignUpMode) {
         user = await signUpWithEmail(email.trim(), pwd, fullName.trim() || undefined);
+        // Save age directly to Firestore Database
+        try {
+          await setDoc(
+            doc(db, "users", user.uid),
+            {
+              age: parsedAge,
+              fullName: fullName.trim() || email.split("@")[0],
+              email: email.trim(),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (fsErr) {
+          console.warn("Firestore age save notice:", fsErr);
+        }
       } else {
         user = await loginWithEmail(email.trim(), pwd);
       }
       onSuccess(user);
     } catch (err: any) {
-      console.warn("Email auth error / fallback:", err);
-      if (err?.code === "auth/operation-not-allowed") {
-        // Automatically create verified citizen session so user is never blocked
-        try {
-          const user = await loginAsGuest(fullName.trim() || email.split("@")[0]);
-          onSuccess(user);
-        } catch (guestErr) {
-          // Fallback mock session
-          const fallbackUser: any = {
-            uid: `citizen_${Date.now()}`,
-            email: email.trim(),
-            displayName: fullName.trim() || email.split("@")[0],
-            photoURL: "",
-          };
-          onSuccess(fallbackUser);
-        }
-      } else if (err?.code === "auth/wrong-password") {
-        setErrorMsg("Incorrect password. Please verify and try again.");
+      console.warn("Email auth error:", err);
+      if (err?.code === "auth/wrong-password" || err?.code === "auth/invalid-credential") {
+        setErrorMsg("Incorrect credentials. Please verify email and password.");
+      } else if (err?.code === "auth/email-already-in-use") {
+        setErrorMsg("Email already registered. Please log in or reset password.");
       } else if (err?.code === "auth/invalid-email") {
         setErrorMsg("Please enter a valid email address format.");
       } else {
-        // Seamless fallback to active session
-        const fallbackUser: any = {
-          uid: `citizen_${Date.now()}`,
-          email: email.trim(),
-          displayName: fullName.trim() || email.split("@")[0],
-          photoURL: "",
-        };
-        onSuccess(fallbackUser);
+        setErrorMsg(err?.message || "Authentication failed. Please check your credentials.");
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePhoneSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phoneNumber.trim() || phoneNumber.length < 10) {
-      setErrorMsg("Please enter a valid 10-digit mobile number.");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const phoneDisplayName = `Citizen (+91 ${phoneNumber.slice(-4)})`;
-      const user = await loginAsGuest(phoneDisplayName);
-      onSuccess(user);
-    } catch (err: any) {
-      const fallbackUser: any = {
-        uid: `citizen_phone_${Date.now()}`,
-        phoneNumber: `+91${phoneNumber}`,
-        displayName: `Citizen (+91 ${phoneNumber.slice(-4)})`,
-        photoURL: "",
-      };
-      onSuccess(fallbackUser);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInstantCitizenLogin = async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const user = await loginAsGuest("Verified Citizen");
-      onSuccess(user);
-    } catch (err: any) {
-      const fallbackUser: any = {
-        uid: `citizen_${Date.now()}`,
-        displayName: "Verified Citizen",
-        email: "citizen@opendesh.gov.in",
-      };
-      onSuccess(fallbackUser);
     } finally {
       setLoading(false);
     }
@@ -204,13 +132,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
             id="login-back-btn"
             onClick={onCancel}
             className="p-2 -ml-1 text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
-            title="Back to Feed"
+            title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <h1 className="text-base font-black text-slate-900 leading-tight">
-              {screen === "welcome" ? "Sign In to Open Desh" : screen === "email" ? "Email Authentication" : "Mobile Sign In"}
+              {screen === "welcome"
+                ? "Sign In to Open Desh"
+                : isSignUpMode
+                ? "Create Citizen Account"
+                : "Email Sign In"}
             </h1>
             <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               Open Voice, Open Desh
@@ -222,14 +154,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
           onClick={onCancel}
           className="text-xs font-bold text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
         >
-          Explore as Guest
+          Cancel
         </button>
       </header>
 
-      {/* Action Reason Banner (e.g. "Log in to like report") */}
+      {/* Action Reason Banner */}
       {actionReason && (
         <div className="bg-blue-50 border-b border-blue-100 px-5 py-3 flex items-center gap-2 text-blue-950 text-xs font-bold">
-          <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+          <Shield className="w-4 h-4 text-blue-600 shrink-0" />
           <span>{actionReason}</span>
         </div>
       )}
@@ -241,9 +173,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
         {/* ========================================================================= */}
         {screen === "welcome" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Centered Brand & Smiling Logo */}
+            {/* Centered Brand & Logo */}
             <div className="text-center space-y-3">
-              <OpenDeshBadge size="lg" />
+              {!imgError ? (
+                <img
+                  src="/logo.jpg"
+                  alt="Open Desh Logo"
+                  onError={() => setImgError(true)}
+                  className="w-18 h-18 rounded-2xl object-cover shadow-sm mx-auto border border-slate-200"
+                />
+              ) : (
+                <div className="w-18 h-18 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-sm mx-auto">
+                  OD
+                </div>
+              )}
               <div className="space-y-1 pt-1">
                 <h2 className="text-3xl font-black text-slate-950 tracking-tight">
                   Open Desh
@@ -261,20 +204,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
             {errorMsg && (
               <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 font-medium">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <span>{errorMsg}</span>
-                  {showConfigTip && (
-                    <p className="text-[11px] text-rose-600/90 font-normal">
-                      Tip: Use <strong>Email login</strong> or <strong>1-Click Instant Citizen Login</strong> below for immediate access.
-                    </p>
-                  )}
-                </div>
+                <span className="flex-1">{errorMsg}</span>
               </div>
             )}
 
             {/* Action Buttons */}
             <div className="space-y-3 pt-2">
-              {/* Button 1: Google Login */}
+              {/* Google Login */}
               <button
                 id="login-btn-google"
                 onClick={handleGoogleSignIn}
@@ -308,7 +244,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 )}
               </button>
 
-              {/* Button 2: Email Sign In */}
+              {/* Email Sign In / Sign Up */}
               <button
                 id="login-btn-email"
                 onClick={() => {
@@ -316,20 +252,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   setScreen("email");
                 }}
                 disabled={loading}
-                className="w-full h-[52px] rounded-full border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-900 font-bold text-sm flex items-center justify-center shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                className="w-full h-[52px] rounded-full border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-900 font-bold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
               >
-                Log in another way (Email / Phone)
-              </button>
-
-              {/* Button 3: 1-Click Citizen Instant Login */}
-              <button
-                id="login-btn-quick"
-                onClick={handleInstantCitizenLogin}
-                disabled={loading}
-                className="w-full h-[48px] rounded-full bg-blue-50 hover:bg-blue-100 text-blue-900 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 border border-blue-200 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>1-Click Instant Citizen Login</span>
+                <Mail className="w-4 h-4 text-slate-600" />
+                <span>Continue with Email</span>
               </button>
             </div>
           </div>
@@ -340,14 +266,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
         {/* ========================================================================= */}
         {screen === "email" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Centered Smiling Logo */}
+            {/* Centered Logo */}
             <div className="text-center space-y-2">
-              <OpenDeshBadge size="sm" />
+              {!imgError ? (
+                <img
+                  src="/logo.jpg"
+                  alt="Open Desh Logo"
+                  onError={() => setImgError(true)}
+                  className="w-14 h-14 rounded-2xl object-cover shadow-sm mx-auto border border-slate-200"
+                />
+              ) : (
+                <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-sm mx-auto">
+                  OD
+                </div>
+              )}
               <h2 className="text-2xl font-black text-slate-950 tracking-tight pt-1">
-                {isSignUpMode ? "Create your citizen account" : "Log in or sign up"}
+                {isSignUpMode ? "Create Citizen Account" : "Log In to Open Desh"}
               </h2>
               <p className="text-xs text-slate-500 max-w-[300px] mx-auto leading-relaxed">
-                Enter your email address to access your verified citizen dashboard.
+                {isSignUpMode
+                  ? "Enter your details including age to verify your citizen profile."
+                  : "Enter your registered email and password to log in."}
               </p>
             </div>
 
@@ -361,26 +300,47 @@ export const LoginView: React.FC<LoginViewProps> = ({
             {/* Email Form */}
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               {isSignUpMode && (
-                <div className="relative rounded-xl border border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white">
-                  <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-900">
-                    Full Name
-                  </label>
-                  <input
-                    id="login-name-input"
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Enter your full name"
-                    className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
-                  />
-                </div>
+                <>
+                  {/* Full Name */}
+                  <div className="relative rounded-xl border border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white">
+                    <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                      <UserIcon className="w-3 h-3 text-slate-700" /> Full Name
+                    </label>
+                    <input
+                      id="login-name-input"
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Rahul Sharma"
+                      className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
+                    />
+                  </div>
+
+                  {/* Age Field */}
+                  <div className="relative rounded-xl border border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white">
+                    <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-700" /> Age (उम्र)
+                    </label>
+                    <input
+                      id="login-age-input"
+                      type="number"
+                      min={10}
+                      max={120}
+                      required
+                      value={age}
+                      onChange={(e) => setAge(e.target.value)}
+                      placeholder="e.g. 24"
+                      className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
+                    />
+                  </div>
+                </>
               )}
 
               {/* Floating Email Field */}
               <div className="relative rounded-xl border border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white">
-                <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-900">
-                  Email
+                <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-slate-700" /> Email Address
                 </label>
                 <input
                   id="login-email-input"
@@ -388,22 +348,23 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="omkunhq@gmail.com"
+                  placeholder="yourname@gmail.com"
                   className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
                 />
               </div>
 
               {/* Password Field */}
               <div className="relative rounded-xl border border-slate-300 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white">
-                <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-500">
-                  Password (optional)
+                <label className="absolute -top-2.5 left-3 bg-white px-1 text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-500" /> Password
                 </label>
                 <input
                   id="login-password-input"
                   type="password"
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder="Enter secure password"
                   className="w-full h-13 px-4 pt-1 text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent"
                 />
               </div>
@@ -411,96 +372,43 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <button
                 id="login-submit-email-btn"
                 type="submit"
-                disabled={loading || !email.trim()}
+                disabled={loading || !email.trim() || !password.trim()}
                 className={`w-full h-[50px] rounded-full font-bold text-sm flex items-center justify-center transition-all cursor-pointer ${
-                  email.trim()
-                    ? "bg-slate-950 hover:bg-slate-900 text-white shadow-md active:scale-[0.99]"
+                  email.trim() && password.trim()
+                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md active:scale-[0.99]"
                     : "bg-slate-200 text-slate-400"
                 }`}
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : "Continue"}
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-white" />
+                ) : isSignUpMode ? (
+                  "Create Account & Save Profile"
+                ) : (
+                  "Log In"
+                )}
               </button>
             </form>
 
             <div className="flex items-center justify-between text-xs font-semibold text-slate-600 px-1">
               <button
                 type="button"
-                onClick={() => setIsSignUpMode(!isSignUpMode)}
-                className="hover:text-blue-600 text-blue-600 cursor-pointer"
+                onClick={() => {
+                  setErrorMsg(null);
+                  setIsSignUpMode(!isSignUpMode);
+                }}
+                className="hover:text-blue-700 text-blue-600 cursor-pointer font-bold"
               >
-                {isSignUpMode ? "Already have an account? Log In" : "Need an account? Sign Up"}
+                {isSignUpMode ? "Already have an account? Log In" : "New to Open Desh? Sign Up"}
               </button>
               <button
                 type="button"
-                onClick={() => setScreen("phone")}
+                onClick={() => {
+                  setErrorMsg(null);
+                  setScreen("welcome");
+                }}
                 className="hover:text-slate-900 cursor-pointer text-slate-500"
               >
-                Use Phone Number →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 3: PHONE NUMBER SIGN IN                                            */}
-        {/* ========================================================================= */}
-        {screen === "phone" && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="text-center space-y-2">
-              <OpenDeshBadge size="sm" />
-              <h2 className="text-2xl font-black text-slate-950 tracking-tight pt-1">
-                Enter your mobile number
-              </h2>
-              <p className="text-xs text-slate-500 max-w-[280px] mx-auto">
-                We'll verify your mobile number for authenticated citizen submissions.
-              </p>
-            </div>
-
-            {errorMsg && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 font-medium">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handlePhoneSubmit} className="space-y-4">
-              <div className="relative rounded-xl border border-slate-900 focus-within:ring-2 focus-within:ring-blue-600/30 transition-all bg-white flex items-center">
-                <span className="pl-4 pr-2 text-sm font-black text-slate-700 border-r border-slate-200">
-                  +91
-                </span>
-                <input
-                  id="login-phone-input"
-                  type="tel"
-                  maxLength={10}
-                  required
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                  placeholder="98765 43210"
-                  className="w-full h-13 px-3 text-sm font-bold text-slate-900 placeholder-slate-400 outline-none bg-transparent"
-                />
-              </div>
-
-              <button
-                id="login-phone-submit-btn"
-                type="submit"
-                disabled={loading || phoneNumber.length < 10}
-                className={`w-full h-[50px] rounded-full font-bold text-sm flex items-center justify-center transition-all cursor-pointer ${
-                  phoneNumber.length >= 10
-                    ? "bg-slate-950 hover:bg-slate-900 text-white shadow-md active:scale-[0.99]"
-                    : "bg-slate-200 text-slate-400"
-                }`}
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : "Continue with Mobile"}
-              </button>
-            </form>
-
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => setScreen("email")}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-              >
-                ← Back to Email Sign In
+                ← Back
               </button>
             </div>
           </div>
@@ -511,7 +419,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       <footer className="p-6 text-center text-[11px] text-slate-500 font-medium border-t border-slate-200/80 bg-white">
         <div className="flex items-center justify-center gap-2 mb-1">
           <Shield className="w-3.5 h-3.5 text-blue-600" />
-          <span>Zero-Trust Civic Identity & Encrypted Storage</span>
+          <span>Encrypted Citizen Identity & Secure Database</span>
         </div>
         <p className="text-slate-400">
           By signing in, you agree to Open Desh Terms of Service & Privacy Policy.
