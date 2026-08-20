@@ -136,7 +136,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="flex items-center gap-2">
             {!imgError ? (
               <img
-                src="/logo.jpg"
+                src="/logo.png"
                 alt="Open Desh Logo"
                 onError={() => setImgError(true)}
                 className="w-7 h-7 rounded-lg object-cover"
@@ -173,7 +173,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="text-center space-y-2">
                 {!imgError ? (
                   <img
-                    src="/logo.jpg"
+                    src="/logo.png"
                     alt="Open Desh Logo"
                     onError={() => setImgError(true)}
                     className="w-16 h-16 rounded-2xl object-cover shadow-sm mx-auto border border-slate-200"

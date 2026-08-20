@@ -139,7 +139,13 @@ export const Header: React.FC<HeaderProps> = ({
             title="Open Desh Home"
           >
             <img
-              src="/assets/logo.svg"
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.endsWith("/assets/logo.svg")) {
+                  target.src = "/assets/logo.svg";
+                }
+              }}
               alt="Open Desh Logo"
               className="h-8 md:h-10 max-w-[170px] md:max-w-[210px] object-contain transition-transform duration-200"
               referrerPolicy="no-referrer"
