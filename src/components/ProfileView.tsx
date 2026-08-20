@@ -36,6 +36,7 @@ interface ProfileViewProps {
   userProfile: UserProfile;
   activeUser: UserProfile;
   userReports: ReportIssue[];
+  allReports?: ReportIssue[];
   isLoggedIn?: boolean;
   onBack?: () => void;
   onNavigateToEditProfile?: () => void;
@@ -51,6 +52,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   userProfile,
   activeUser,
   userReports,
+  allReports = [],
   isLoggedIn = false,
   onBack,
   onNavigateToEditProfile,
@@ -70,10 +72,91 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
 
+  // Effective list of reports authored by this user
+  const effectiveAuthoredReports = React.useMemo(() => {
+    const source = allReports && allReports.length > 0 ? allReports : userReports;
+    const filtered = source.filter(
+      (r) =>
+        r.authorId === userProfile.id ||
+        (userProfile.username &&
+          r.authorUsername?.toLowerCase() === userProfile.username.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : userReports;
+  }, [allReports, userReports, userProfile.id, userProfile.username]);
+
+  // Collect all real replies made by this userProfile across all reports
+  const userReplies = React.useMemo(() => {
+    const list: { report: ReportIssue; reply: any }[] = [];
+    const source = allReports && allReports.length > 0 ? allReports : userReports;
+
+    const searchReplies = (report: ReportIssue, replies?: any[]) => {
+      if (!replies) return;
+      for (const rep of replies) {
+        if (
+          rep.authorId === userProfile.id ||
+          (userProfile.username &&
+            rep.authorUsername?.toLowerCase() === userProfile.username.toLowerCase())
+        ) {
+          list.push({ report, reply: rep });
+        }
+        if (rep.replies && rep.replies.length > 0) {
+          searchReplies(report, rep.replies);
+        }
+      }
+    };
+
+    for (const report of source) {
+      searchReplies(report, report.replies);
+    }
+    return list;
+  }, [allReports, userReports, userProfile.id, userProfile.username]);
+
+  // Collect all real re-reports (both post re-reports and reply/comment re-reports) made by this userProfile
+  const userRereports = React.useMemo(() => {
+    type RereportItem =
+      | { type: "report"; report: ReportIssue }
+      | { type: "reply"; report: ReportIssue; reply: any };
+
+    const list: RereportItem[] = [];
+    const source = allReports && allReports.length > 0 ? allReports : userReports;
+
+    for (const r of source) {
+      // 1. Post itself re-reported by user
+      if (
+        r.reReportedBy?.includes(userProfile.id) ||
+        (userProfile.username && r.reReportedBy?.includes(userProfile.username))
+      ) {
+        list.push({ type: "report", report: r });
+      }
+
+      // 2. Comments/Replies re-reported by user
+      const searchReplyRereports = (replies?: any[]) => {
+        if (!replies) return;
+        for (const rep of replies) {
+          if (
+            rep.reReportedBy?.includes(userProfile.id) ||
+            (userProfile.username && rep.reReportedBy?.includes(userProfile.username))
+          ) {
+            list.push({ type: "reply", report: r, reply: rep });
+          }
+          if (rep.replies && rep.replies.length > 0) {
+            searchReplyRereports(rep.replies);
+          }
+        }
+      };
+
+      searchReplyRereports(r.replies);
+    }
+
+    return list;
+  }, [allReports, userReports, userProfile.id, userProfile.username]);
+
   const isOwnProfile = Boolean(isLoggedIn && activeUser && userProfile.id === activeUser.id);
 
   const isLeadershipOrDept =
-    userProfile.category === "representative" || userProfile.category === "department";
+    userProfile.category === "representative" ||
+    userProfile.category === "department" ||
+    userProfile.category === "business";
 
   const availableTabs = isLeadershipOrDept
     ? ([
@@ -149,6 +232,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const badgeInfo = getBadges();
 
+  // 1. Top Bar: Clean username ONLY without '@' and WITHOUT verified tick (Instagram layout)
+  const headerUsername = userProfile.username
+    ? userProfile.username.replace(/^@+/, "")
+    : (userProfile.fullName ? userProfile.fullName.toLowerCase().replace(/\s+/g, "_") : "citizen");
+
+  // 2. Profile Card: Real Full Name WITH verified tick
+  const profileFullName = userProfile.fullName && userProfile.fullName.trim() !== ""
+    ? userProfile.fullName
+    : headerUsername;
+
   const handleCopyProfileLink = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
@@ -200,14 +293,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </button>
           )}
           <div className="flex items-center gap-1.5 min-w-0">
-            <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none truncate flex items-center gap-1.5">
-              <span>{userProfile.fullName}</span>
-              {userProfile.verified && (
-                <CategoryVerifiedTick
-                  category={userProfile.category}
-                  size="xs"
-                />
-              )}
+            {/* Top Bar: Clean Username Only (NO verified tick here) */}
+            <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none truncate">
+              {headerUsername}
             </h1>
           </div>
         </div>
@@ -272,7 +360,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             {userProfile.avatarUrl ? (
               <img
                 src={userProfile.avatarUrl}
-                alt={userProfile.fullName}
+                alt={profileFullName}
                 className="w-20 h-20 sm:w-22 sm:h-22 rounded-full object-cover border border-slate-200 shadow-xs"
                 referrerPolicy="no-referrer"
               />
@@ -283,10 +371,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          {/* Right Info: Name, Username & Counters */}
+          {/* Right Info: Real Full Name with Verified Tick & Counters */}
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 truncate flex items-center gap-1.5">
-              <span>{userProfile.fullName}</span>
+              <span>{profileFullName}</span>
               {userProfile.verified && (
                 <CategoryVerifiedTick
                   category={userProfile.category}
@@ -294,9 +382,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 />
               )}
             </h2>
-            <span className="text-xs text-slate-500 font-medium block">
-              @{userProfile.username}
-            </span>
 
             {/* 3 Stats Counters */}
             <div className="flex items-center gap-4 sm:gap-6 mt-2.5 text-slate-900">
@@ -348,16 +433,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             />
           )}
 
-          {/* Secondary Rate Leader Action (Only on other's representative profile) */}
-          {!isOwnProfile && userProfile.category === "representative" && (
-            <button
-              onClick={() => setEvaluationViewTab("writereview")}
-              className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <Star className="w-3.5 h-3.5 fill-current" />
-              <span>RATE LEADER</span>
-            </button>
-          )}
+          {/* Secondary Rate Action (Representative, Department or Business) */}
+          {!isOwnProfile &&
+            (userProfile.category === "representative" ||
+              userProfile.category === "department" ||
+              userProfile.category === "business") && (
+              <button
+                onClick={() => setEvaluationViewTab("writereview")}
+                className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <Star className="w-3.5 h-3.5 fill-current" />
+                <span>
+                  {userProfile.category === "representative"
+                    ? "RATE LEADER"
+                    : userProfile.category === "department"
+                    ? "RATE DEPT"
+                    : "RATE BUSINESS"}
+                </span>
+              </button>
+            )}
         </div>
 
         {/* Bio & Details Section */}
@@ -509,8 +603,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {/* TAB 1: REPORTS */}
         {activeTab === "Report" && (
           <div className="divide-y divide-slate-100">
-            {userReports.length > 0 ? (
-              userReports.map((report) => (
+            {effectiveAuthoredReports.length > 0 ? (
+              effectiveAuthoredReports.map((report) => (
                 <div
                   key={report.id}
                   onClick={() => onNavigateToPost && onNavigateToPost(report.id)}
@@ -649,35 +743,207 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         {/* TAB 4: REPLIES */}
         {activeTab === "Replies" && (
-          <div className="p-4 space-y-3">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="font-bold text-slate-900">
-                  Official Acknowledgment on Report #REP-001
-                </span>
-                <span className="text-slate-400 text-[11px]">1 hour ago</span>
+          <div className="divide-y divide-slate-100">
+            {userReplies.length > 0 ? (
+              userReplies.map(({ report, reply }, i) => (
+                <div
+                  key={reply.id || i}
+                  onClick={() => onNavigateToPost && onNavigateToPost(report.id)}
+                  className="p-4 hover:bg-slate-50/70 transition-colors cursor-pointer space-y-2.5"
+                >
+                  {/* Context of which report was replied to */}
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                    <MessageCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Replied to</span>
+                    <span className="font-bold text-slate-800">@{report.authorUsername || report.authorName}'s</span>
+                    <span>report:</span>
+                    <span className="font-semibold text-slate-600 truncate max-w-[200px]">
+                      "{report.text}"
+                    </span>
+                  </div>
+
+                  {/* The reply card */}
+                  <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/90 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={reply.authorAvatar || userProfile.avatarUrl}
+                          alt={reply.authorName}
+                          className="w-6 h-6 rounded-full object-cover border border-slate-200"
+                        />
+                        <span className="font-bold text-slate-900">{reply.authorName}</span>
+                        <span className="text-slate-400 font-medium text-[11px]">
+                          @{reply.authorUsername}
+                        </span>
+                      </div>
+                      <span className="text-slate-400 text-[11px] font-medium">
+                        {reply.timestamp}
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal">
+                      {reply.text}
+                    </p>
+
+                    {reply.imageUrl && (
+                      <div className="rounded-xl overflow-hidden bg-white border border-slate-200 max-h-48 flex items-center justify-center">
+                        <img
+                          src={reply.imageUrl}
+                          alt="Reply attachment"
+                          className="w-full h-auto max-h-48 object-contain"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
+                      <span className="flex items-center gap-1">
+                        <Heart className={`w-3.5 h-3.5 ${reply.likesCount > 0 ? "text-rose-500 fill-rose-500" : "text-slate-400"}`} />
+                        <span>{reply.likesCount || 0}</span>
+                      </span>
+                      <span className="text-blue-600 font-bold hover:underline ml-auto text-[11px]">
+                        View Full Thread →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-12 text-center text-xs text-slate-400">
+                No replies or comments posted by this user yet.
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed font-normal">
-                "Official PWD Team has acknowledged ticket #PWD-JH-9921. Road resurfacing contractor has been summoned on site."
-              </p>
-              <span className="text-[10px] font-black text-blue-600 uppercase">
-                Verified Civic Department Action
-              </span>
-            </div>
+            )}
           </div>
         )}
 
         {/* TAB 5: REREPORTS */}
         {activeTab === "Rereport" && (
-          <div className="p-4 space-y-3">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
-              <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold">
-                <Repeat2 className="w-4 h-4" /> Re-reported into Jharkhand Constituency Feed
+          <div className="divide-y divide-slate-100">
+            {userRereports.length > 0 ? (
+              userRereports.map((item, idx) => {
+                if (item.type === "report") {
+                  const report = item.report;
+                  return (
+                    <div
+                      key={`rereport_post_${report.id}_${idx}`}
+                      onClick={() => onNavigateToPost && onNavigateToPost(report.id)}
+                      className="p-4 hover:bg-slate-50/70 transition-colors cursor-pointer space-y-2"
+                    >
+                      {/* Re-reported header indicator */}
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-extrabold pb-0.5">
+                        <Repeat2 className="w-4 h-4" />
+                        <span>You re-reported this post</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          {report.category}
+                        </span>
+                        <span className="text-slate-400 font-medium">{report.timestamp}</span>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
+                        {report.text}
+                      </p>
+
+                      {report.imageUrl && (
+                        <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
+                          <img
+                            src={report.imageUrl}
+                            alt="Evidence"
+                            className="w-full h-auto object-contain rounded-2xl"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 text-xs text-slate-500 font-semibold">
+                        <span className="flex items-center gap-1 text-slate-600">
+                          <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />{" "}
+                          {report.likesCount}
+                        </span>
+                        <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                          <Repeat2 className="w-4 h-4 text-emerald-600" /> {report.reReportsCount}
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-600">
+                          <MessageCircle className="w-4 h-4 text-blue-500" />{" "}
+                          {report.repliesCount}
+                        </span>
+                        <span className="font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          {report.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // If it's a re-reported reply / comment
+                const { report, reply } = item;
+                return (
+                  <div
+                    key={`rereport_reply_${reply.id}_${idx}`}
+                    onClick={() => onNavigateToPost && onNavigateToPost(report.id)}
+                    className="p-4 hover:bg-slate-50/70 transition-colors cursor-pointer space-y-2.5"
+                  >
+                    {/* Re-reported reply header indicator */}
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-extrabold pb-0.5">
+                      <Repeat2 className="w-4 h-4" />
+                      <span>You re-reported a reply in @{report.authorUsername || report.authorName}'s post</span>
+                    </div>
+
+                    {/* The re-reported comment card */}
+                    <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/90 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={reply.authorAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"}
+                            alt={reply.authorName}
+                            className="w-6 h-6 rounded-full object-cover border border-slate-200"
+                          />
+                          <span className="font-bold text-slate-900">{reply.authorName}</span>
+                          <span className="text-slate-400 font-medium text-[11px]">
+                            @{reply.authorUsername}
+                          </span>
+                        </div>
+                        <span className="text-slate-400 text-[11px] font-medium">
+                          {reply.timestamp}
+                        </span>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal">
+                        {reply.text}
+                      </p>
+
+                      {reply.imageUrl && (
+                        <div className="rounded-xl overflow-hidden bg-white border border-slate-200 max-h-48 flex items-center justify-center">
+                          <img
+                            src={reply.imageUrl}
+                            alt="Reply attachment"
+                            className="w-full h-auto max-h-48 object-contain"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
+                        <span className="flex items-center gap-1">
+                          <Heart className={`w-3.5 h-3.5 ${reply.likesCount > 0 ? "text-rose-500 fill-rose-500" : "text-slate-400"}`} />
+                          <span>{reply.likesCount || 0}</span>
+                        </span>
+                        <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                          <Repeat2 className="w-3.5 h-3.5" />
+                          <span>{reply.reReportsCount || 0}</span>
+                        </span>
+                        <span className="text-blue-600 font-bold hover:underline ml-auto text-[11px]">
+                          View Full Post →
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-12 text-center text-xs text-slate-400">
+                No re-reports shared by this user yet.
               </div>
-              <p className="text-xs text-slate-800">
-                "Deep 3-foot asphalt crater on Main Road near Kanke Chowk. @PWD urgent repair required!"
-              </p>
-            </div>
+            )}
           </div>
         )}
       </div>

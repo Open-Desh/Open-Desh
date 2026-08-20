@@ -47,7 +47,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
       onSuccess(user);
     } catch (err: any) {
       console.warn("Google login notice:", err);
-      if (err?.code === "auth/popup-blocked") {
+      if (err?.code === "auth/unauthorized-domain") {
+        setErrorMsg(
+          "Current preview domain is not in Firebase OAuth Authorized Domains list. Please log in seamlessly via Email below!"
+        );
+      } else if (err?.code === "auth/popup-blocked") {
         setErrorMsg("Browser popup was blocked. Please enable popups or log in via Email.");
       } else if (err?.code === "auth/popup-closed-by-user") {
         setErrorMsg("Google sign-in window was closed. Please try again.");

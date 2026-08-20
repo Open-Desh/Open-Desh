@@ -1,17 +1,19 @@
 import React from "react";
-import { Home, Search, Plus, TrendingUp, Building2 } from "lucide-react";
+import { Home, Search, Plus, Building2, Bell } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.tsx";
 
 interface BottomNavProps {
   currentView: string;
   onNavigate: (view: string) => void;
   onOpenCreateReport: () => void;
+  unreadNotificationsCount?: number;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   currentView,
   onNavigate,
   onOpenCreateReport,
+  unreadNotificationsCount = 0,
 }) => {
   const { t } = useLanguage();
 
@@ -57,16 +59,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           </button>
         </div>
 
-        {/* 4. Leader Tracker */}
+        {/* 4. Notifications */}
         <button
-          id="bottom-nav-leader"
-          onClick={() => onNavigate("leader")}
-          className={`flex flex-col items-center justify-center flex-1 transition-colors ${
-            currentView === "leader" ? "text-blue-600 font-bold" : "text-slate-500 font-medium"
+          id="bottom-nav-notifications"
+          onClick={() => onNavigate("notifications")}
+          className={`relative flex flex-col items-center justify-center flex-1 transition-colors ${
+            currentView === "notifications" ? "text-blue-600 font-bold" : "text-slate-500 font-medium"
           }`}
         >
-          <TrendingUp className="w-5 h-5" />
-          <span className="text-[10px] mt-1">{t("bottom.leader", "Leader")}</span>
+          <div className="relative">
+            <Bell className="w-5 h-5" />
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-[14px] px-0.5 items-center justify-center rounded-full bg-rose-500 text-white text-[8px] font-black border border-white">
+                {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] mt-1">{t("bottom.notifications", "Alerts")}</span>
         </button>
 
         {/* 5. Infrastructure */}

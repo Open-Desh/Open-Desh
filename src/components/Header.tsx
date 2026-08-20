@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserPlus, HelpCircle, Activity, Search, X, LogIn } from "lucide-react";
+import { Users, HelpCircle, Activity, Search, X, LogIn, Bell } from "lucide-react";
 import { UserProfile } from "../types.ts";
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
   searchQuery?: string;
   onSearchQueryChange?: (q: string) => void;
   bookmarkedCount?: number;
+  unreadNotificationsCount?: number;
   isLoggedIn?: boolean;
   onOpenLogin?: () => void;
 }
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery = "",
   onSearchQueryChange,
   bookmarkedCount = 0,
+  unreadNotificationsCount = 0,
   isLoggedIn = false,
   onOpenLogin,
 }) => {
@@ -206,10 +208,14 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="header-connect-btn"
           onClick={() => onNavigate("connect")}
-          className="w-10 h-10 rounded-full text-slate-800 hover:text-blue-600 hover:bg-blue-50/80 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+            currentView === "connect"
+              ? "text-slate-900 bg-slate-100 font-bold"
+              : "text-slate-800 hover:text-slate-900 hover:bg-slate-100"
+          }`}
           title="Connect & Discover People"
         >
-          <UserPlus className="w-6 h-6 stroke-[2.2]" />
+          <Users className="w-6 h-6 stroke-[2.2]" />
         </button>
       </div>
     </header>

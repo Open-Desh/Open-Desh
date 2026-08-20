@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Header } from "./components/Header.tsx";
 import { BottomNav } from "./components/BottomNav.tsx";
 import { FeedView } from "./components/FeedView.tsx";
 import { HelpView } from "./components/HelpView.tsx";
-import { LeaderTrackerView } from "./components/LeaderTrackerView.tsx";
 import { InfrastructureView } from "./components/InfrastructureView.tsx";
 import { ProfileView } from "./components/ProfileView.tsx";
 import { BookmarksView } from "./components/BookmarksView.tsx";
@@ -21,6 +20,8 @@ import { AgePromptModal } from "./components/AgePromptModal.tsx";
 import { BudgetView } from "./components/BudgetView.tsx";
 import { PostDetailView } from "./components/PostDetailView.tsx";
 import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
+import { NotificationsView } from "./components/NotificationsView.tsx";
+import { initialSeedNotifications } from "./data/seedNotifications.ts";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
 import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
 import {
@@ -33,6 +34,7 @@ import {
   addReplyInFirestore,
   updateReportRepliesInFirestore,
   submitLeaderReviewInFirestore,
+  submitUserReviewInFirestore,
   seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
@@ -43,6 +45,7 @@ import {
   IssueCategory,
   UserReview,
   ThreadedReply,
+  AppNotification,
 } from "./types.ts";
 
 const defaultGuestProfile: UserProfile = {
@@ -87,6 +90,84 @@ export default function App() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [infrastructure, setInfrastructure] = useState<InfrastructureProject[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
+
+  // Real-time Notifications State
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem("open_nation_notifications");
+      return saved ? JSON.parse(saved) : initialSeedNotifications;
+    } catch {
+      return initialSeedNotifications;
+    }
+  });
+
+  // Sync notifications to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("open_nation_notifications", JSON.stringify(notifications));
+    } catch (e) {
+      console.error("Failed to persist notifications:", e);
+    }
+  }, [notifications]);
+
+  // Helper to add a notification
+  const triggerNotification = (notif: Omit<AppNotification, "id" | "createdAt" | "read">) => {
+    const newNotif: AppNotification = {
+      ...notif,
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: Date.now(),
+      read: false,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  // User's filtered notifications: ONLY likes and replies from OTHER users on the current user's reports
+  const userNotifications = useMemo(() => {
+    return notifications.filter((notif) => {
+      // 1. Only 'like' or 'reply' types
+      if (notif.type !== "like" && notif.type !== "reply") return false;
+
+      // 2. Action must NOT be performed by the current user themselves
+      const isActorSelf =
+        notif.actorId === userProfile.id ||
+        notif.actorUsername === userProfile.username ||
+        (currentUser && notif.actorId === currentUser.uid);
+      if (isActorSelf) return false;
+
+      // 3. Notification must be on a report authored by the current user or explicitly sent to current user
+      const targetReport = reports.find((r) => r.id === notif.targetReportId);
+      const isAuthorSelf = targetReport
+        ? targetReport.authorId === userProfile.id ||
+          targetReport.authorUsername === userProfile.username ||
+          (currentUser && targetReport.authorId === currentUser.uid) ||
+          targetReport.authorName === userProfile.fullName
+        : false;
+
+      const isDirectRecipient =
+        notif.recipientId === userProfile.id ||
+        (currentUser && notif.recipientId === currentUser.uid) ||
+        notif.recipientId === userProfile.username;
+
+      return isAuthorSelf || isDirectRecipient;
+    });
+  }, [notifications, userProfile, currentUser, reports]);
+
+  const unreadNotificationsCount = userNotifications.filter((n) => !n.read).length;
+
 
   // Clean Path route synchronization (no '#' in URLs)
   useEffect(() => {
@@ -491,6 +572,29 @@ export default function App() {
       // Firestore Database Sync
       await toggleLikeInFirestore(id, userProfile.id, isLiked);
 
+      // Trigger live notification on like ONLY if someone else's report is being liked (not user's own)
+      const isSelfReport =
+        target?.authorId === userProfile.id ||
+        target?.authorUsername === userProfile.username ||
+        (currentUser && target?.authorId === currentUser.uid);
+
+      if (!isLiked && target && !isSelfReport) {
+        triggerNotification({
+          recipientId: target.authorId || "citizen_guest",
+          type: "like",
+          actorId: userProfile.id,
+          actorName: userProfile.fullName,
+          actorUsername: userProfile.username,
+          actorAvatar: userProfile.avatarUrl,
+          actorCategory: userProfile.category,
+          actorBadge: userProfile.verified ? "Citizen" : undefined,
+          title: `${userProfile.fullName} upvoted your report`,
+          message: `upvoted your civic report on ${target.category || "Issue"}`,
+          targetReportId: id,
+          timestamp: "Just now",
+        });
+      }
+
       try {
         await fetch(`/api/reports/${id}/like`, { method: "POST" });
       } catch {
@@ -641,6 +745,30 @@ export default function App() {
       // Firestore Direct Sync
       await addReplyInFirestore(id, replyObj);
 
+      // Trigger live notification ONLY if someone else's report is being replied to (not user's own)
+      const targetRep = reports.find((r) => r.id === id);
+      const isSelfReport =
+        targetRep?.authorId === userProfile.id ||
+        targetRep?.authorUsername === userProfile.username ||
+        (currentUser && targetRep?.authorId === currentUser.uid);
+
+      if (targetRep && !isSelfReport) {
+        triggerNotification({
+          recipientId: targetRep.authorId || "citizen_guest",
+          type: "reply",
+          actorId: userProfile.id,
+          actorName: userProfile.fullName,
+          actorUsername: userProfile.username,
+          actorAvatar: userProfile.avatarUrl,
+          actorCategory: userProfile.category,
+          actorBadge: userProfile.verified ? "Citizen" : undefined,
+          title: `${userProfile.fullName} replied to your post`,
+          message: text.length > 100 ? `${text.slice(0, 100)}...` : text,
+          targetReportId: id,
+          timestamp: "Just now",
+        });
+      }
+
       try {
         await fetch(`/api/reports/${id}/reply`, {
           method: "POST",
@@ -738,6 +866,29 @@ export default function App() {
           setReports((prev) =>
             prev.map((r) => (r.id === id ? data.report : r))
           );
+
+          // Trigger live notification alert for status update
+          const targetRep = reports.find((r) => r.id === id);
+          const statusLabels = ["Open", "Under Dept Review", "In Progress", "Resolved"];
+          const newStatusLabel = statusLabels[level] || "Updated";
+          triggerNotification({
+            recipientId: targetRep?.authorId || "citizen_guest",
+            type: "status_update",
+            actorId: userProfile.id,
+            actorName: userProfile.fullName,
+            actorUsername: userProfile.username,
+            actorAvatar: userProfile.avatarUrl,
+            actorCategory: userProfile.category,
+            actorBadge: userProfile.verified ? "Authority" : undefined,
+            title: `Report Status: ${newStatusLabel}`,
+            message: `${userProfile.fullName} updated ticket #${id.slice(-6).toUpperCase()} to ${newStatusLabel}.${notes ? ` Note: "${notes}"` : ""}`,
+            targetReportId: id,
+            timestamp: "Just now",
+            metadata: {
+              newStatus: newStatusLabel,
+              category: targetRep?.category,
+            },
+          });
         }
       } catch (err) {
         console.error("Status update error:", err);
@@ -813,6 +964,8 @@ export default function App() {
       if (matchedLeader) {
         await submitLeaderReviewInFirestore(matchedLeader.id, reviewObj);
       }
+      // Also sync to user document in Firestore
+      await submitUserReviewInFirestore(userId, reviewObj);
 
       try {
         await fetch(`/api/users/${userId}/rate`, {
@@ -865,15 +1018,40 @@ export default function App() {
       return;
     }
 
+    // Check if it's a leader ID first
+    const matchedLeader = leaders.find(
+      (l) => l.id === userId || l.username.replace(/^@/, "").toLowerCase() === userId.replace(/^@/, "").toLowerCase()
+    );
+    if (matchedLeader) {
+      handleSelectLeaderProfile(matchedLeader);
+      return;
+    }
+
     try {
+      // 1. Try backend API
       const res = await fetch(`/api/users/${userId}`);
       if (res.ok) {
         const targetProfile: UserProfile = await res.json();
         setSelectedViewingProfile(targetProfile);
         navigateTo("profile", false);
+        return;
       }
     } catch (err) {
-      console.error("Failed to load user profile:", err);
+      console.warn("API user fetch error, trying Firestore fallback:", err);
+    }
+
+    try {
+      // 2. Direct Firestore fallback
+      const userDocRef = doc(db, "users", userId);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        const targetProfile = { id: userDocSnap.id, ...userDocSnap.data() } as UserProfile;
+        setSelectedViewingProfile(targetProfile);
+        navigateTo("profile", false);
+        return;
+      }
+    } catch (err) {
+      console.error("Firestore user fetch error:", err);
     }
   };
 
@@ -931,6 +1109,7 @@ export default function App() {
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           userProfile={userProfile}
+          unreadNotificationsCount={unreadNotificationsCount}
           isLoggedIn={isLoggedIn}
           onOpenLogin={() => {
             setAuthActionReason("Sign in to unlock verified citizen actions.");
@@ -951,7 +1130,7 @@ export default function App() {
             : "md:ml-[260px]"
         }`}
       >
-        {/* Navigation Header - Rendered on dashboard/aitutor etc., but Profile, Settings, Search, Compose, Login, Connect, Budget, Leader, Infrastructure, PostDetail & Edit Profile use their own custom X-style header */}
+        {/* Navigation Header - Rendered on dashboard/aitutor etc., but Profile, Settings, Search, Compose, Login, Connect, Notifications, Budget, Leader, Infrastructure, PostDetail & Edit Profile use their own custom X-style header */}
         {currentView !== "profile" &&
           currentView !== "profile_edit" &&
           currentView !== "login" &&
@@ -959,9 +1138,11 @@ export default function App() {
           currentView !== "search" &&
           currentView !== "compose" &&
           currentView !== "connect" &&
+          currentView !== "notifications" &&
           currentView !== "budget" &&
           currentView !== "leader" &&
           currentView !== "infrastructure" &&
+          currentView !== "verification" &&
           currentView !== "post_detail" &&
           currentView !== "post" && (
             <Header
@@ -972,6 +1153,7 @@ export default function App() {
               searchQuery={bookmarkSearchQuery}
               onSearchQueryChange={setBookmarkSearchQuery}
               bookmarkedCount={bookmarkedReports.length}
+              unreadNotificationsCount={unreadNotificationsCount}
               isLoggedIn={isLoggedIn}
               onOpenLogin={() => {
                 setAuthActionReason("Sign in to your Open Desh account.");
@@ -1078,15 +1260,18 @@ export default function App() {
 
           {currentView === "aitutor" && <HelpView />}
 
-          {currentView === "leader" && (
-            <LeaderTrackerView
+          {(currentView === "connect" || currentView === "leader") && (
+            <ConnectHubView
+              userProfile={userProfile}
               leaders={leaders}
-              activeUser={userProfile}
               onBack={() => navigateTo("dashboard")}
+              onSelectUser={handleSelectUserProfile}
               onSelectLeaderProfile={handleSelectLeaderProfile}
+              onToggleFollow={handleToggleFollow}
               onRateLeader={async (leaderId, rating, comment) => {
                 await handleRateUser(leaderId, rating, comment);
               }}
+              initialTab={currentView === "leader" ? "leaders" : "leaders"}
             />
           )}
 
@@ -1124,9 +1309,13 @@ export default function App() {
               userProfile={activeProfileToRender}
               activeUser={userProfile}
               isLoggedIn={isLoggedIn}
+              allReports={reports}
               userReports={reports.filter(
                 (r) =>
                   r.authorId === activeProfileToRender.id ||
+                  (activeProfileToRender.username &&
+                    r.authorUsername?.toLowerCase() ===
+                      activeProfileToRender.username.toLowerCase()) ||
                   (activeProfileToRender.category === "representative" &&
                     r.category === "Infrastructure")
               )}
@@ -1175,12 +1364,20 @@ export default function App() {
             />
           )}
 
-          {currentView === "connect" && (
-            <ConnectHubView
+          {currentView === "notifications" && (
+            <NotificationsView
+              notifications={userNotifications}
+              reports={reports}
               userProfile={userProfile}
+              onMarkAsRead={handleMarkNotificationAsRead}
+              onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+              onClearAll={handleClearAllNotifications}
+              onSelectPost={(postId) => handleSelectPost(postId)}
+              onSelectUser={(userId) => handleSelectUserProfile(userId)}
+              onLikeReport={handleLikeReport}
+              onReReport={handleReReport}
+              onBookmark={handleBookmark}
               onBack={() => navigateTo("dashboard")}
-              onSelectUser={handleSelectUserProfile}
-              onToggleFollow={handleToggleFollow}
             />
           )}
 
@@ -1202,6 +1399,7 @@ export default function App() {
             currentView={currentView}
             onNavigate={navigateTo}
             onOpenCreateReport={handleOpenCompose}
+            unreadNotificationsCount={unreadNotificationsCount}
           />
         )}
 

@@ -190,7 +190,20 @@ export async function submitLeaderReviewInFirestore(leaderId: string, review: Us
       reviews: arrayUnion(sanitizeData(review)),
     });
   } catch (err) {
-    console.warn("Firestore review notice:", err);
+    console.warn("Firestore leader review notice:", err);
+  }
+}
+
+// 8b. Submit User / Business Review to Firestore users collection
+export async function submitUserReviewInFirestore(userId: string, review: UserReview): Promise<void> {
+  try {
+    const userDocRef = doc(db, "users", userId);
+    await updateDoc(userDocRef, {
+      reviewsCount: increment(1),
+      reviews: arrayUnion(sanitizeData(review)),
+    });
+  } catch (err) {
+    console.warn("Firestore user review notice:", err);
   }
 }
 

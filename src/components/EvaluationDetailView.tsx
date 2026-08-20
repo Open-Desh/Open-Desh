@@ -158,7 +158,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
           </button>
           <div>
             <h1 className="text-base font-black text-slate-900 leading-tight flex items-center gap-1.5">
-              <span>Civic Audit & Performance Index</span>
+              <span>Performance Index</span>
               <ShieldCheck className="w-4 h-4 text-blue-600" />
             </h1>
             <span className="text-xs text-slate-500 font-medium">

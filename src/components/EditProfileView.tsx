@@ -8,8 +8,16 @@ import {
   Loader2,
   Briefcase,
   ChevronDown,
+  Sparkles,
+  Plus,
+  Trash2,
+  Network,
+  HelpCircle,
+  Clock,
+  ShieldCheck,
 } from "lucide-react";
-import { UserProfile, UserCategory } from "../types.ts";
+import { UserProfile, UserCategory, CivicService } from "../types.ts";
+import { getSmartDefaultServices } from "../utils/serviceTemplates.ts";
 
 interface EditProfileViewProps {
   userProfile: UserProfile;
@@ -97,6 +105,15 @@ const INDIAN_STATES_AND_UTS = [
   "Puducherry",
 ];
 
+const SERVICE_CATEGORY_OPTIONS: CivicService["category"][] = [
+  "Civic Infrastructure",
+  "Sanitation & Waste",
+  "Water & Utilities",
+  "Public Redressal",
+  "Legislative Help",
+  "Welfare & Funds",
+];
+
 export const EditProfileView: React.FC<EditProfileViewProps> = ({
   userProfile,
   onSave,
@@ -120,7 +137,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     userProfile.citizenDetails?.occupation || ""
   );
 
-  // Business Specific Fields (Simple like Citizen)
+  // Business Specific Fields
   const [companyName, setCompanyName] = useState(
     userProfile.businessDetails?.companyName || ""
   );
@@ -167,6 +184,28 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     userProfile.departmentDetails?.name || ""
   );
 
+  // =========================================================================
+  // SERVICES (MIND MAP & DIRECTORY) STATE FOR BUSINESS, REPRESENTATIVE & DEPT
+  // =========================================================================
+  const [servicesList, setServicesList] = useState<CivicService[]>(() => {
+    if (userProfile.services && userProfile.services.length > 0) {
+      return userProfile.services;
+    }
+    const initialRole =
+      userProfile.category === "representative"
+        ? userProfile.representativeDetails?.position || "MLA"
+        : userProfile.category === "department"
+        ? userProfile.departmentDetails?.name || "Municipal Office"
+        : userProfile.businessDetails?.companyName || "Enterprise";
+    const initialSub =
+      userProfile.category === "representative"
+        ? userProfile.representativeDetails?.level || ""
+        : userProfile.category === "department"
+        ? userProfile.departmentDetails?.governmentLevel || ""
+        : userProfile.businessDetails?.industry || "";
+    return getSmartDefaultServices(userProfile.category, initialRole, initialSub);
+  });
+
   const [saving, setSaving] = useState(false);
   const [showImageUrlInput, setShowImageUrlInput] = useState(false);
 
@@ -178,8 +217,81 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
       availableDesignations &&
       !availableDesignations.includes(repDesignation)
     ) {
-      setRepDesignation(availableDesignations[0] || "");
+      const nextDesig = availableDesignations[0] || "";
+      setRepDesignation(nextDesig);
+      // Auto-refresh smart services if list is default
+      refreshSmartServices(category, nextDesig, newLevel);
     }
+  };
+
+  // Helper to refresh services based on role/industry
+  const refreshSmartServices = (
+    cat: UserCategory,
+    roleStr: string,
+    subStr: string
+  ) => {
+    const templates = getSmartDefaultServices(cat, roleStr, subStr);
+    if (templates.length > 0) {
+      setServicesList(templates);
+    }
+  };
+
+  // Category switch handler
+  const handleCategorySwitch = (newCat: UserCategory) => {
+    setCategory(newCat);
+    if (newCat !== "citizen") {
+      const targetRole =
+        newCat === "representative"
+          ? repDesignation
+          : newCat === "department"
+          ? deptName || govLevel
+          : companyName || industry || "Enterprise";
+      const targetSub =
+        newCat === "representative"
+          ? repLevel
+          : newCat === "department"
+          ? govLevel
+          : industry;
+      refreshSmartServices(newCat, targetRole, targetSub);
+    }
+  };
+
+  // Service management handlers
+  const handleAddService = () => {
+    const newService: CivicService = {
+      id: `srv_${Date.now()}`,
+      title: "",
+      category:
+        category === "business"
+          ? "Civic Infrastructure"
+          : category === "representative"
+          ? "Legislative Help"
+          : "Public Redressal",
+      description: "",
+      sla: "24-48 Hours",
+      citizenEntitlement: "Guaranteed citizen redressal under public charter.",
+      nodalContact: fullName || "Service Desk",
+      status: "Active",
+    };
+    setServicesList((prev) => [newService, ...prev]);
+  };
+
+  const handleUpdateService = (
+    index: number,
+    field: keyof CivicService,
+    val: string
+  ) => {
+    setServicesList((prev) => {
+      const copy = [...prev];
+      if (copy[index]) {
+        copy[index] = { ...copy[index], [field]: val };
+      }
+      return copy;
+    });
+  };
+
+  const handleRemoveService = (index: number) => {
+    setServicesList((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,7 +313,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     try {
       const updatedData: Partial<UserProfile> = {
         fullName: fullName.trim() || userProfile.fullName,
-        username: userProfile.username, // Username is preserved, no input box
+        username: userProfile.username,
         location: location.trim(),
         age: age.trim() ? parseInt(age, 10) : undefined,
         bio: bio.trim(),
@@ -215,6 +327,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           occupation: occupation.trim() || "Citizen Resident",
           voterConstituency: location.trim() || undefined,
         };
+        updatedData.services = undefined;
       } else if (category === "business") {
         updatedData.businessDetails = {
           companyName:
@@ -223,6 +336,8 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           officialWebsite: websiteUrl.trim() || undefined,
           verifiedCompany: userProfile.verified || false,
         };
+        // Clean and filter valid services
+        updatedData.services = servicesList.filter((s) => s.title.trim() !== "");
       } else if (category === "representative") {
         const finalParty =
           selectedParty === "Others"
@@ -243,6 +358,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               ? "State Legislative Assembly"
               : "Local Municipal Governance",
         };
+        updatedData.services = servicesList.filter((s) => s.title.trim() !== "");
       } else if (category === "department") {
         const isStateOrPolice =
           govLevel === "State Government" ||
@@ -259,6 +375,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             : location || "All India",
           officialBadge: "Verified Govt Department",
         };
+        updatedData.services = servicesList.filter((s) => s.title.trim() !== "");
       }
 
       await onSave(updatedData);
@@ -313,7 +430,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         </button>
       </header>
 
-      {/* 2. Avatar / Profile Picture (Only DP Image, No Banner) */}
+      {/* 2. Avatar / Profile Picture */}
       <div className="px-4 sm:px-6 pt-5 pb-3 flex flex-col items-center">
         <div className="relative group">
           <img
@@ -371,7 +488,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         )}
       </div>
 
-      {/* 3. Edge-to-Edge Form Body */}
+      {/* 3. Form Body */}
       <form
         onSubmit={handleSave}
         className="flex-1 px-4 sm:px-6 py-2 space-y-4 pb-24"
@@ -382,7 +499,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {category === "department"
               ? "Official Name / Department Head"
               : category === "business"
-              ? "Full Name / Representative Name"
+              ? "Full Name / Executive Name"
               : "Name"}
           </label>
           <input
@@ -447,7 +564,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           />
         </div>
 
-        {/* Citizen Age (Optional) */}
+        {/* Citizen Age */}
         {category === "citizen" && (
           <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white">
             <label className="text-[11px] font-bold text-slate-500 block">
@@ -466,13 +583,13 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           </div>
         )}
 
-        {/* Section Divider */}
+        {/* Section Divider: Account Type */}
         <div className="pt-2 pb-1 border-t border-slate-100">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-2">
             Account Type
           </h2>
           <p className="text-xs text-slate-500 mb-3">
-            Choose your account role to configure your public badge and governance capabilities.
+            Choose your account role to configure your public badge, category details, and services mind map.
           </p>
 
           {/* 4-Option Grid Selector */}
@@ -480,7 +597,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {/* 1. Citizen */}
             <button
               type="button"
-              onClick={() => setCategory("citizen")}
+              onClick={() => handleCategorySwitch("citizen")}
               className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                 category === "citizen"
                   ? "border-blue-600 bg-blue-50/80 text-blue-900 font-black shadow-xs ring-1 ring-blue-600"
@@ -497,14 +614,14 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {/* 2. Business / Company */}
             <button
               type="button"
-              onClick={() => setCategory("business")}
+              onClick={() => handleCategorySwitch("business")}
               className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                 category === "business"
-                  ? "border-indigo-600 bg-indigo-50/80 text-indigo-950 font-black shadow-xs ring-1 ring-indigo-600"
+                  ? "border-amber-500 bg-amber-50/80 text-amber-950 font-black shadow-xs ring-1 ring-amber-500"
                   : "border-slate-200 hover:bg-slate-50 text-slate-700 font-bold"
               }`}
             >
-              <Briefcase className="w-5 h-5 mb-1 text-indigo-600" />
+              <Briefcase className="w-5 h-5 mb-1 text-amber-600" />
               <span className="text-xs block leading-tight">Business / Co.</span>
               <span className="text-[10px] text-slate-400 font-normal">
                 Enterprise
@@ -514,14 +631,14 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {/* 3. Representative */}
             <button
               type="button"
-              onClick={() => setCategory("representative")}
+              onClick={() => handleCategorySwitch("representative")}
               className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                 category === "representative"
-                  ? "border-purple-600 bg-purple-50/80 text-purple-950 font-black shadow-xs ring-1 ring-purple-600"
+                  ? "border-emerald-600 bg-emerald-50/80 text-emerald-950 font-black shadow-xs ring-1 ring-emerald-600"
                   : "border-slate-200 hover:bg-slate-50 text-slate-700 font-bold"
               }`}
             >
-              <Shield className="w-5 h-5 mb-1 text-purple-600" />
+              <Shield className="w-5 h-5 mb-1 text-emerald-600" />
               <span className="text-xs block">Representative</span>
               <span className="text-[10px] text-slate-400 font-normal">
                 Politics & Leader
@@ -531,14 +648,14 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {/* 4. Department */}
             <button
               type="button"
-              onClick={() => setCategory("department")}
+              onClick={() => handleCategorySwitch("department")}
               className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                 category === "department"
-                  ? "border-amber-600 bg-amber-50/80 text-amber-950 font-black shadow-xs ring-1 ring-amber-600"
+                  ? "border-[#78350f] bg-[#fcf6f0] text-[#78350f] font-black shadow-xs ring-1 ring-[#78350f]"
                   : "border-slate-200 hover:bg-slate-50 text-slate-700 font-bold"
               }`}
             >
-              <Building2 className="w-5 h-5 mb-1 text-amber-600" />
+              <Building2 className="w-5 h-5 mb-1 text-[#78350f]" />
               <span className="text-xs block">Govt Dept</span>
               <span className="text-[10px] text-slate-400 font-normal">
                 Public Agency
@@ -550,7 +667,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         {/* Dynamic Category Specific Inputs */}
 
         {/* ========================================================= */}
-        {/* A. Citizen Category (Simple) */}
+        {/* A. Citizen Category */}
         {/* ========================================================= */}
         {category === "citizen" && (
           <div className="space-y-3 pt-2 animate-fadeIn">
@@ -570,32 +687,36 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         )}
 
         {/* ========================================================= */}
-        {/* B. Business / Company Category (Simple like Citizen) */}
+        {/* B. Business / Company Category */}
         {/* ========================================================= */}
         {category === "business" && (
           <div className="space-y-3 pt-2 animate-fadeIn">
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition-all bg-white">
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500 transition-all bg-white">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Company / Organization Name
               </label>
               <input
                 type="text"
                 value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g. Tata Infra Ltd / GreenWave Solutions"
+                onChange={(e) => {
+                  setCompanyName(e.target.value);
+                }}
+                placeholder="e.g. Tata Infra Ltd / GreenWave Waste Solutions"
                 className="w-full text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none bg-transparent pt-0.5"
               />
             </div>
 
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition-all bg-white">
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500 transition-all bg-white">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Industry / Sector
               </label>
               <input
                 type="text"
                 value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                placeholder="e.g. Civic Infrastructure, Real Estate, Waste Management, Technology"
+                onChange={(e) => {
+                  setIndustry(e.target.value);
+                }}
+                placeholder="e.g. Civic Infrastructure, Real Estate, Waste Management, Solar Energy"
                 className="w-full text-sm font-medium text-slate-900 placeholder-slate-400 outline-none bg-transparent pt-0.5"
               />
             </div>
@@ -603,12 +724,12 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         )}
 
         {/* ========================================================= */}
-        {/* C. 1. Representative Category (Politics & Leaders) */}
+        {/* C. Representative Category */}
         {/* ========================================================= */}
         {category === "representative" && (
           <div className="space-y-3 pt-2 animate-fadeIn">
             {/* Dropdown 1: Pad ka Level */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all bg-white relative">
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 transition-all bg-white relative">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Pad ka Level (Level of Office)
               </label>
@@ -630,15 +751,18 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               </div>
             </div>
 
-            {/* Dropdown 2: Current Designation (Depends on Dropdown 1) */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all bg-white relative">
+            {/* Dropdown 2: Current Designation */}
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 transition-all bg-white relative">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Current Designation (Pad)
               </label>
               <div className="relative">
                 <select
                   value={repDesignation}
-                  onChange={(e) => setRepDesignation(e.target.value)}
+                  onChange={(e) => {
+                    setRepDesignation(e.target.value);
+                    refreshSmartServices(category, e.target.value, repLevel);
+                  }}
                   className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none pt-0.5 pr-8 appearance-none cursor-pointer"
                 >
                   {(DESIGNATIONS_BY_LEVEL[repLevel] || []).map((desig) => (
@@ -652,7 +776,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             </div>
 
             {/* Dropdown 3: Political Party */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all bg-white relative">
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 transition-all bg-white relative">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Political Party
               </label>
@@ -672,10 +796,10 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               </div>
             </div>
 
-            {/* If "Others" is selected in Party, show Input Box: Type Your Party */}
+            {/* If "Others" is selected in Party */}
             {selectedParty === "Others" && (
-              <div className="border border-purple-200 bg-purple-50/50 rounded-xl px-3.5 py-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all">
-                <label className="text-[11px] font-bold text-purple-700 block">
+              <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl px-3.5 py-2 focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 transition-all">
+                <label className="text-[11px] font-bold text-emerald-800 block">
                   Type Your Party Name
                 </label>
                 <input
@@ -689,8 +813,8 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               </div>
             )}
 
-            {/* Input Box: Constituency/Ward */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all bg-white">
+            {/* Constituency/Ward */}
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 transition-all bg-white">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Constituency / Ward Name
               </label>
@@ -706,21 +830,23 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         )}
 
         {/* ========================================================= */}
-        {/* D. 2. Government Department Category */}
+        {/* D. Government Department Category */}
         {/* ========================================================= */}
         {category === "department" && (
           <div className="space-y-3 pt-2 animate-fadeIn">
             {/* Dropdown 1: Government Level */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 transition-all bg-white relative">
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-[#78350f] focus-within:ring-1 focus-within:ring-[#78350f] transition-all bg-white relative">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Government Level
               </label>
               <div className="relative">
                 <select
                   value={govLevel}
-                  onChange={(e) =>
-                    setGovLevel(e.target.value as GovernmentLevel)
-                  }
+                  onChange={(e) => {
+                    const nextLvl = e.target.value as GovernmentLevel;
+                    setGovLevel(nextLvl);
+                    refreshSmartServices(category, deptName || nextLvl, nextLvl);
+                  }}
                   className="w-full text-sm font-semibold text-slate-900 bg-transparent outline-none pt-0.5 pr-8 appearance-none cursor-pointer"
                 >
                   {GOVERNMENT_LEVELS.map((lvl) => (
@@ -733,10 +859,10 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               </div>
             </div>
 
-            {/* Dropdown 2: State (Active only when State Government or Police & Law Enforcement is selected) */}
+            {/* Dropdown 2: State */}
             {isStateDropdownActive && (
-              <div className="border border-amber-200 bg-amber-50/40 rounded-xl px-3.5 py-2 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 transition-all relative animate-fadeIn">
-                <label className="text-[11px] font-bold text-amber-800 block">
+              <div className="border border-amber-200 bg-amber-50/40 rounded-xl px-3.5 py-2 focus-within:border-[#78350f] focus-within:ring-1 focus-within:ring-[#78350f] transition-all relative animate-fadeIn">
+                <label className="text-[11px] font-bold text-[#78350f] block">
                   Select State / Union Territory
                 </label>
                 <div className="relative">
@@ -751,23 +877,198 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-amber-600 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-[#78350f] absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
             )}
 
-            {/* Input Box: Department Name */}
-            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 transition-all bg-white">
+            {/* Department Name */}
+            <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-[#78350f] focus-within:ring-1 focus-within:ring-[#78350f] transition-all bg-white">
               <label className="text-[11px] font-bold text-slate-500 block">
                 Department Name
               </label>
               <input
                 type="text"
                 value={deptName}
-                onChange={(e) => setDeptName(e.target.value)}
-                placeholder="e.g. Delhi Municipal Corporation (MCD), Uttar Pradesh Police, Ministry of Health, Delhi Jal Board"
+                onChange={(e) => {
+                  setDeptName(e.target.value);
+                }}
+                onBlur={() => {
+                  if (deptName.trim()) {
+                    refreshSmartServices(category, deptName, govLevel);
+                  }
+                }}
+                placeholder="e.g. Municipal Corporation of Delhi (MCD), Uttar Pradesh Police, Delhi Jal Board"
                 className="w-full text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none bg-transparent pt-0.5"
               />
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 4. DEDICATED "SERVICE" OPTION */}
+        {/* Shown for Business, Representative, and Department Categories */}
+        {/* ========================================================================= */}
+        {category !== "citizen" && (
+          <div className="pt-3 pb-2 border-t border-slate-200/80 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <Network className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight flex items-center gap-1.5">
+                    <span>Public Services & Deliverables</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-200">
+                      {servicesList.length} Active
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium leading-snug">
+                    {category === "business"
+                      ? "Add products/services provided to citizens and clients with SLA and warranty."
+                      : category === "representative"
+                      ? "Add constituency assistance, funds, recommendations & legislative help."
+                      : "Add citizen entitlements, municipal duties, emergency dispatch & SLAs."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* List of Configurable Services */}
+            <div className="space-y-3">
+              {servicesList.map((service, idx) => (
+                <div
+                  key={service.id || idx}
+                  className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/70 border border-slate-200 space-y-3 relative group"
+                >
+                  {/* Service Header Bar */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                      Service #{idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveService(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Delete this service"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 1. Service Title */}
+                  <div className="border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white">
+                    <label className="text-[10px] font-bold text-slate-500 block">
+                      Service Name / Title
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={service.title}
+                      onChange={(e) =>
+                        handleUpdateService(idx, "title", e.target.value)
+                      }
+                      placeholder={
+                        category === "business"
+                          ? "e.g. Bituminous Road Resurfacing / 24x7 Waste Logistics"
+                          : category === "representative"
+                          ? "e.g. MLALAD Fund Sanctions / Medical Emergency Grant"
+                          : "e.g. Pothole Repair / Choked Sewer Clearance"
+                      }
+                      className="w-full text-xs sm:text-sm font-bold text-slate-900 outline-none bg-transparent pt-0.5 placeholder-slate-400"
+                    />
+                  </div>
+
+                  {/* 2. Category & SLA in Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Category Selector */}
+                    <div className="border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white relative">
+                      <label className="text-[10px] font-bold text-slate-500 block">
+                        Service Category
+                      </label>
+                      <select
+                        value={service.category}
+                        onChange={(e) =>
+                          handleUpdateService(
+                            idx,
+                            "category",
+                            e.target.value as CivicService["category"]
+                          )
+                        }
+                        className="w-full text-xs font-bold text-slate-900 bg-transparent outline-none pt-0.5 pr-6 cursor-pointer"
+                      >
+                        {SERVICE_CATEGORY_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* SLA / Turnaround Time */}
+                    <div className="border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white">
+                      <label className="text-[10px] font-bold text-slate-500 block">
+                        Service Level SLA / Turnaround
+                      </label>
+                      <input
+                        type="text"
+                        value={service.sla}
+                        onChange={(e) =>
+                          handleUpdateService(idx, "sla", e.target.value)
+                        }
+                        placeholder="e.g. 24 Hours SLA / 48 Hours Action"
+                        className="w-full text-xs font-bold text-emerald-700 outline-none bg-transparent pt-0.5 placeholder-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. Description */}
+                  <div className="border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white">
+                    <label className="text-[10px] font-bold text-slate-500 block">
+                      Description & Scope of Work
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={service.description}
+                      onChange={(e) =>
+                        handleUpdateService(idx, "description", e.target.value)
+                      }
+                      placeholder="Explain what is covered, response teams, or technical machinery deployed..."
+                      className="w-full text-xs font-medium text-slate-900 outline-none bg-transparent pt-0.5 placeholder-slate-400 resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  {/* 4. Citizen Entitlement / Guarantee */}
+                  <div className="border border-blue-200 bg-blue-50/50 rounded-xl px-3 py-1.5 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all">
+                    <label className="text-[10px] font-black uppercase tracking-wide text-blue-700 block">
+                      Citizen Right / Entitlement Guarantee
+                    </label>
+                    <input
+                      type="text"
+                      value={service.citizenEntitlement}
+                      onChange={(e) =>
+                        handleUpdateService(
+                          idx,
+                          "citizenEntitlement",
+                          e.target.value
+                        )
+                      }
+                      placeholder="e.g. Zero administrative fee; Guaranteed photo-proof resolution"
+                      className="w-full text-xs font-semibold text-blue-950 outline-none bg-transparent pt-0.5 placeholder-blue-300"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {/* Add New Service Button */}
+              <button
+                type="button"
+                onClick={handleAddService}
+                className="w-full py-2.5 border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 rounded-2xl text-xs font-black text-slate-700 hover:text-blue-600 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Custom Service / Deliverable</span>
+              </button>
             </div>
           </div>
         )}

@@ -14,6 +14,8 @@ import {
   LogIn,
   LogOut,
   Languages,
+  Bell,
+  Users,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
@@ -27,6 +29,7 @@ interface SidebarProps {
   isMobileOpen: boolean;
   onCloseMobile: () => void;
   userProfile: UserProfile;
+  unreadNotificationsCount?: number;
   isLoggedIn?: boolean;
   onOpenLogin?: () => void;
   onLogout?: () => void;
@@ -40,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   onCloseMobile,
   userProfile,
+  unreadNotificationsCount = 0,
   isLoggedIn = false,
   onOpenLogin,
   onLogout,
@@ -47,11 +51,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [darkMode, setDarkMode] = React.useState(false);
   const { t, currentLanguageInfo, openLanguageModal } = useLanguage();
 
-  // Navigation links with Budget below Profile and Language below Setting & Privacy
+  // Navigation links with Notifications, Budget below Profile and Language below Setting & Privacy
   const navItems = [
     { id: "profile", label: t("nav.profile", "Profile"), icon: User },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: Bell,
+      badge: unreadNotificationsCount > 0 ? `${unreadNotificationsCount}` : undefined,
+    },
     { id: "budget", label: t("nav.budget", "National Budget"), icon: IndianRupee },
-    { id: "leader", label: t("nav.leader", "Leader"), icon: TrendingUp },
+    { id: "connect", label: "Connect & Leaders", icon: Users },
     { id: "infrastructure", label: t("nav.infrastructure", "Infrastructure"), icon: Building2 },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
@@ -138,14 +148,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && (
                 <div className="mt-1 space-y-1">
                   <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate flex items-center gap-1.5">
-                    <span>{userProfile.fullName || "Citizen"}</span>
+                    <span>
+                      {userProfile.fullName ||
+                        (userProfile.username ? userProfile.username.replace(/^@+/, "") : "Citizen")}
+                    </span>
                     {userProfile.verified && (
                       <CategoryVerifiedTick category={userProfile.category} size="xs" />
                     )}
                   </h2>
-                  <p className="text-slate-500 text-xs sm:text-sm truncate">
-                    @{userProfile.username || "citizen"}
-                  </p>
                   <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
                     <span>
                       <strong className="text-slate-900 font-bold">

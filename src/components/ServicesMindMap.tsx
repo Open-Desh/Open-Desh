@@ -19,6 +19,7 @@ import {
   Info,
 } from "lucide-react";
 import { CivicService, UserProfile } from "../types.ts";
+import { getSmartDefaultServices } from "../utils/serviceTemplates.ts";
 
 interface ServicesMindMapProps {
   userProfile: UserProfile;
@@ -35,83 +36,40 @@ export const ServicesMindMap: React.FC<ServicesMindMapProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [viewMode, setViewMode] = useState<"mindmap" | "grid">("mindmap");
 
-  // Default rich services tailored to representative or department
-  const defaultServices: CivicService[] = [
-    {
-      id: "srv_01",
-      title: "Emergency Road Pothole & Subsidence Patching",
-      category: "Civic Infrastructure",
-      description:
-        "Rapid-response cold mix bitumen resurfacing for severe craters, asphalt sinkholes, and arterial transit hazards within constituency limits.",
-      sla: "24 Hours SLA",
-      citizenEntitlement:
-        "Guaranteed 24-hour engineer site inspection and cold-mix patch with zero administrative charge to resident.",
-      nodalContact: "Er. Alok Prasad (Zone Exec Officer) • 0651-2400192",
-      status: "Active",
-    },
-    {
-      id: "srv_02",
-      title: "Public Stormwater Drain De-silting & Overflow Redressal",
-      category: "Sanitation & Waste",
-      description:
-        "Mechanical suction machines and municipal manual teams for blocked monsoon nullahs and residential waterlogging clearance.",
-      sla: "48 Hours Action",
-      citizenEntitlement:
-        "Mandatory ward desilting log published with geo-tagged pre/post clearance photos.",
-      nodalContact: "Sanitation Desk • +91 94311 88201",
-      status: "High Demand",
-    },
-    {
-      id: "srv_03",
-      title: "LED Streetlight Darkness Blackspot Rectification",
-      category: "Water & Utilities",
-      description:
-        "Replacement of fused luminaires, electrical pole short-circuiting repair, and high-mast junction lighting maintenance.",
-      sla: "36 Hours SLA",
-      citizenEntitlement:
-        "Free luminaire replacement within 36 hours of app geo-tag verification.",
-      nodalContact: "Power Grid Maintenance Cell • 1912",
-      status: "Active",
-    },
-    {
-      id: "srv_04",
-      title: "Direct MLA Public Recommendation & Grant Expeditor",
-      category: "Legislative Help",
-      description:
-        "Official letter of recommendation and endorsement for hospital emergency medical funds (Ayushman / CM Relief Fund) and school admissions.",
-      sla: "12 Hours Fast-track",
-      citizenEntitlement:
-        "Constituency resident entitlement under Public Service Guarantee Act with direct office SMS acknowledgment.",
-      nodalContact: "Constituency Office In-charge • +91 94311 00921",
-      status: "Active",
-    },
-    {
-      id: "srv_05",
-      title: "MLALAD Local Area Development Proposal Submission",
-      category: "Welfare & Funds",
-      description:
-        "Community petitions for new tube wells, park paving, boundary walls, and community center installations through discretionary funds.",
-      sla: "7 Days Audit Review",
-      citizenEntitlement:
-        "Open public domain publication of fund sanctions with expenditure ledger on Open Nation.",
-      nodalContact: "Planning & Development Directorate • Room 204, Secretariat",
-      status: "Scheduled",
-    },
-    {
-      id: "srv_06",
-      title: "Grievance Redressal & Anti-Corruption Escalation",
-      category: "Public Redressal",
-      description:
-        "Direct whistleblowing and anti-extortion escalation cell supervised directly by the representative's legal advisory team.",
-      sla: "Immediate Confidential Triage",
-      citizenEntitlement:
-        "Whistleblower anonymity protection and direct escalation to State Vigilance Bureau if unaddressed.",
-      nodalContact: "Legal Redressal Cell • legal@opennation.org",
-      status: "Active",
-    },
-  ];
+  // Determine smart contextual default services based on role, designation, and department/business name
+  const roleOrName =
+    userProfile.category === "representative"
+      ? userProfile.representativeDetails?.position || userProfile.fullName
+      : userProfile.category === "department"
+      ? userProfile.departmentDetails?.name || userProfile.fullName
+      : userProfile.businessDetails?.companyName || userProfile.fullName;
 
-  const currentServices = services && services.length > 0 ? services : defaultServices;
+  const subCategoryOrLevel =
+    userProfile.category === "representative"
+      ? userProfile.representativeDetails?.level || ""
+      : userProfile.category === "department"
+      ? userProfile.departmentDetails?.governmentLevel || ""
+      : userProfile.businessDetails?.industry || "";
+
+  const smartServices = getSmartDefaultServices(userProfile.category, roleOrName, subCategoryOrLevel);
+
+  const currentServices =
+    services && services.length > 0
+      ? services
+      : smartServices.length > 0
+      ? smartServices
+      : [
+          {
+            id: "srv_fallback_1",
+            title: "Citizen Redressal & Direct Service Desk",
+            category: "Public Redressal" as const,
+            description: "Direct service delivery, escalation management, and SLA tracking.",
+            sla: "24-48 Hours",
+            citizenEntitlement: "Time-bound public response under Right to Service Charter.",
+            nodalContact: "Official Citizen Support Desk",
+            status: "Active" as const,
+          },
+        ];
 
   const categories = [
     "All",
