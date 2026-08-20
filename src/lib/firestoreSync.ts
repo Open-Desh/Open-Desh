@@ -278,6 +278,9 @@ export interface RegisteredAuthority {
   departmentCode?: string;
   party?: string;
   verified: boolean;
+  location?: string;
+  jurisdictionRegion?: string;
+  constituency?: string;
 }
 
 export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthority[]> {
@@ -298,6 +301,9 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
         departmentCode: u.departmentDetails?.departmentCode,
         party: u.representativeDetails?.party,
         verified: u.verified ?? true,
+        location: u.location,
+        jurisdictionRegion: u.departmentDetails?.jurisdictionRegion,
+        constituency: u.representativeDetails?.constituency,
       });
     }
   });
@@ -315,6 +321,8 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
         badge: l.party,
         party: l.party,
         verified: true,
+        location: l.location,
+        constituency: l.constituency,
       });
     }
   });
@@ -339,6 +347,9 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
             departmentCode: data.departmentDetails?.departmentCode,
             party: data.representativeDetails?.party,
             verified: data.verified ?? true,
+            location: data.location,
+            jurisdictionRegion: data.departmentDetails?.jurisdictionRegion,
+            constituency: data.representativeDetails?.constituency,
           });
         }
       }
@@ -361,6 +372,8 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
           badge: l.party,
           party: l.party,
           verified: true,
+          location: l.location,
+          constituency: l.constituency,
         });
       }
     });

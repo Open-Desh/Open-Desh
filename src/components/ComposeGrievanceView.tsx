@@ -237,21 +237,15 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   }, [selectedCategory]);
 
   // 3. AI Automatic Responsible Department Decider:
-  // Evaluates text and category against ONLY real registered authorities from the DB
+  // Evaluates text, category, and location against ONLY real registered authorities from the DB
   const aiDeterminedAuthorities = useMemo(() => {
-    return determineResponsibleAuthorities(text, selectedCategory, dbAuthorities);
-  }, [text, selectedCategory, dbAuthorities]);
+    return determineResponsibleAuthorities(text, selectedCategory, dbAuthorities, resolvedAddress);
+  }, [text, selectedCategory, dbAuthorities, resolvedAddress]);
 
-  // Auto-synchronize AI responsible department tags when text changes or category switches
+  // Auto-synchronize AI responsible department tags when text changes, category switches, or location changes
   useEffect(() => {
-    if (aiDeterminedAuthorities.length > 0) {
-      const aiTags = aiDeterminedAuthorities.map((a) => `@${a.username}`);
-      setActiveSelectedTags((prev) => {
-        // Keep existing manual selections and merge AI recommended verified tags
-        const merged = Array.from(new Set([...prev, ...aiTags]));
-        return merged;
-      });
-    }
+    const aiTags = aiDeterminedAuthorities.map((a) => `@${a.username}`);
+    setActiveSelectedTags(aiTags);
   }, [aiDeterminedAuthorities]);
 
   // Handle @ mention detection in textarea
@@ -886,53 +880,8 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
           {/* Real Registered Profiles Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {aiDeterminedAuthorities.map((auth) => {
-              const tag = `@${auth.username}`;
-              const isSelected = activeSelectedTags.includes(tag);
-              return (
-                <button
-                  key={auth.id}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border shrink-0 transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-blue-600 border-blue-600 text-white font-bold shadow-xs"
-                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 font-medium"
-                  }`}
-                  title={`${auth.fullName} (${auth.role})`}
-                >
-                  <img
-                    src={auth.avatarUrl}
-                    alt={auth.fullName}
-                    className="w-4 h-4 rounded-full object-cover"
-                  />
-                  <span>{tag}</span>
-                  <span
-                    className={`text-[10px] ${
-                      isSelected ? "text-blue-100" : "text-slate-400"
-                    }`}
-                  >
-                    ({auth.badge})
-                  </span>
-                  {isSelected ? (
-                    <Check className="w-3 h-3 text-white ml-0.5 stroke-[2.5]" />
-                  ) : (
-                    <span className="text-slate-400 text-xs ml-0.5 font-bold">+</span>
-                  )}
-                </button>
-              );
-            })}
-
-            {/* If there are additional registered authorities in DB not yet in AI top list, provide access */}
-            {dbAuthorities
-              .filter(
-                (a) =>
-                  !aiDeterminedAuthorities.some(
-                    (aiA) => aiA.username.toLowerCase() === a.username.toLowerCase()
-                  )
-              )
-              .slice(0, 3)
-              .map((auth) => {
+            {aiDeterminedAuthorities.length > 0 ? (
+              aiDeterminedAuthorities.map((auth) => {
                 const tag = `@${auth.username}`;
                 const isSelected = activeSelectedTags.includes(tag);
                 return (
@@ -943,7 +892,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                     className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border shrink-0 transition-all cursor-pointer ${
                       isSelected
                         ? "bg-blue-600 border-blue-600 text-white font-bold shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium opacity-85"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 font-medium"
                     }`}
                     title={`${auth.fullName} (${auth.role})`}
                   >
@@ -953,6 +902,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                       className="w-4 h-4 rounded-full object-cover"
                     />
                     <span>{tag}</span>
+                    <span
+                      className={`text-[10px] ${
+                        isSelected ? "text-blue-100" : "text-slate-400"
+                      }`}
+                    >
+                      ({auth.badge})
+                    </span>
                     {isSelected ? (
                       <Check className="w-3 h-3 text-white ml-0.5 stroke-[2.5]" />
                     ) : (
@@ -960,7 +916,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                     )}
                   </button>
                 );
-              })}
+              })
+            ) : (
+              <div className="text-[11px] text-slate-500 italic py-1 px-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>No local department registered in DB for this area. Tag manually with @ if needed.</span>
+              </div>
+            )}
 
             {/* Location GPS Chip - Click opens interactive map */}
             <button

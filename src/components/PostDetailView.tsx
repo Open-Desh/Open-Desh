@@ -78,8 +78,9 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   const isSaved = userProfile.savedReports?.includes(report.id);
   const isDeptUser = userProfile.category === "department";
   const hasDeptClaimed = Boolean(report.claimedByDept);
+  const hasTaggedDept = Boolean(report.taggedOfficers && report.taggedOfficers.length > 0);
   const primaryDeptTag =
-    report.taggedOfficers?.[0] || report.aiTriage?.departmentTag || "@MunicipalCorp";
+    report.taggedOfficers?.[0] || report.claimedByDept || "";
   const currentDeptLevel = report.departmentStatusLevel ?? (hasDeptClaimed ? 1 : 0);
 
   const imageList =
@@ -640,14 +641,14 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           </div>
         )}
 
-        {/* 4-Stage Official Progress Card */}
-        {(hasDeptClaimed || report.taggedOfficers?.length || isDeptUser) && (
+        {/* 4-Stage Official Progress Card (Only shown if department claimed, department tagged, or viewing as an official department user) */}
+        {(hasDeptClaimed || hasTaggedDept || isDeptUser) && (
           <div className="bg-slate-50 border border-blue-200 rounded-2xl p-4 space-y-3 mt-2 shadow-2xs">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
                 <span className="text-xs font-black text-slate-900 uppercase">
-                  Official Action: {report.claimedByDept || primaryDeptTag}
+                  Official Action: {report.claimedByDept || primaryDeptTag || "Assigned Department"}
                 </span>
               </div>
               <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
@@ -700,8 +701,8 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
               </div>
             )}
 
-            {/* Department Actions Trigger */}
-            {(isDeptUser || !hasDeptClaimed) && (
+            {/* Department Actions: ONLY visible if user is an official department account */}
+            {isDeptUser ? (
               <div className="pt-1">
                 {!hasDeptClaimed ? (
                   <button
@@ -710,8 +711,8 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                         report.id,
                         1,
                         `Acknowledged by ${
-                          userProfile.departmentDetails?.name || primaryDeptTag
-                        }. Action initiated.`
+                          userProfile.departmentDetails?.name || userProfile.name || primaryDeptTag
+                        }. Official investigation initiated.`
                       )
                     }
                     className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
@@ -747,6 +748,18 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                   </div>
                 )}
               </div>
+            ) : (
+              !hasDeptClaimed && (
+                <div className="text-[11px] text-slate-500 bg-white/80 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    Awaiting official response from {primaryDeptTag || "assigned authority"}
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                    SLA Active
+                  </span>
+                </div>
+              )
             )}
           </div>
         )}
