@@ -16,11 +16,13 @@ import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { LoginView } from "./components/LoginView.tsx";
 import { EditProfileView } from "./components/EditProfileView.tsx";
+import { VerificationView } from "./components/VerificationView.tsx";
 import { AgePromptModal } from "./components/AgePromptModal.tsx";
 import { BudgetView } from "./components/BudgetView.tsx";
+import { PostDetailView } from "./components/PostDetailView.tsx";
 import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
 import {
   getReportsDirect,
   getLeadersDirect,
@@ -29,6 +31,7 @@ import {
   toggleLikeInFirestore,
   toggleReReportInFirestore,
   addReplyInFirestore,
+  updateReportRepliesInFirestore,
   submitLeaderReviewInFirestore,
   seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
@@ -39,6 +42,7 @@ import {
   InfrastructureProject,
   IssueCategory,
   UserReview,
+  ThreadedReply,
 } from "./types.ts";
 
 const defaultGuestProfile: UserProfile = {
@@ -73,6 +77,7 @@ export default function App() {
 
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
 
   // Core Data States - defaults to guest citizen initially
@@ -91,6 +96,16 @@ export default function App() {
         setCurrentView("profile_edit");
         return;
       }
+      if (fullPath === "verification" || fullPath === "get-verified" || fullPath === "profile/verify") {
+        setCurrentView("verification");
+        return;
+      }
+      if (fullPath.startsWith("post/")) {
+        const pid = fullPath.replace("post/", "");
+        setSelectedPostId(pid);
+        setCurrentView("post_detail");
+        return;
+      }
 
       const path = fullPath.split("/")[0];
       if (window.location.hash) {
@@ -98,6 +113,16 @@ export default function App() {
         window.history.replaceState(null, "", hashView ? `/${hashView}` : "/");
         if (hashView === "profile/edit") {
           setCurrentView("profile_edit");
+          return;
+        }
+        if (hashView === "verification" || hashView === "get-verified" || hashView === "profile/verify") {
+          setCurrentView("verification");
+          return;
+        }
+        if (hashView.startsWith("post/")) {
+          const pid = hashView.replace("post/", "");
+          setSelectedPostId(pid);
+          setCurrentView("post_detail");
           return;
         }
         if (hashView) {
@@ -123,74 +148,98 @@ export default function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // Sync / Load User Profile from Firestore on Auth Change
-  const syncUserProfileFromFirestore = async (firebaseUser: FirebaseUser) => {
+  // Ref to hold the active Firestore user snapshot unsubscribe function
+  const [profileUnsub, setProfileUnsub] = useState<Unsubscribe | null>(null);
+
+  // Sync / Load User Profile from Firestore on Auth Change with Real-Time Listener
+  const syncUserProfileFromFirestore = (firebaseUser: FirebaseUser) => {
     try {
       const userDocRef = doc(db, "users", firebaseUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
 
-      if (userDocSnap.exists()) {
-        const savedData = userDocSnap.data() as Partial<UserProfile>;
-        setUserProfile((prev) => ({
-          ...defaultGuestProfile,
-          ...prev,
-          ...savedData,
-          id: firebaseUser.uid,
-          fullName: savedData.fullName || firebaseUser.displayName || prev.fullName,
-          username: savedData.username || (firebaseUser.email ? firebaseUser.email.split("@")[0] : `citizen_${firebaseUser.uid.slice(0, 6)}`),
-          avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prev.avatarUrl,
-          verified: true,
-          age: savedData.age,
-        }));
-        if (!savedData.age) {
-          setShowAgeModal(true);
+      // Setup real-time listener so changes in Firestore Console reflect instantly
+      const unsubscribe = onSnapshot(
+        userDocRef,
+        async (userDocSnap) => {
+          if (userDocSnap.exists()) {
+            const savedData = userDocSnap.data() as Partial<UserProfile>;
+            const isVerified =
+              typeof savedData.verified === "boolean" ? savedData.verified : false;
+
+            setUserProfile((prev) => ({
+              ...defaultGuestProfile,
+              ...prev,
+              ...savedData,
+              id: firebaseUser.uid,
+              fullName: savedData.fullName || firebaseUser.displayName || prev.fullName,
+              username:
+                savedData.username ||
+                (firebaseUser.email
+                  ? firebaseUser.email.split("@")[0]
+                  : `citizen_${firebaseUser.uid.slice(0, 6)}`),
+              avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prev.avatarUrl,
+              verified: isVerified,
+              verificationStatus:
+                savedData.verificationStatus || (isVerified ? "approved" : "none"),
+              category: savedData.category || "citizen",
+              age: savedData.age,
+            }));
+
+            if (!savedData.age) {
+              setShowAgeModal(true);
+            }
+          } else {
+            // Automatic New User Profile Generation & Firestore Provisioning
+            const displayName =
+              firebaseUser.displayName ||
+              (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Citizen Resident");
+            const username = firebaseUser.email
+              ? firebaseUser.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "")
+              : `citizen_${firebaseUser.uid.slice(0, 6)}`;
+
+            const newProfile: UserProfile = {
+              id: firebaseUser.uid,
+              fullName: displayName,
+              username: username,
+              bio: "Active citizen contributor in Open Nation civic governance.",
+              location: "Jharkhand, India",
+              websiteUrl: "",
+              avatarUrl:
+                firebaseUser.photoURL ||
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+              category: "citizen",
+              followersCount: 0,
+              followingCount: 0,
+              postsCount: 0,
+              systemScore: 80,
+              publicRating: 5.0,
+              reviewsCount: 0,
+              verified: false, // Default to false for all new accounts
+              verificationStatus: "none",
+              savedReports: [],
+            };
+
+            setUserProfile(newProfile);
+            setShowAgeModal(true);
+
+            await setDoc(userDocRef, {
+              ...newProfile,
+              email: firebaseUser.email || "",
+              createdAt: new Date().toISOString(),
+              lastLogin: new Date().toISOString(),
+            });
+          }
+        },
+        (error) => {
+          console.warn("Firestore user snapshot notice:", error);
         }
-      } else {
-        // Automatic New User Profile Generation & Firestore Provisioning
-        const displayName =
-          firebaseUser.displayName ||
-          (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Verified Citizen");
-        const username = firebaseUser.email
-          ? firebaseUser.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "")
-          : `citizen_${firebaseUser.uid.slice(0, 6)}`;
+      );
 
-        const newProfile: UserProfile = {
-          id: firebaseUser.uid,
-          fullName: displayName,
-          username: username,
-          bio: "Active citizen contributor in Open Desh civic governance.",
-          location: "Jharkhand, India",
-          websiteUrl: "",
-          avatarUrl:
-            firebaseUser.photoURL ||
-            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
-          category: "citizen",
-          followersCount: 0,
-          followingCount: 0,
-          postsCount: 0,
-          systemScore: 80,
-          publicRating: 5.0,
-          reviewsCount: 0,
-          verified: true,
-          savedReports: [],
-        };
-
-        setUserProfile(newProfile);
-        setShowAgeModal(true);
-
-        await setDoc(userDocRef, {
-          ...newProfile,
-          email: firebaseUser.email || "",
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-        });
-      }
+      setProfileUnsub(() => unsubscribe);
     } catch (err) {
       console.warn("User Firestore load notice:", err);
-      // Fallback local creation
       const displayName =
         firebaseUser.displayName ||
-        (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Verified Citizen");
+        (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Citizen Resident");
       const username = firebaseUser.email
         ? firebaseUser.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "")
         : `citizen_${firebaseUser.uid.slice(0, 6)}`;
@@ -201,7 +250,8 @@ export default function App() {
         fullName: displayName,
         username: username,
         avatarUrl: firebaseUser.photoURL || prev.avatarUrl,
-        verified: true,
+        verified: false,
+        verificationStatus: "none",
       }));
     }
   };
@@ -212,15 +262,24 @@ export default function App() {
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
         setIsLoggedIn(true);
-        await syncUserProfileFromFirestore(firebaseUser);
+        syncUserProfileFromFirestore(firebaseUser);
       } else {
+        if (profileUnsub) {
+          profileUnsub();
+          setProfileUnsub(null);
+        }
         setCurrentUser(null);
         setIsLoggedIn(false);
         setUserProfile(defaultGuestProfile);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (profileUnsub) {
+        profileUnsub();
+      }
+    };
   }, []);
 
   const navigateTo = (view: string, resetProfile = true) => {
@@ -231,6 +290,11 @@ export default function App() {
       newPath = "/";
     } else if (view === "profile_edit") {
       newPath = "/profile/edit";
+    } else if (view.startsWith("post/")) {
+      const pid = view.replace("post/", "");
+      setSelectedPostId(pid);
+      targetView = "post_detail";
+      newPath = `/${view}`;
     }
 
     // Protection: If unauthenticated guest tries to visit own profile or edit profile, redirect to login
@@ -247,6 +311,12 @@ export default function App() {
     if (view === "profile" && resetProfile) {
       setSelectedViewingProfile(null);
     }
+  };
+
+  const handleSelectPost = (reportId: string) => {
+    setSelectedPostId(reportId);
+    navigateTo(`post/${reportId}`, false);
+    setCurrentView("post_detail");
   };
 
   // Auth Guard Helper for interactive actions - Redirects to dedicated Login Page
@@ -490,9 +560,52 @@ export default function App() {
     }, "save bookmarks");
   };
 
-  const handleReply = async (id: string, text: string, parentReplyId?: string) => {
+  // Helper to recursively update nested replies in the thread tree
+  const updateReplyTree = (
+    replies: ThreadedReply[],
+    replyId: string,
+    updater: (reply: ThreadedReply) => ThreadedReply
+  ): ThreadedReply[] => {
+    return replies.map((r) => {
+      if (r.id === replyId) {
+        return updater(r);
+      }
+      if (r.replies && r.replies.length > 0) {
+        return {
+          ...r,
+          replies: updateReplyTree(r.replies, replyId, updater),
+        };
+      }
+      return r;
+    });
+  };
+
+  const handleReply = async (
+    id: string,
+    text: string,
+    parentReplyId?: string,
+    replyImage?: string
+  ) => {
     requireAuth(async () => {
-      const replyObj = {
+      let replyToUsername: string | undefined;
+      if (parentReplyId) {
+        const currentReport = reports.find((r) => r.id === id);
+        const findAuthor = (replies?: ThreadedReply[]): ThreadedReply | undefined => {
+          if (!replies) return undefined;
+          for (const r of replies) {
+            if (r.id === parentReplyId) return r;
+            if (r.replies && r.replies.length > 0) {
+              const f = findAuthor(r.replies);
+              if (f) return f;
+            }
+          }
+          return undefined;
+        };
+        const parentRep = findAuthor(currentReport?.replies);
+        replyToUsername = parentRep?.authorUsername || parentRep?.authorName;
+      }
+
+      const replyObj: ThreadedReply = {
         id: `reply_${Date.now()}`,
         authorId: currentUser?.uid || userProfile.id,
         authorName: userProfile.fullName,
@@ -501,9 +614,14 @@ export default function App() {
         authorCategory: userProfile.category,
         authorBadge: userProfile.verified ? "Citizen" : undefined,
         text,
+        imageUrl: replyImage || undefined,
         timestamp: "Just now",
         likesCount: 0,
+        likedBy: [],
+        reReportsCount: 0,
+        reReportedBy: [],
         parentReplyId: parentReplyId || null,
+        replyToUsername: replyToUsername || undefined,
       };
 
       // Optimistic UI update
@@ -527,12 +645,84 @@ export default function App() {
         await fetch(`/api/reports/${id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, parentReplyId }),
+          body: JSON.stringify({ text, parentReplyId, imageUrl: replyImage }),
         });
       } catch {
         // Safe for serverless
       }
     }, "reply and comment on reports");
+  };
+
+  const handleLikeReply = async (reportId: string, replyId: string) => {
+    requireAuth(async () => {
+      let updatedReplies: ThreadedReply[] = [];
+
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === reportId) {
+            const currentReplies = r.replies || [];
+            updatedReplies = updateReplyTree(currentReplies, replyId, (reply) => {
+              const isLiked = reply.likedBy?.includes(userProfile.id) || false;
+              const newLikedBy = isLiked
+                ? (reply.likedBy || []).filter((uid) => uid !== userProfile.id)
+                : [...(reply.likedBy || []), userProfile.id];
+              return {
+                ...reply,
+                likedBy: newLikedBy,
+                likesCount: isLiked
+                  ? Math.max(0, (reply.likesCount || 1) - 1)
+                  : (reply.likesCount || 0) + 1,
+              };
+            });
+            return {
+              ...r,
+              replies: updatedReplies,
+            };
+          }
+          return r;
+        })
+      );
+
+      if (updatedReplies.length > 0) {
+        await updateReportRepliesInFirestore(reportId, updatedReplies);
+      }
+    }, "like this reply");
+  };
+
+  const handleReReportReply = async (reportId: string, replyId: string) => {
+    requireAuth(async () => {
+      let updatedReplies: ThreadedReply[] = [];
+
+      setReports((prev) =>
+        prev.map((r) => {
+          if (r.id === reportId) {
+            const currentReplies = r.replies || [];
+            updatedReplies = updateReplyTree(currentReplies, replyId, (reply) => {
+              const hasReReported = reply.reReportedBy?.includes(userProfile.id) || false;
+              const newReReportedBy = hasReReported
+                ? (reply.reReportedBy || []).filter((uid) => uid !== userProfile.id)
+                : [...(reply.reReportedBy || []), userProfile.id];
+              return {
+                ...reply,
+                reReportedBy: newReReportedBy,
+                reReportsCount: hasReReported
+                  ? Math.max(0, (reply.reReportsCount || 1) - 1)
+                  : (reply.reReportsCount || 0) + 1,
+              };
+            });
+            return {
+              ...r,
+              replies: updatedReplies,
+            };
+          }
+          return r;
+        })
+      );
+
+      if (updatedReplies.length > 0) {
+        await updateReportRepliesInFirestore(reportId, updatedReplies);
+      }
+    }, "re-report this reply");
   };
 
   const handleUpdateStatus = async (id: string, level: number, notes?: string) => {
@@ -761,7 +951,7 @@ export default function App() {
             : "md:ml-[260px]"
         }`}
       >
-        {/* Navigation Header - Rendered on dashboard/aitutor etc., but Profile, Settings, Search, Compose, Login, Connect, Budget, Leader, Infrastructure & Edit Profile use their own custom X-style header */}
+        {/* Navigation Header - Rendered on dashboard/aitutor etc., but Profile, Settings, Search, Compose, Login, Connect, Budget, Leader, Infrastructure, PostDetail & Edit Profile use their own custom X-style header */}
         {currentView !== "profile" &&
           currentView !== "profile_edit" &&
           currentView !== "login" &&
@@ -771,7 +961,9 @@ export default function App() {
           currentView !== "connect" &&
           currentView !== "budget" &&
           currentView !== "leader" &&
-          currentView !== "infrastructure" && (
+          currentView !== "infrastructure" &&
+          currentView !== "post_detail" &&
+          currentView !== "post" && (
             <Header
               currentView={currentView}
               onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
@@ -801,7 +993,45 @@ export default function App() {
               onUpdateStatus={handleUpdateStatus}
               onOpenCreateModal={handleOpenCompose}
               onSelectUser={handleSelectUserProfile}
+              onSelectPost={handleSelectPost}
               loading={loadingReports}
+            />
+          )}
+
+          {/* DEDICATED POST DETAILS & THREAD VIEW (Twitter/X Style) */}
+          {(currentView === "post_detail" || currentView === "post") && (
+            <PostDetailView
+              report={
+                reports.find((r) => r.id === selectedPostId) ||
+                reports[0] || {
+                  id: "unknown",
+                  authorId: "unknown",
+                  authorName: "Citizen",
+                  authorUsername: "citizen",
+                  authorAvatar: userProfile.avatarUrl,
+                  authorCategory: "citizen",
+                  category: "Infrastructure",
+                  text: "Post not found or has been moved.",
+                  location: { lat: 23.3441, lng: 85.3096, city: "Jharkhand" },
+                  timestamp: "Recently",
+                  status: "Open",
+                  departmentStatusLevel: 0,
+                  likesCount: 0,
+                  reReportsCount: 0,
+                  repliesCount: 0,
+                }
+              }
+              userProfile={userProfile}
+              onBack={() => navigateTo("dashboard")}
+              onLike={handleLikeReport}
+              onReReport={handleReReport}
+              onBookmark={handleBookmark}
+              onReply={handleReply}
+              onLikeReply={handleLikeReply}
+              onReReportReply={handleReReportReply}
+              onUpdateStatus={handleUpdateStatus}
+              onSelectUser={handleSelectUserProfile}
+              onToggleFollow={handleToggleFollow}
             />
           )}
 
@@ -819,6 +1049,17 @@ export default function App() {
             <EditProfileView
               userProfile={userProfile}
               onSave={handleUpdateProfile}
+              onCancel={() => navigateTo("profile")}
+            />
+          )}
+
+          {/* DEDICATED FULL-PAGE VERIFICATION PORTAL (No Modal) */}
+          {currentView === "verification" && (
+            <VerificationView
+              userProfile={userProfile}
+              onSave={async (updated) => {
+                await handleUpdateProfile(updated);
+              }}
               onCancel={() => navigateTo("profile")}
             />
           )}
@@ -869,6 +1110,7 @@ export default function App() {
               onUpdateStatus={handleUpdateStatus}
               onNavigate={navigateTo}
               onSelectUser={handleSelectUserProfile}
+              onSelectPost={handleSelectPost}
               searchQuery={bookmarkSearchQuery}
               onSearchQueryChange={setBookmarkSearchQuery}
             />
@@ -893,6 +1135,7 @@ export default function App() {
                 navigateTo("dashboard");
               }}
               onNavigateToEditProfile={() => navigateTo("profile_edit")}
+              onNavigateToVerification={() => navigateTo("verification")}
               onUpdateProfile={handleUpdateProfile}
               onRateUser={async (rating, comment) => {
                 await handleRateUser(activeProfileToRender.id, rating, comment);
@@ -900,7 +1143,7 @@ export default function App() {
               onReplyToReview={handleReplyToReview}
               onToggleFollow={handleToggleFollow}
               onNavigateToPost={(reportId) => {
-                navigateTo("dashboard");
+                handleSelectPost(reportId);
               }}
             />
           )}
@@ -923,6 +1166,7 @@ export default function App() {
               onNavigate={navigateTo}
               onSelectUser={handleSelectUserProfile}
               onSelectLeaderProfile={handleSelectLeaderProfile}
+              onSelectPost={handleSelectPost}
               onLikeReport={handleLikeReport}
               onReReport={handleReReport}
               onBookmark={handleBookmark}
@@ -948,14 +1192,18 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose and Login) */}
-      {currentView !== "compose" && currentView !== "login" && currentView !== "profile_edit" && (
-        <BottomNav
-          currentView={currentView}
-          onNavigate={navigateTo}
-          onOpenCreateReport={handleOpenCompose}
-        />
-      )}
+      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose, Login, and Post Detail thread view) */}
+      {currentView !== "compose" &&
+        currentView !== "login" &&
+        currentView !== "profile_edit" &&
+        currentView !== "post_detail" &&
+        currentView !== "post" && (
+          <BottomNav
+            currentView={currentView}
+            onNavigate={navigateTo}
+            onOpenCreateReport={handleOpenCompose}
+          />
+        )}
 
       {/* Create Grievance Report Modal */}
       <CreateReportModal

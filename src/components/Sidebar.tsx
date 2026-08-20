@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
+import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 
 interface SidebarProps {
   currentView: string;
@@ -136,8 +137,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {!isCollapsed && (
                 <div className="mt-1 space-y-1">
-                  <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate">
-                    {userProfile.fullName || "Citizen"}
+                  <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate flex items-center gap-1.5">
+                    <span>{userProfile.fullName || "Citizen"}</span>
+                    {userProfile.verified && (
+                      <CategoryVerifiedTick category={userProfile.category} size="xs" />
+                    )}
                   </h2>
                   <p className="text-slate-500 text-xs sm:text-sm truncate">
                     @{userProfile.username || "citizen"}

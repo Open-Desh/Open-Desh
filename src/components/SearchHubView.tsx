@@ -41,6 +41,7 @@ interface SearchHubViewProps {
   onNavigate: (view: string) => void;
   onSelectUser?: (userId: string) => void;
   onSelectLeaderProfile?: (leader: Leader) => void;
+  onSelectPost?: (reportId: string) => void;
   onLikeReport?: (reportId: string) => Promise<void>;
   onReReport?: (reportId: string) => Promise<void>;
   onBookmark?: (reportId: string) => Promise<void>;
@@ -56,6 +57,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
   onNavigate,
   onSelectUser,
   onSelectLeaderProfile,
+  onSelectPost,
   onLikeReport,
   onReReport,
   onBookmark,
@@ -452,11 +454,15 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </button>
 
                       <button
-                        onClick={() =>
-                          setActiveReplyBoxReportId(
-                            activeReplyBoxReportId === report.id ? null : report.id
-                          )
-                        }
+                        onClick={() => {
+                          if (onSelectPost) {
+                            onSelectPost(report.id);
+                          } else {
+                            setActiveReplyBoxReportId(
+                              activeReplyBoxReportId === report.id ? null : report.id
+                            );
+                          }
+                        }}
                         className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer py-1 px-1.5"
                       >
                         <MessageCircle className="w-4 h-4 text-blue-500" />

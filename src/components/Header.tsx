@@ -69,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="mobile-sidebar-open-btn"
           onClick={onOpenMobileSidebar}
-          className="md:hidden w-10 h-10 rounded-full overflow-hidden shadow-2xs hover:scale-105 active:scale-95 transition-transform shrink-0 relative cursor-pointer"
+          className="md:hidden w-[37px] h-[37px] rounded-full overflow-hidden shadow-2xs hover:scale-105 active:scale-95 transition-transform shrink-0 relative cursor-pointer"
           title="Open Menu"
         >
           <img

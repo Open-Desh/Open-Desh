@@ -26,6 +26,11 @@ import {
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
+import {
+  CategoryBadge,
+  CategoryVerifiedTick,
+  CategoryGetVerifiedButton,
+} from "./CategoryBadge.tsx";
 
 interface ProfileViewProps {
   userProfile: UserProfile;
@@ -34,6 +39,7 @@ interface ProfileViewProps {
   isLoggedIn?: boolean;
   onBack?: () => void;
   onNavigateToEditProfile?: () => void;
+  onNavigateToVerification?: () => void;
   onUpdateProfile: (updated: Partial<UserProfile>) => Promise<void>;
   onRateUser?: (rating: number, comment: string) => Promise<void>;
   onReplyToReview?: (reviewId: string, replyText: string) => Promise<void>;
@@ -48,6 +54,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   isLoggedIn = false,
   onBack,
   onNavigateToEditProfile,
+  onNavigateToVerification,
   onUpdateProfile,
   onRateUser,
   onReplyToReview,
@@ -119,6 +126,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             ? `${userProfile.representativeDetails.position} • ${userProfile.representativeDetails.party}`
             : "Elected Public Representative",
         };
+      case "business":
+        return {
+          primary: "BUSINESS / COMPANY",
+          primaryColor: "bg-indigo-600 text-white",
+          secondary: isOwnProfile ? "ENTERPRISE" : "VERIFIED ORG",
+          secondaryColor: "bg-slate-900 text-white",
+          roleTitle: userProfile.businessDetails
+            ? `${userProfile.businessDetails.industry || "Enterprise"} • ${userProfile.businessDetails.companyName || userProfile.fullName}`
+            : "Registered Business & Corporate Entity",
+        };
       default:
         return {
           primary: "CITIZEN",
@@ -182,13 +199,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <div>
-            <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none">
-              {userProfile.fullName}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none truncate flex items-center gap-1.5">
+              <span>{userProfile.fullName}</span>
+              {userProfile.verified && (
+                <CategoryVerifiedTick
+                  category={userProfile.category}
+                  size="xs"
+                />
+              )}
             </h1>
-            <span className="text-[11px] text-slate-500 font-semibold block mt-0.5">
-              {userProfile.postsCount?.toLocaleString() || userReports.length} posts
-            </span>
           </div>
         </div>
 
@@ -248,7 +268,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {/* DP & Top Metrics Row */}
         <div className="flex items-center gap-4 sm:gap-6">
           {/* Avatar Picture */}
-          <div className="relative shrink-0">
+          <div className="shrink-0">
             {userProfile.avatarUrl ? (
               <img
                 src={userProfile.avatarUrl}
@@ -261,17 +281,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 DP
               </div>
             )}
-            {userProfile.verified && (
-              <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-1 rounded-full border-2 border-white shadow-xs">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
-            )}
           </div>
 
           {/* Right Info: Name, Username & Counters */}
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 truncate flex items-center gap-1.5">
               <span>{userProfile.fullName}</span>
+              {userProfile.verified && (
+                <CategoryVerifiedTick
+                  category={userProfile.category}
+                  size="sm"
+                />
+              )}
             </h2>
             <span className="text-xs text-slate-500 font-medium block">
               @{userProfile.username}
@@ -303,29 +324,39 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Role Badges */}
+        {/* Dynamic Category Verification Badge Area */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className={`${badgeInfo.primaryColor} px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs`}
-          >
-            {badgeInfo.primary}
-          </span>
+          {/* 1. Selected Category Badge (Always visible for all profiles) */}
+          <CategoryBadge
+            category={userProfile.category}
+            verified={userProfile.verified}
+            size="sm"
+          />
 
-          {/* Secondary Badge / Rate Action (Hidden from own profile) */}
-          {!isOwnProfile && userProfile.category === "representative" ? (
+          {/* 2. "Get verified" / "Under Review" Button (ONLY visible to user themselves when unverified) */}
+          {!userProfile.verified && isOwnProfile && (
+            <CategoryGetVerifiedButton
+              category={userProfile.category}
+              status={userProfile.verificationStatus}
+              onClick={() => {
+                if (onNavigateToVerification) {
+                  onNavigateToVerification();
+                } else if (onNavigateToEditProfile) {
+                  onNavigateToEditProfile();
+                }
+              }}
+            />
+          )}
+
+          {/* Secondary Rate Leader Action (Only on other's representative profile) */}
+          {!isOwnProfile && userProfile.category === "representative" && (
             <button
               onClick={() => setEvaluationViewTab("writereview")}
-              className={`${badgeInfo.secondaryColor} px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs hover:opacity-90 active:scale-95 transition-all flex items-center gap-1 cursor-pointer`}
+              className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
             >
               <Star className="w-3.5 h-3.5 fill-current" />
-              <span>{badgeInfo.secondary}</span>
+              <span>RATE LEADER</span>
             </button>
-          ) : (
-            <span
-              className={`${badgeInfo.secondaryColor} px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs`}
-            >
-              {badgeInfo.secondary}
-            </span>
           )}
         </div>
 
@@ -357,8 +388,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* 3. Performance Scorecard Card (Rendered for Representative & Department only) OR Citizen Civic Summary */}
-        {isLeadershipOrDept ? (
+        {/* 3. Performance Scorecard Card (Rendered for Representative & Department only) */}
+        {isLeadershipOrDept && (
           <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
             {/* System Score */}
             <div
@@ -402,35 +433,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 {userProfile.reviewsCount
                   ? `${(userProfile.reviewsCount / 1000).toFixed(1)}K`
                   : "142.8K"}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
-            <div className="px-2 text-center py-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
-                GRIEVANCES FILED
-              </span>
-              <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
-                {userReports.length}
-              </span>
-            </div>
-
-            <div className="px-2 text-center py-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
-                RESOLVED CASES
-              </span>
-              <span className="text-xl sm:text-2xl font-black text-emerald-600 block leading-tight">
-                {userReports.filter((r) => r.status === "Resolved").length}
-              </span>
-            </div>
-
-            <div className="px-2 text-center py-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5">
-                CIVIC IMPACT
-              </span>
-              <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
-                {Math.max(12, (userReports.length * 10) + (userProfile.postsCount || 0))} pts
               </span>
             </div>
           </div>

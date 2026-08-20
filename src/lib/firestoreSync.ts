@@ -169,6 +169,18 @@ export async function addReplyInFirestore(reportId: string, reply: ThreadedReply
   }
 }
 
+// 7b. Update Entire Replies Tree in Firestore (for reply likes, reply rereports, nested replies)
+export async function updateReportRepliesInFirestore(reportId: string, replies: ThreadedReply[]): Promise<void> {
+  try {
+    const repDoc = doc(db, "reports", reportId);
+    await updateDoc(repDoc, {
+      replies: sanitizeData(replies),
+    });
+  } catch (err) {
+    console.warn("Firestore update replies notice:", err);
+  }
+}
+
 // 8. Submit Voter Review for a Leader in Firestore
 export async function submitLeaderReviewInFirestore(leaderId: string, review: UserReview): Promise<void> {
   try {

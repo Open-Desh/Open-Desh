@@ -1,4 +1,4 @@
-export type UserCategory = "citizen" | "department" | "representative";
+export type UserCategory = "citizen" | "department" | "representative" | "business";
 
 export interface CitizenDetails {
   occupation: string;
@@ -6,12 +6,24 @@ export interface CitizenDetails {
   voterConstituency?: string;
 }
 
+export interface BusinessDetails {
+  companyName: string;
+  industry: string;
+  registrationNumber?: string;
+  gstinOrPan?: string;
+  officialWebsite?: string;
+  contactEmail?: string;
+  verifiedCompany?: boolean;
+}
+
 export interface DepartmentDetails {
   name: string;
-  designation: string;
-  jurisdictionRegion: string;
-  departmentCode: string;
-  officialBadge: string;
+  designation?: string;
+  jurisdictionRegion?: string;
+  departmentCode?: string;
+  officialBadge?: string;
+  governmentLevel?: string;
+  state?: string;
   activeTickets?: number;
   resolvedTickets?: number;
 }
@@ -19,9 +31,10 @@ export interface DepartmentDetails {
 export interface RepresentativeDetails {
   party: string;
   position: string; // e.g. "MLA - Ranchi East", "Member of Parliament"
-  constituency: string; // e.g. "Jharkhand"
-  termYears: string;
-  legislativeBody: string;
+  constituency: string; // e.g. "Varanasi", "New Delhi"
+  level?: string; // "National Level" | "State Level" | "Local/Municipal Level" | "Party Official/Worker"
+  termYears?: string;
+  legislativeBody?: string;
 }
 
 export interface UserReview {
@@ -90,6 +103,7 @@ export interface UserProfile {
   citizenDetails?: CitizenDetails;
   departmentDetails?: DepartmentDetails;
   representativeDetails?: RepresentativeDetails;
+  businessDetails?: BusinessDetails;
   followersCount: number;
   followingCount: number;
   postsCount: number;
@@ -100,6 +114,10 @@ export interface UserProfile {
   services?: CivicService[];
   systemScoreBreakdown?: SystemScoreBreakdown;
   verified: boolean;
+  verificationStatus?: "none" | "pending" | "approved" | "rejected";
+  verificationSubmittedAt?: string;
+  verificationSubmittedCategory?: UserCategory;
+  verificationSubmittedDocs?: string;
   savedReports?: string[];
   isFollowing?: boolean;
 }
@@ -113,9 +131,12 @@ export interface ThreadedReply {
   authorCategory: UserCategory;
   authorBadge?: string;
   text: string;
+  imageUrl?: string;
   timestamp: string;
   likesCount: number;
   likedBy?: string[];
+  reReportsCount?: number;
+  reReportedBy?: string[];
   parentReplyId?: string | null;
   replyToUsername?: string;
   replyToName?: string;

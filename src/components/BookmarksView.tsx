@@ -15,6 +15,7 @@ import {
   Flame,
 } from "lucide-react";
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
+import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 
 interface BookmarksViewProps {
   bookmarkedReports: ReportIssue[];
@@ -26,6 +27,7 @@ interface BookmarksViewProps {
   onUpdateStatus: (id: string, level: number, notes?: string) => Promise<void>;
   onNavigate: (view: string) => void;
   onSelectUser?: (userId: string) => void;
+  onSelectPost?: (id: string) => void;
   searchQuery?: string;
   onSearchQueryChange?: (q: string) => void;
 }
@@ -40,6 +42,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onUpdateStatus,
   onNavigate,
   onSelectUser,
+  onSelectPost,
   searchQuery = "",
   onSearchQueryChange,
 }) => {
@@ -122,9 +125,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span
                         onClick={() => onSelectUser && onSelectUser(reply.authorId)}
-                        className="font-extrabold text-slate-900 cursor-pointer hover:underline"
+                        className="font-extrabold text-slate-900 cursor-pointer hover:underline flex items-center gap-1"
                       >
-                        {reply.authorName}
+                        <span>{reply.authorName}</span>
+                        {(reply.authorBadge || reply.authorCategory) && (
+                          <CategoryVerifiedTick
+                            category={reply.authorCategory}
+                            size="xs"
+                          />
+                        )}
                       </span>
                       {reply.authorBadge && (
                         <span
@@ -268,9 +277,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                          className="font-extrabold text-slate-900 text-sm hover:underline cursor-pointer truncate"
+                          className="font-extrabold text-slate-900 text-sm hover:underline cursor-pointer truncate flex items-center gap-1"
                         >
-                          {report.authorName}
+                          <span>{report.authorName}</span>
+                          {(report.authorBadge || report.authorCategory) && (
+                            <CategoryVerifiedTick
+                              category={report.authorCategory}
+                              size="xs"
+                            />
+                          )}
                         </span>
                         {report.authorBadge && (
                           <span
@@ -443,11 +458,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
                 {/* Interactive Twitter/X Toolbar */}
                 <div className="flex items-center justify-between text-slate-500 pt-2 border-t border-slate-100 text-xs font-semibold">
-                  {/* Reply Button */}
+                  {/* Reply Button (Opens dedicated post view) */}
                   <button
                     onClick={() => {
-                      setActiveReplyBoxReportId(isReplyBoxOpen ? null : report.id);
-                      setExpandedRepliesReportId((prev) => ({ ...prev, [report.id]: true }));
+                      if (onSelectPost) {
+                        onSelectPost(report.id);
+                      } else {
+                        setActiveReplyBoxReportId(isReplyBoxOpen ? null : report.id);
+                        setExpandedRepliesReportId((prev) => ({ ...prev, [report.id]: true }));
+                      }
                     }}
                     className="flex items-center gap-1.5 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50 group cursor-pointer"
                   >

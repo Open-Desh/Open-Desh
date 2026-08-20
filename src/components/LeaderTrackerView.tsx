@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Leader, UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
+import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 
 interface LeaderTrackerViewProps {
   leaders: Leader[];
@@ -229,10 +230,10 @@ export const LeaderTrackerView: React.FC<LeaderTrackerViewProps> = ({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight hover:text-blue-600 transition-colors truncate">
-                        {leader.name}
+                      <h2 className="text-sm sm:text-base font-black text-slate-900 leading-tight hover:text-emerald-700 transition-colors truncate flex items-center gap-1">
+                        <span>{leader.name}</span>
+                        <CategoryVerifiedTick category="representative" size="xs" />
                       </h2>
-                      <CheckCircle2 className="w-4 h-4 text-blue-600 fill-blue-600 text-white shrink-0" />
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">
                       {leader.title} •{" "}
