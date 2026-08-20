@@ -16,6 +16,7 @@ import {
   Leader,
   InfrastructureProject,
   UserProfile,
+  UserCategory,
   UserReview,
   ThreadedReply,
 } from "../types";
@@ -263,5 +264,110 @@ export async function seedAllCollectionsToFirestore(): Promise<void> {
   } catch (err) {
     console.warn("Firestore seeding notice:", err);
   }
+}
+
+// 11. Fetch All Registered Official Authorities & Leaders from Firestore
+export interface RegisteredAuthority {
+  id: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string;
+  category: UserCategory;
+  role: string;
+  badge: string;
+  departmentCode?: string;
+  party?: string;
+  verified: boolean;
+}
+
+export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthority[]> {
+  const authoritiesMap = new Map<string, RegisteredAuthority>();
+
+  // 1. Load initial hardcoded seeds first as baseline
+  Object.values(INITIAL_USERS).forEach((u) => {
+    if (u.category === "department" || u.category === "representative") {
+      const uname = u.username.toLowerCase();
+      authoritiesMap.set(uname, {
+        id: u.id,
+        username: u.username,
+        fullName: u.fullName,
+        avatarUrl: u.avatarUrl,
+        category: u.category,
+        role: u.departmentDetails?.designation || u.representativeDetails?.position || (u.category === "department" ? "Official Department" : "Elected Representative"),
+        badge: u.departmentDetails?.officialBadge || u.representativeDetails?.party || "Verified Profile",
+        departmentCode: u.departmentDetails?.departmentCode,
+        party: u.representativeDetails?.party,
+        verified: u.verified ?? true,
+      });
+    }
+  });
+
+  INITIAL_LEADERS.forEach((l) => {
+    const uname = l.username.toLowerCase();
+    if (!authoritiesMap.has(uname)) {
+      authoritiesMap.set(uname, {
+        id: l.id,
+        username: l.username,
+        fullName: l.name,
+        avatarUrl: l.image,
+        category: "representative",
+        role: l.title,
+        badge: l.party,
+        party: l.party,
+        verified: true,
+      });
+    }
+  });
+
+  try {
+    // 2. Fetch live users from Firestore `users` collection
+    const usersRef = collection(db, "users");
+    const userSnaps = await getDocs(usersRef);
+    userSnaps.forEach((docSnap) => {
+      const data = docSnap.data() as UserProfile;
+      if (data && (data.category === "department" || data.category === "representative" || data.verified)) {
+        const uname = data.username?.toLowerCase();
+        if (uname) {
+          authoritiesMap.set(uname, {
+            id: data.id || docSnap.id,
+            username: data.username,
+            fullName: data.fullName,
+            avatarUrl: data.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+            category: data.category || "citizen",
+            role: data.departmentDetails?.designation || data.representativeDetails?.position || (data.category === "department" ? "Govt Dept" : "Citizen"),
+            badge: data.departmentDetails?.officialBadge || data.representativeDetails?.party || (data.verified ? "Verified" : "Citizen"),
+            departmentCode: data.departmentDetails?.departmentCode,
+            party: data.representativeDetails?.party,
+            verified: data.verified ?? true,
+          });
+        }
+      }
+    });
+
+    // 3. Fetch live leaders from Firestore `leaders` collection
+    const leadersRef = collection(db, "leaders");
+    const leaderSnaps = await getDocs(leadersRef);
+    leaderSnaps.forEach((docSnap) => {
+      const l = docSnap.data() as Leader;
+      if (l && l.username) {
+        const uname = l.username.toLowerCase();
+        authoritiesMap.set(uname, {
+          id: l.id || docSnap.id,
+          username: l.username,
+          fullName: l.name,
+          avatarUrl: l.image,
+          category: "representative",
+          role: l.title,
+          badge: l.party,
+          party: l.party,
+          verified: true,
+        });
+      }
+    });
+  } catch (err) {
+    console.warn("Notice: Firestore authorities fetch fallback to seeded profiles:", err);
+  }
+
+  return Array.from(authoritiesMap.values());
 }
 

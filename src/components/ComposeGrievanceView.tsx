@@ -25,10 +25,21 @@ import {
   Compass,
   ChevronRight,
   Info,
+  AtSign,
+  RotateCcw,
+  Bot,
+  ArrowRight,
 } from "lucide-react";
 import { IssueCategory, LocationGeo, UserProfile, Leader } from "../types.ts";
 import { LocationPickerMap } from "./LocationPickerMap.tsx";
-import { INITIAL_USERS } from "../data/seedData.ts";
+import {
+  getRegisteredAuthoritiesDirect,
+  RegisteredAuthority,
+} from "../lib/firestoreSync.ts";
+import {
+  refineCivicReportTextWithAI,
+  determineResponsibleAuthorities,
+} from "../lib/aiService.ts";
 
 interface ComposeGrievanceViewProps {
   userProfile: UserProfile;
@@ -54,10 +65,12 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   onSubmit,
 }) => {
   const [text, setText] = useState("");
+  const [originalRawText, setOriginalRawText] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<IssueCategory>("Infrastructure");
   const [urgencyLevel, setUrgencyLevel] = useState<"Normal" | "High Priority" | "Critical Emergency">("Normal");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isAIPolishing, setIsAIPolishing] = useState(false);
+  const [aiRefinedSuccess, setAiRefinedSuccess] = useState(false);
 
   // Multi-image state
   const [images, setImages] = useState<string[]>([]);
@@ -81,8 +94,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   const [locationAccuracy, setLocationAccuracy] = useState<string>("± 8m");
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
 
-  // Active Tagged Authorities - MUST START EMPTY (No pre-tagging!)
+  // Database Registered Authorities (Fetched from Firestore)
+  const [dbAuthorities, setDbAuthorities] = useState<RegisteredAuthority[]>([]);
   const [activeSelectedTags, setActiveSelectedTags] = useState<string[]>([]);
+
+  // Manual @ mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [cursorPosition, setCursorPosition] = useState<number>(0);
 
   // Category specific structured fields
   const [structuredFields, setStructuredFields] = useState<Record<string, string>>({
@@ -93,7 +111,20 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch live GPS on mount
+  // 1. Fetch live registered authorities from Firebase Firestore
+  useEffect(() => {
+    let isMounted = true;
+    getRegisteredAuthoritiesDirect().then((auths) => {
+      if (isMounted) {
+        setDbAuthorities(auths);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Fetch live GPS on mount
   const fetchLiveGPS = () => {
     setIsRefreshingLocation(true);
     setLocationStatus("locating");
@@ -205,179 +236,77 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     }
   }, [selectedCategory]);
 
-  // Dynamic Suggestion Algorithm: Check category & keywords against AUTHENTIC accounts in Database
-  const suggestedAuthorities = useMemo(() => {
-    const lowerText = text.toLowerCase();
-    const suggestions: {
-      tag: string;
-      name: string;
-      avatar: string;
-      badge: string;
-      role: string;
-      type: "department" | "leader";
-    }[] = [];
+  // 3. AI Automatic Responsible Department Decider:
+  // Evaluates text and category against ONLY real registered authorities from the DB
+  const aiDeterminedAuthorities = useMemo(() => {
+    return determineResponsibleAuthorities(text, selectedCategory, dbAuthorities);
+  }, [text, selectedCategory, dbAuthorities]);
 
-    const dbUsers = Object.values(INITIAL_USERS);
-
-    // 1. Check department officers in database
-    if (
-      selectedCategory === "Infrastructure" ||
-      lowerText.includes("road") ||
-      lowerText.includes("sadak") ||
-      lowerText.includes("pothole") ||
-      lowerText.includes("gaddha") ||
-      lowerText.includes("bridge") ||
-      lowerText.includes("flyover") ||
-      lowerText.includes("highway")
-    ) {
-      const pwdOfficer = dbUsers.find((u) => u.username === "pwd_officer_rajesh");
-      if (pwdOfficer) {
-        suggestions.push({
-          tag: `@${pwdOfficer.username}`,
-          name: pwdOfficer.fullName,
-          avatar: pwdOfficer.avatarUrl,
-          badge: "Executive Engineer",
-          role: "Public Works Dept (PWD)",
-          type: "department",
-        });
-      }
-      const ltInfra = dbUsers.find((u) => u.username === "lt_infrastructure");
-      if (ltInfra && (lowerText.includes("flyover") || lowerText.includes("highway") || lowerText.includes("construction"))) {
-        suggestions.push({
-          tag: `@${ltInfra.username}`,
-          name: ltInfra.fullName,
-          avatar: ltInfra.avatarUrl,
-          badge: "EPC Contractor",
-          role: "Civil Infrastructure",
-          type: "department",
-        });
-      }
-    }
-
-    if (
-      selectedCategory === "Water" ||
-      lowerText.includes("water") ||
-      lowerText.includes("pani") ||
-      lowerText.includes("pipe") ||
-      lowerText.includes("drain") ||
-      lowerText.includes("leak") ||
-      lowerText.includes("jal")
-    ) {
-      const wabag = dbUsers.find((u) => u.username === "wabag_water_epc");
-      if (wabag) {
-        suggestions.push({
-          tag: `@${wabag.username}`,
-          name: wabag.fullName,
-          avatar: wabag.avatarUrl,
-          badge: "Water Utility EPC",
-          role: "Drinking Water Supply",
-          type: "department",
-        });
-      }
-      const pwdOfficer = dbUsers.find((u) => u.username === "pwd_officer_rajesh");
-      if (pwdOfficer && lowerText.includes("drain")) {
-        suggestions.push({
-          tag: `@${pwdOfficer.username}`,
-          name: pwdOfficer.fullName,
-          avatar: pwdOfficer.avatarUrl,
-          badge: "Executive Engineer",
-          role: "Stormwater Drainage",
-          type: "department",
-        });
-      }
-    }
-
-    if (
-      selectedCategory === "Public Transport" ||
-      lowerText.includes("bus") ||
-      lowerText.includes("metro") ||
-      lowerText.includes("transit") ||
-      lowerText.includes("traffic")
-    ) {
-      const afcons = dbUsers.find((u) => u.username === "afcons_metro_jv");
-      if (afcons) {
-        suggestions.push({
-          tag: `@${afcons.username}`,
-          name: afcons.fullName,
-          avatar: afcons.avatarUrl,
-          badge: "Rail Transit EPC",
-          role: "Urban Transit Authority",
-          type: "department",
-        });
-      }
-    }
-
-    // 2. Check elected leaders in database
-    leaders.forEach((ldr) => {
-      // Area Representative (Nitesh Gupta)
-      if (ldr.username === "niteshgupta950") {
-        if (!suggestions.some((s) => s.tag === `@${ldr.username}`)) {
-          suggestions.push({
-            tag: `@${ldr.username}`,
-            name: ldr.name,
-            avatar: ldr.image,
-            badge: ldr.party,
-            role: ldr.title,
-            type: "leader",
-          });
-        }
-      }
-      // Chief Minister for systemic/statewide or high severity issues
-      if (ldr.username === "hemantsoren_jmm" && (urgencyLevel === "Critical Emergency" || selectedCategory === "Corruption" || selectedCategory === "Infrastructure")) {
-        if (!suggestions.some((s) => s.tag === `@${ldr.username}`)) {
-          suggestions.push({
-            tag: `@${ldr.username}`,
-            name: ldr.name,
-            avatar: ldr.image,
-            badge: ldr.party,
-            role: "Chief Minister",
-            type: "leader",
-          });
-        }
-      }
-      // Opposition Leader for Corruption / Watchdog
-      if (ldr.username === "babulal_bjp" && (selectedCategory === "Corruption" || lowerText.includes("bribe") || lowerText.includes("scam") || lowerText.includes("ghoos"))) {
-        if (!suggestions.some((s) => s.tag === `@${ldr.username}`)) {
-          suggestions.push({
-            tag: `@${ldr.username}`,
-            name: ldr.name,
-            avatar: ldr.image,
-            badge: ldr.party,
-            role: "Leader of Opposition",
-            type: "leader",
-          });
-        }
-      }
-      // Health Minister
-      if (ldr.username === "bannagupta_inc" && (lowerText.includes("hospital") || lowerText.includes("doctor") || lowerText.includes("health") || lowerText.includes("dawai") || lowerText.includes("ambulance"))) {
-        if (!suggestions.some((s) => s.tag === `@${ldr.username}`)) {
-          suggestions.push({
-            tag: `@${ldr.username}`,
-            name: ldr.name,
-            avatar: ldr.image,
-            badge: ldr.party,
-            role: "Cabinet Minister (Health)",
-            type: "leader",
-          });
-        }
-      }
-    });
-
-    // Fallback: If no suggestion matches yet, suggest the primary elected MLA from DB
-    if (suggestions.length === 0 && leaders.length > 0) {
-      const primaryLeader = leaders[0];
-      suggestions.push({
-        tag: `@${primaryLeader.username}`,
-        name: primaryLeader.name,
-        avatar: primaryLeader.image,
-        badge: primaryLeader.party,
-        role: primaryLeader.title,
-        type: "leader",
+  // Auto-synchronize AI responsible department tags when text changes or category switches
+  useEffect(() => {
+    if (aiDeterminedAuthorities.length > 0) {
+      const aiTags = aiDeterminedAuthorities.map((a) => `@${a.username}`);
+      setActiveSelectedTags((prev) => {
+        // Keep existing manual selections and merge AI recommended verified tags
+        const merged = Array.from(new Set([...prev, ...aiTags]));
+        return merged;
       });
     }
+  }, [aiDeterminedAuthorities]);
 
-    return suggestions;
-  }, [text, selectedCategory, urgencyLevel, leaders]);
+  // Handle @ mention detection in textarea
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const pos = e.target.selectionStart || 0;
+    setText(val);
+    setCursorPosition(pos);
+
+    // Look back from cursor to see if user is typing an @ mention
+    const textBeforeCursor = val.slice(0, pos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
+      // If there are no spaces after @, user is actively typing a handle
+      if (!/\s/.test(textAfterAt)) {
+        setMentionQuery(textAfterAt.toLowerCase());
+        return;
+      }
+    }
+    setMentionQuery(null);
+  };
+
+  // Select an authority from manual @ dropdown
+  const handleSelectMention = (auth: RegisteredAuthority) => {
+    const textBeforeCursor = text.slice(0, cursorPosition);
+    const textAfterCursor = text.slice(cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtIndex !== -1) {
+      const beforeAt = text.slice(0, lastAtIndex);
+      const newText = `${beforeAt}@${auth.username} ${textAfterCursor}`;
+      setText(newText);
+      const tag = `@${auth.username}`;
+      if (!activeSelectedTags.includes(tag)) {
+        setActiveSelectedTags((prev) => [...prev, tag]);
+      }
+      setMentionQuery(null);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
+
+  // Filtered mention list from verified database profiles
+  const matchingMentions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    return dbAuthorities.filter(
+      (a) =>
+        a.username.toLowerCase().includes(mentionQuery) ||
+        a.fullName.toLowerCase().includes(mentionQuery) ||
+        (a.badge && a.badge.toLowerCase().includes(mentionQuery))
+    ).slice(0, 5);
+  }, [mentionQuery, dbAuthorities]);
 
   const toggleTag = (tag: string) => {
     setActiveSelectedTags((prev) =>
@@ -413,19 +342,43 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     setImages((prev) => prev.filter((_, i) => i !== indexToRemove));
   };
 
-  // AI Civic Polish: Formats citizen voice into official grievance drafting
-  const handleAIPolish = () => {
-    if (!text.trim()) return;
+  // 4. AI Refine & Suggestion: Calls Cloudflare Worker (https://oj.opendesh.workers.dev)
+  // Refines user's complaint text and upgrades it seamlessly
+  const handleAIRefine = async () => {
+    if (!text.trim() || isAIPolishing) return;
     setIsAIPolishing(true);
 
-    setTimeout(() => {
-      const raw = text.trim();
-      const polishedText = `[PUBLIC CIVIC NOTICE: ${selectedCategory.toUpperCase()}]\n${raw}\n\nCitizen audit logged at ${resolvedAddress}.`;
-      setText(polishedText);
+    try {
+      if (!originalRawText) {
+        setOriginalRawText(text);
+      }
+      const refined = await refineCivicReportTextWithAI(
+        text,
+        selectedCategory,
+        resolvedAddress
+      );
+      if (refined && refined.trim()) {
+        setText(refined.trim());
+        setAiRefinedSuccess(true);
+        setTimeout(() => setAiRefinedSuccess(false), 5000);
+      }
+    } catch (err) {
+      console.warn("AI refine notice:", err);
+    } finally {
       setIsAIPolishing(false);
-    }, 600);
+    }
   };
 
+  // Revert back to original raw text
+  const handleRevertText = () => {
+    if (originalRawText) {
+      setText(originalRawText);
+      setOriginalRawText(null);
+      setAiRefinedSuccess(false);
+    }
+  };
+
+  // 5. Submit Form with Real Verified DB Routing
   const handleFormSubmit = async () => {
     if (!text.trim() && Object.values(structuredFields).every((v) => !String(v).trim()) && images.length === 0) {
       return;
@@ -452,16 +405,36 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         fullReportText = `[WHISTLEBLOWER VERIFIED REPORT - IDENTITY PROTECTED]\n${fullReportText}`;
       }
 
-      // Collect all active selected tags
-      const taggedOfficers = activeSelectedTags.filter((t) =>
-        suggestedAuthorities.some((s) => s.tag === t && s.type === "department")
-      );
-      const taggedLeaders = activeSelectedTags.filter((t) =>
-        suggestedAuthorities.some((s) => s.tag === t && s.type === "leader")
+      // Collect all tagged mentions from both activeSelectedTags and manual @ tags in text
+      const extractedManualMentions = (fullReportText.match(/@([a-zA-Z0-9_]+)/g) || []);
+      const allMentionedTags = Array.from(
+        new Set([...activeSelectedTags, ...extractedManualMentions])
       );
 
+      // Verify every tag strictly against registered database profiles
+      const taggedOfficers: string[] = [];
+      const taggedLeaders: string[] = [];
+
+      allMentionedTags.forEach((tag) => {
+        const cleanHandle = tag.replace(/^@/, "").toLowerCase();
+        const matched = dbAuthorities.find(
+          (a) => a.username.toLowerCase() === cleanHandle
+        );
+        if (matched) {
+          if (matched.category === "department") {
+            taggedOfficers.push(`@${matched.username}`);
+          } else if (matched.category === "representative") {
+            taggedLeaders.push(`@${matched.username}`);
+          }
+        }
+      });
+
       // Add tag mentions in text if not present
-      const tagsToAppend = activeSelectedTags.filter((t) => !fullReportText.includes(t));
+      const tagsToAppend = allMentionedTags.filter(
+        (t) =>
+          !fullReportText.includes(t) &&
+          dbAuthorities.some((a) => `@${a.username.toLowerCase()}` === t.toLowerCase())
+      );
       if (tagsToAppend.length > 0) {
         fullReportText = `${fullReportText}\n\nCc: ${tagsToAppend.join(" ")}`;
       }
@@ -489,7 +462,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     }
   };
 
-  // Modern Categories Definition with Rich Details
+  // Modern Categories Definition
   const categories: {
     id: IssueCategory;
     label: string;
@@ -500,55 +473,71 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   }[] = [
     {
       id: "Infrastructure",
-      label: "Roads & PWD",
-      description: "Potholes, broken roads, footpaths, bridges & road construction",
+      label: "Roads & Bridges",
+      description: "Potholes, broken asphalt, flyovers, cave-ins, and road safety hazards",
       icon: Construction,
       colorClass: "text-amber-600",
       bgClass: "bg-amber-50 border-amber-200",
     },
     {
       id: "Water",
-      label: "Water Supply",
-      description: "Pipeline leaks, dirty tap water, shortages & water tanker supply",
+      label: "Water & Drainage",
+      description: "Pipeline bursts, contaminated water, dirty supply, storm drainage blockage",
       icon: Droplet,
-      colorClass: "text-cyan-600",
-      bgClass: "bg-cyan-50 border-cyan-200",
+      colorClass: "text-blue-600",
+      bgClass: "bg-blue-50 border-blue-200",
     },
     {
       id: "Electricity",
-      label: "Electricity",
-      description: "Power cuts, broken transformers, low voltage & hazardous open wires",
+      label: "Electricity & Power",
+      description: "Transformer blast, broken wires, voltage instability, prolonged blackout",
       icon: Zap,
       colorClass: "text-amber-500",
       bgClass: "bg-amber-50 border-amber-200",
     },
     {
       id: "Sanitation",
-      label: "Sanitation",
-      description: "Garbage dumps, overflowing drains, sewer blockage & cleanliness",
-      icon: Trash2,
+      label: "Sanitation & Waste",
+      description: "Uncollected garbage dump, overflowing bin, open drains, public health risk",
+      icon: Building2,
       colorClass: "text-emerald-600",
       bgClass: "bg-emerald-50 border-emerald-200",
     },
     {
       id: "Corruption",
-      label: "Corruption",
-      description: "Bribe demands, tender scams, extortion & officer negligence",
+      label: "Bribe & Corruption",
+      description: "Demands for illicit money, extortion, ghost contractor billing, delay extortion",
       icon: ShieldAlert,
       colorClass: "text-rose-600",
       bgClass: "bg-rose-50 border-rose-200",
     },
     {
       id: "Public Transport",
-      label: "Transport",
-      description: "City buses, fare overcharge, traffic signals & public safety",
-      icon: Building2,
-      colorClass: "text-indigo-600",
-      bgClass: "bg-indigo-50 border-indigo-200",
+      label: "Public Transport",
+      description: "Bus terminal safety, broken transit fleet, traffic lights, commuter rights",
+      icon: Compass,
+      colorClass: "text-purple-600",
+      bgClass: "bg-purple-50 border-purple-200",
+    },
+    {
+      id: "Health",
+      label: "Hospital & Health",
+      description: "Ambulance delay, missing doctors, expired drugs, clinic hygiene",
+      icon: ShieldCheck,
+      colorClass: "text-teal-600",
+      bgClass: "bg-teal-50 border-teal-200",
+    },
+    {
+      id: "Other",
+      label: "General Civic Matter",
+      description: "Other civic issues, park maintenance, encroachment, public grievance",
+      icon: Info,
+      colorClass: "text-slate-600",
+      bgClass: "bg-slate-50 border-slate-200",
     },
   ];
 
-  // Character limit circle calculation
+  // Character limit calculation
   const charLength = text.length;
   const maxChars = 280;
   const charProgress = Math.min(100, (charLength / maxChars) * 100);
@@ -570,19 +559,6 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
-          {/* AI Legal Draft */}
-          {text.trim().length > 10 && (
-            <button
-              onClick={handleAIPolish}
-              disabled={isAIPolishing}
-              className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-full border border-blue-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Auto-format as Official Citizen Petition"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isAIPolishing ? "animate-spin" : ""}`} />
-              <span>{isAIPolishing ? "Drafting..." : "AI Legal Draft"}</span>
-            </button>
-          )}
-
           {/* Urgency tag indicator */}
           {urgencyLevel === "Critical Emergency" && (
             <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
@@ -632,13 +608,17 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       />
 
       {/* 2. Main Compose Body */}
-      <main className="flex-1 overflow-y-auto px-4 py-3 flex flex-col justify-between max-w-xl mx-auto w-full">
-        <div className="space-y-3.5 flex-1 flex flex-col">
+      <main className="flex-1 overflow-y-auto px-4 py-3 flex flex-col justify-between max-w-xl mx-auto w-full relative">
+        <div className="space-y-3 flex-1 flex flex-col">
           {/* Top Control Section: Avatar on left, Controls aligned on right */}
           <div className="flex items-start gap-2.5 pb-1">
             {/* User DP / Avatar */}
             <img
-              src={isAnonymous ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80" : userProfile.avatarUrl}
+              src={
+                isAnonymous
+                  ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
+                  : userProfile.avatarUrl
+              }
               alt={userProfile.fullName}
               className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5"
             />
@@ -653,7 +633,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   onClick={() => setShowCategorySlider(true)}
                   id="compose-category-slider-trigger"
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full border border-blue-200 transition-all cursor-pointer shadow-2xs"
-                  title="Tap to select Category from bottom slider"
+                  title="Tap to select Category"
                 >
                   <CategoryIcon className="w-3.5 h-3.5 text-blue-600" />
                   <span>{selectedCategoryMeta.label}</span>
@@ -675,16 +655,16 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   <span>{isAnonymous ? "Anonymous ON" : "Anonymous"}</span>
                 </button>
 
-                {/* Urgent/Critical Active Indicator Badge if turned ON from toolbar */}
+                {/* Urgent/Critical Active Indicator Badge */}
                 {urgencyLevel === "Critical Emergency" && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full animate-pulse">
                     <Flame className="w-3 h-3 text-rose-600 fill-rose-500" />
-                    URGENT CRITICAL
+                    URGENT
                   </span>
                 )}
               </div>
 
-              {/* Row 2: Location Text directly starting under the Category button (not under DP) */}
+              {/* Row 2: Location Text */}
               <div className="flex items-center">
                 <button
                   type="button"
@@ -699,19 +679,101 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             </div>
           </div>
 
-          {/* Clean Main Text Input */}
-          <div className="flex-1 min-h-[140px]">
+          {/* Clean Main Text Input Container */}
+          <div className="flex-1 min-h-[140px] flex flex-col relative">
             <textarea
               ref={textareaRef}
               value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Kya Problem ha ? (Describe the civic issue, road damage, water shortage, electricity cut, sanitation problem...)"
+              onChange={handleTextChange}
+              placeholder="Kya Problem ha ? (Apni samasya yaha likhein, road, pani, bijli, safai, ghooskhori...)"
               rows={4}
-              className="w-full text-base sm:text-lg font-medium text-slate-900 placeholder:text-slate-400 border-none outline-none resize-none p-0 focus:ring-0 leading-relaxed bg-transparent"
+              className="w-full text-base sm:text-lg font-medium text-slate-900 placeholder:text-slate-400 border-none outline-none resize-none p-0 focus:ring-0 leading-relaxed bg-transparent flex-1"
             />
+
+            {/* Real-time @ mention autocomplete dropdown */}
+            {matchingMentions.length > 0 && (
+              <div className="absolute left-0 right-0 top-16 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-1.5 space-y-1 animate-fade-in max-h-48 overflow-y-auto">
+                <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider flex items-center gap-1">
+                  <AtSign className="w-3 h-3 text-blue-600" /> Verified Database Authorities
+                </div>
+                {matchingMentions.map((auth) => (
+                  <button
+                    key={auth.id}
+                    type="button"
+                    onClick={() => handleSelectMention(auth)}
+                    className="w-full text-left px-2.5 py-1.5 hover:bg-blue-50 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={auth.avatarUrl}
+                        alt={auth.fullName}
+                        className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          @{auth.username}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">
+                          {auth.fullName} • {auth.role}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full shrink-0 ml-2">
+                      {auth.badge || "Verified"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* AI Refine Button directly at the end of user's written text */}
+            {text.trim().length > 4 && (
+              <div className="pt-2 flex items-center justify-between flex-wrap gap-2 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAIRefine}
+                    disabled={isAIPolishing}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                    title="AI will refine your problem into a professional official civic complaint"
+                  >
+                    {isAIPolishing ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                        <span>AI सुधार रहा है...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                        <span>AI Suggest / सुधारें</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Undo Button if user wants their original raw text back */}
+                  {originalRawText && (
+                    <button
+                      type="button"
+                      onClick={handleRevertText}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors cursor-pointer"
+                      title="Revert to your original raw text"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Undo</span>
+                    </button>
+                  )}
+                </div>
+
+                {aiRefinedSuccess && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-fade-in">
+                    <Check className="w-3 h-3" /> AI Refined
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Attached Photos Preview Grid (Only shown when photos exist) */}
+          {/* Attached Photos Preview Grid */}
           {images.length > 0 && (
             <div className="space-y-1.5 animate-fade-in">
               <div className="flex items-center justify-between text-xs text-slate-500 font-bold px-0.5">
@@ -803,12 +865,17 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           )}
         </div>
 
-        {/* 3. Intelligent Real-Time Tagging & Authority Suggestions (NOT pre-tagged by default) */}
+        {/* 3. Intelligent Real-Time Tagging & AI Authority Routing */}
         <div className="pt-3 pb-1 border-t border-slate-100 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-700">Suggested Authorities:</span>
-              <span className="text-slate-400 text-[10px]">(Tap to tag in report)</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-slate-700 flex items-center gap-1">
+                <Bot className="w-3.5 h-3.5 text-blue-600" />
+                AI Decided Responsible Authorities:
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                (Verified from Firebase DB)
+              </span>
             </div>
             {activeSelectedTags.length > 0 && (
               <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
@@ -817,29 +884,34 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             )}
           </div>
 
-          {/* Dynamic Suggestion Chips from authentic DB profiles */}
+          {/* Real Registered Profiles Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {suggestedAuthorities.map((auth) => {
-              const isSelected = activeSelectedTags.includes(auth.tag);
+            {aiDeterminedAuthorities.map((auth) => {
+              const tag = `@${auth.username}`;
+              const isSelected = activeSelectedTags.includes(tag);
               return (
                 <button
-                  key={auth.tag}
+                  key={auth.id}
                   type="button"
-                  onClick={() => toggleTag(auth.tag)}
+                  onClick={() => toggleTag(tag)}
                   className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border shrink-0 transition-all cursor-pointer ${
                     isSelected
                       ? "bg-blue-600 border-blue-600 text-white font-bold shadow-xs"
                       : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 font-medium"
                   }`}
-                  title={`${auth.name} (${auth.role})`}
+                  title={`${auth.fullName} (${auth.role})`}
                 >
                   <img
-                    src={auth.avatar}
-                    alt={auth.name}
+                    src={auth.avatarUrl}
+                    alt={auth.fullName}
                     className="w-4 h-4 rounded-full object-cover"
                   />
-                  <span>{auth.tag}</span>
-                  <span className={`text-[10px] ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
+                  <span>{tag}</span>
+                  <span
+                    className={`text-[10px] ${
+                      isSelected ? "text-blue-100" : "text-slate-400"
+                    }`}
+                  >
                     ({auth.badge})
                   </span>
                   {isSelected ? (
@@ -850,6 +922,45 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                 </button>
               );
             })}
+
+            {/* If there are additional registered authorities in DB not yet in AI top list, provide access */}
+            {dbAuthorities
+              .filter(
+                (a) =>
+                  !aiDeterminedAuthorities.some(
+                    (aiA) => aiA.username.toLowerCase() === a.username.toLowerCase()
+                  )
+              )
+              .slice(0, 3)
+              .map((auth) => {
+                const tag = `@${auth.username}`;
+                const isSelected = activeSelectedTags.includes(tag);
+                return (
+                  <button
+                    key={auth.id}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border shrink-0 transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-600 border-blue-600 text-white font-bold shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium opacity-85"
+                    }`}
+                    title={`${auth.fullName} (${auth.role})`}
+                  >
+                    <img
+                      src={auth.avatarUrl}
+                      alt={auth.fullName}
+                      className="w-4 h-4 rounded-full object-cover"
+                    />
+                    <span>{tag}</span>
+                    {isSelected ? (
+                      <Check className="w-3 h-3 text-white ml-0.5 stroke-[2.5]" />
+                    ) : (
+                      <span className="text-slate-400 text-xs ml-0.5 font-bold">+</span>
+                    )}
+                  </button>
+                );
+              })}
 
             {/* Location GPS Chip - Click opens interactive map */}
             <button
@@ -869,7 +980,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         </div>
       </main>
 
-      {/* 4. Bottom Twitter/X Toolbar: [Gallery] [Camera] [Sliders/Category] [Poll] [Location] [Circle Progress] */}
+      {/* 4. Bottom Twitter/X Toolbar */}
       <footer className="shrink-0 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between bg-white z-30 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
         <div className="flex items-center gap-2 sm:gap-3 text-blue-600">
           {/* 1. Gallery Image Upload */}
@@ -947,7 +1058,11 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                 ? "bg-rose-600 text-white shadow-sm ring-2 ring-rose-300"
                 : "hover:bg-rose-50 text-slate-500 hover:text-rose-600"
             }`}
-            title={urgencyLevel === "Critical Emergency" ? "Urgent Critical Tag Active" : "Mark as Urgent / Critical Emergency"}
+            title={
+              urgencyLevel === "Critical Emergency"
+                ? "Urgent Critical Tag Active"
+                : "Mark as Urgent / Critical Emergency"
+            }
           >
             <Flame className={`w-5 h-5 ${urgencyLevel === "Critical Emergency" ? "fill-white" : ""}`} />
           </button>
@@ -983,19 +1098,16 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       </footer>
 
       {/* ========================================================================= */}
-      {/* 5. MODERN CATEGORY BOTTOM SHEET SLIDER (Slide-up Drawer with Backdrop) */}
+      {/* 5. MODERN CATEGORY BOTTOM SHEET SLIDER */}
       {/* ========================================================================= */}
       {showCategorySlider && (
         <div className="fixed inset-0 z-[400] flex flex-col justify-end">
-          {/* Backdrop blur */}
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity animate-fade-in"
             onClick={() => setShowCategorySlider(false)}
           />
 
-          {/* Slide-Up Bottom Sheet Card */}
           <div className="relative z-10 w-full max-w-xl mx-auto bg-white rounded-t-3xl border-t border-slate-200 shadow-2xl p-5 max-h-[85vh] overflow-y-auto animate-slide-up">
-            {/* Drag handle */}
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-3" />
 
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
@@ -1014,7 +1126,6 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               </button>
             </div>
 
-            {/* Categories List Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {categories.map((cat) => {
                 const Icon = cat.icon;
@@ -1066,7 +1177,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 6. INTERACTIVE MAP SLIDE-UP MODAL (Draggable Leaflet & Live Nominatim GPS) */}
+      {/* 6. INTERACTIVE MAP SLIDE-UP MODAL */}
       {/* ========================================================================= */}
       {showLocationMapModal && (
         <div className="fixed inset-0 z-[400] bg-white flex flex-col h-[100dvh] max-h-[100dvh] w-full overflow-hidden animate-fade-in">

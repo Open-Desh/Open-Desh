@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  HelpCircle,
   Scale,
   FileText,
   Building,
@@ -12,53 +11,12 @@ import {
   BookOpen,
   CheckCircle2,
   AlertCircle,
-  Send,
-  MessageSquare,
-  Sparkles,
-  Loader2,
-  Bot,
+  HelpCircle,
 } from "lucide-react";
 
 export const HelpView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-
-  // AI Legal Advisor State
-  const [aiQuestion, setAiQuestion] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  const [aiSource, setAiSource] = useState<string | null>(null);
-
-  const handleAskAi = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiQuestion.trim() || aiLoading) return;
-
-    setAiLoading(true);
-    setAiAnswer(null);
-
-    try {
-      const res = await fetch("/api/gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: aiQuestion.trim(),
-          taskType: "legal_advisor",
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAiAnswer(data.reply || "No response received.");
-        setAiSource(data.source || "gemini");
-      } else {
-        setAiAnswer("क्षमा करें, AI सलाहकार से जुड़ने में समस्या हुई। कृपया कुछ समय बाद पुनः प्रयास करें।");
-      }
-    } catch (err) {
-      setAiAnswer("नेटवर्क त्रुटि: कृपया अपना इंटरनेट कनेक्शन जांचें।");
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const categories = [
     "All",
@@ -125,7 +83,7 @@ export const HelpView: React.FC = () => {
       steps: [
         "Capture multi-angle high-resolution photographs with location metadata enabled.",
         "Record physical measurements (e.g. crater depth, pipe breach diameter) using visible reference points.",
-        "Tag the supervising department (@PWD, @JalBoard, @MCD) and elected representative.",
+        "Tag the supervising department (@PWD, @JalBoard) and elected representative.",
         "Monitor the 4-stage resolution bar on Open Desh from Open to Department Acknowledged, In Progress, and Verified Resolved.",
       ],
       legalRef: "Open Desh Transparent Public Audit Standard",
@@ -152,107 +110,38 @@ export const HelpView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-              Civic Rights, RTI & AI Legal Guide
+              Civic Rights, RTI & SLA Guide
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Open Voice, Open Desh — Citizen statutory laws, grievance charters, and AI legal consultation.
+              Open Voice, Open Desh — Citizen statutory laws, grievance charters, and civic handbook.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Interactive Civic AI Legal Advisor Box */}
-      <div className="bg-gradient-to-br from-blue-900 to-slate-900 rounded-2xl p-5 text-white shadow-md border border-blue-800/60 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-inner">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-extrabold tracking-tight">Civic AI Legal Advisor</h2>
-                <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5 text-blue-300" />
-                  Gemini Powered
-                </span>
-              </div>
-              <p className="text-[11px] text-blue-200/80 mt-0.5">
-                RTI Act 2005, CPGRAMS, Municipal Act, and Department Jurisdiction Guidance
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleAskAi} className="space-y-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={aiQuestion}
-              onChange={(e) => setAiQuestion(e.target.value)}
-              placeholder="Ask anything: 'Sadak 3 saal se nahi bani, kiske khilaf RTI dalu?'..."
-              disabled={aiLoading}
-              className="w-full text-xs sm:text-sm pl-4 pr-24 py-3 bg-white/10 border border-white/20 rounded-xl focus:outline-none focus:border-blue-400 focus:bg-white/15 text-white placeholder:text-slate-300 transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!aiQuestion.trim() || aiLoading}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white text-xs font-black rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              {aiLoading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Thinking...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-3 h-3" />
-                  <span>Ask AI</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-
-        {aiAnswer && (
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/15 text-xs sm:text-sm text-slate-100 space-y-2 animate-fadeIn">
-            <div className="flex items-center justify-between text-[11px] text-blue-200 pb-2 border-b border-white/10 font-bold">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                Legal Guidance & Action Plan:
-              </span>
-              <span className="text-[10px] text-slate-300 bg-white/10 px-2 py-0.5 rounded">
-                Source: {aiSource}
-              </span>
-            </div>
-            <div className="whitespace-pre-wrap leading-relaxed text-slate-100 font-normal text-xs sm:text-sm">
-              {aiAnswer}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Search & Categories */}
+      {/* Search and Category Filters */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search RTI drafting guides, municipal SLAs, acts, or government helplines..."
-            className="w-full text-xs sm:text-sm pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-900 transition-colors"
+            placeholder="Search RTI drafting, statutory timelines, PWD standards, helplines..."
+            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white transition-all placeholder:text-slate-400 font-medium"
           />
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+        {/* Category Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                 selectedCategory === cat
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
               }`}
             >
               {cat}
@@ -261,53 +150,93 @@ export const HelpView: React.FC = () => {
         </div>
       </div>
 
-      {/* Content Cards */}
-      <div className="space-y-4">
-        {filteredTopics.map((topic) => (
-          <article
-            key={topic.id}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-3.5 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-black uppercase text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
-                {topic.category}
-              </span>
-              <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-                Statutory Guide
-              </span>
-            </div>
+      {/* Topics List */}
+      <div className="space-y-3">
+        {filteredTopics.length > 0 ? (
+          filteredTopics.map((topic) => (
+            <div
+              key={topic.id}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3 hover:border-blue-200 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200/60">
+                      {topic.category}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-slate-400" />
+                      {topic.legalRef}
+                    </span>
+                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                    {topic.title}
+                  </h3>
+                </div>
+              </div>
 
-            <div>
-              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 leading-snug">
-                {topic.title}
-              </h2>
-              <p className="text-xs text-slate-600 leading-relaxed mt-1">{topic.description}</p>
-            </div>
+              <p className="text-xs text-slate-600 leading-relaxed font-normal">
+                {topic.description}
+              </p>
 
-            {/* Actionable Steps */}
-            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-2">
-              <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wide block">
-                Standard Action Protocol & Guidelines:
-              </span>
-              <ul className="space-y-1.5">
-                {topic.steps.map((step, idx) => (
-                  <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ul>
+              {/* Action Steps */}
+              <div className="bg-slate-50/80 border border-slate-100 rounded-xl p-3 space-y-1.5">
+                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  Key Protocols & Procedures
+                </h4>
+                <ul className="space-y-1 text-xs text-slate-600 list-disc list-inside">
+                  {topic.steps.map((step, idx) => (
+                    <li key={idx} className="leading-relaxed">
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
+          ))
+        ) : (
+          <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-2">
+            <AlertCircle className="w-8 h-8 text-slate-400 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800">No Legal Topics Found</h3>
+            <p className="text-xs text-slate-500">
+              Try searching with different terms like "RTI", "SLA", "PWD", or "Helplines".
+            </p>
+          </div>
+        )}
+      </div>
 
-            {/* Legal Reference Footer */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span className="font-semibold text-[11px]">
-                Statute Reference: <strong className="text-blue-700 font-extrabold">{topic.legalRef}</strong>
-              </span>
-            </div>
-          </article>
-        ))}
+      {/* Emergency Helpline Quick Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Phone className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-slate-900">Anti-Corruption Helpline</h4>
+            <p className="text-xs font-black text-amber-600 mt-0.5">1064 / 1800-11-0180</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Building className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-slate-900">CPGRAMS Grievance</h4>
+            <p className="text-xs font-black text-blue-600 mt-0.5">pgportal.gov.in (1800-11-4000)</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-slate-900">National Emergency</h4>
+            <p className="text-xs font-black text-rose-600 mt-0.5">112 (Police, Fire, Ambulance)</p>
+          </div>
+        </div>
       </div>
     </div>
   );

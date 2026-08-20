@@ -151,7 +151,9 @@ export type IssueCategory =
   | "Electricity"
   | "Sanitation"
   | "Environment"
-  | "Public Transport";
+  | "Public Transport"
+  | "Health"
+  | "Other";
 
 export interface LocationGeo {
   lat: number;
