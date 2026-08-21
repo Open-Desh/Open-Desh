@@ -40,10 +40,14 @@ import {
   refineCivicReportTextWithAI,
   determineResponsibleAuthorities,
 } from "../lib/aiService.ts";
+import { cleanReportText } from "../utils/reportUtils.ts";
 
 interface ComposeGrievanceViewProps {
   userProfile: UserProfile;
   leaders: Leader[];
+  initialText?: string;
+  initialMention?: string;
+  initialCategory?: IssueCategory;
   onCancel: () => void;
   onSubmit: (reportData: {
     text: string;
@@ -61,12 +65,22 @@ interface ComposeGrievanceViewProps {
 export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   userProfile,
   leaders,
+  initialText = "",
+  initialMention,
+  initialCategory,
   onCancel,
   onSubmit,
 }) => {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => {
+    if (initialText) return initialText;
+    if (initialMention) {
+      const cleanTag = initialMention.startsWith("@") ? initialMention : `@${initialMention}`;
+      return `${cleanTag} `;
+    }
+    return "";
+  });
   const [originalRawText, setOriginalRawText] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<IssueCategory>("Infrastructure");
+  const [selectedCategory, setSelectedCategory] = useState<IssueCategory>(initialCategory || "Infrastructure");
   const [urgencyLevel, setUrgencyLevel] = useState<"Normal" | "High Priority" | "Critical Emergency">("Normal");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isAIPolishing, setIsAIPolishing] = useState(false);
@@ -96,7 +110,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
   // Database Registered Authorities (Fetched from Firestore)
   const [dbAuthorities, setDbAuthorities] = useState<RegisteredAuthority[]>([]);
-  const [activeSelectedTags, setActiveSelectedTags] = useState<string[]>([]);
+  const [activeSelectedTags, setActiveSelectedTags] = useState<string[]>(() => {
+    if (initialMention) {
+      const cleanTag = initialMention.startsWith("@") ? initialMention : `@${initialMention}`;
+      return [cleanTag];
+    }
+    return [];
+  });
 
   // Manual @ mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -277,13 +297,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     const lastAtIndex = textBeforeCursor.lastIndexOf("@");
 
     if (lastAtIndex !== -1) {
-      const beforeAt = text.slice(0, lastAtIndex);
-      const newText = `${beforeAt}@${auth.username} ${textAfterCursor}`;
-      setText(newText);
+      const beforeAt = text.slice(0, lastAtIndex).trimEnd();
       const tag = `@${auth.username}`;
       if (!activeSelectedTags.includes(tag)) {
         setActiveSelectedTags((prev) => [...prev, tag]);
       }
+      const newText = beforeAt ? `${beforeAt} ${textAfterCursor.trimStart()}` : textAfterCursor.trimStart();
+      setText(newText.trim());
       setMentionQuery(null);
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -400,41 +420,44 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       }
 
       // Collect all tagged mentions from both activeSelectedTags and manual @ tags in text
-      const extractedManualMentions = (fullReportText.match(/@([a-zA-Z0-9_]+)/g) || []);
+      const extractedManualMentions = (fullReportText.match(/@+([a-zA-Z0-9_]+)/g) || []);
       const allMentionedTags = Array.from(
         new Set([...activeSelectedTags, ...extractedManualMentions])
       );
 
-      // Verify every tag strictly against registered database profiles
+      // Verify every tag strictly against registered database profiles (dbAuthorities and leaders)
       const taggedOfficers: string[] = [];
       const taggedLeaders: string[] = [];
 
       allMentionedTags.forEach((tag) => {
-        const cleanHandle = tag.replace(/^@/, "").toLowerCase();
-        const matched = dbAuthorities.find(
-          (a) => a.username.toLowerCase() === cleanHandle
+        const cleanH = tag.replace(/^@+/, "").toLowerCase();
+        // 1. Check registered departments / authorities in database
+        const matchedDept = dbAuthorities.find(
+          (a) => a.username.replace(/^@+/, "").toLowerCase() === cleanH
         );
-        if (matched) {
-          if (matched.category === "department") {
-            taggedOfficers.push(`@${matched.username}`);
-          } else if (matched.category === "representative") {
-            taggedLeaders.push(`@${matched.username}`);
+        // 2. Check elected leaders / representatives in database
+        const matchedLeader = leaders.find(
+          (l) => l.username.replace(/^@+/, "").toLowerCase() === cleanH
+        );
+
+        if (matchedDept) {
+          const normalizedHandle = `@${matchedDept.username.replace(/^@+/, "")}`;
+          if (matchedDept.category === "department") {
+            if (!taggedOfficers.includes(normalizedHandle)) taggedOfficers.push(normalizedHandle);
+          } else {
+            if (!taggedLeaders.includes(normalizedHandle)) taggedLeaders.push(normalizedHandle);
           }
+        } else if (matchedLeader) {
+          const normalizedHandle = `@${matchedLeader.username.replace(/^@+/, "")}`;
+          if (!taggedLeaders.includes(normalizedHandle)) taggedLeaders.push(normalizedHandle);
         }
       });
 
-      // Add tag mentions in text if not present
-      const tagsToAppend = allMentionedTags.filter(
-        (t) =>
-          !fullReportText.includes(t) &&
-          dbAuthorities.some((a) => `@${a.username.toLowerCase()}` === t.toLowerCase())
-      );
-      if (tagsToAppend.length > 0) {
-        fullReportText = `${fullReportText}\n\nCc: ${tagsToAppend.join(" ")}`;
-      }
+      // Clean all manual @tags and Cc blocks from the text so they only live cleanly in verified pills below
+      let cleanContentText = cleanReportText(fullReportText);
 
       await onSubmit({
-        text: fullReportText || `${selectedCategory} issue reported at ${resolvedAddress}`,
+        text: cleanContentText || `${selectedCategory} issue reported at ${resolvedAddress}`,
         category: selectedCategory,
         imageUrl: images[0] || undefined,
         images: images,

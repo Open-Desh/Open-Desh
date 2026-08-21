@@ -142,11 +142,11 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     userProfile.category || "citizen"
   );
 
-  // Debounced live username availability check
+  // Debounced live username availability check (Max 15 characters)
   const handleUsernameChange = (val: string) => {
     const rawVal = val.replace(/^@/, "").toLowerCase().trim();
-    // Allow typing only lowercase alphanumeric and underscore
-    const sanitizedVal = rawVal.replace(/[^a-z0-9_]/g, "");
+    // Allow typing only lowercase alphanumeric and underscore, capped at 15 characters
+    const sanitizedVal = rawVal.replace(/[^a-z0-9_]/g, "").slice(0, 15);
     setUsername(sanitizedVal);
     setUsernameSuccess(false);
 
@@ -164,8 +164,8 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
       return;
     }
 
-    if (sanitizedVal.length > 30) {
-      setUsernameError("Username cannot exceed 30 characters.");
+    if (sanitizedVal.length > 15) {
+      setUsernameError("Username cannot exceed 15 characters.");
       return;
     }
 
@@ -387,11 +387,19 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (usernameError || isCheckingUsername) return;
+
+    const cleanUsername = username.trim().toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, "").slice(0, 15);
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setUsernameError("Username must be between 3 and 15 characters.");
+      return;
+    }
+
     setSaving(true);
     try {
       const updatedData: Partial<UserProfile> = {
-        fullName: fullName.trim() || userProfile.fullName,
-        username: userProfile.username,
+        fullName: (fullName.trim() || userProfile.fullName).slice(0, 15),
+        username: cleanUsername,
         location: location.trim(),
         age: age.trim() ? parseInt(age, 10) : undefined,
         bio: bio.trim(),
@@ -497,7 +505,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         <button
           id="edit-profile-save-header-btn"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || Boolean(usernameError) || isCheckingUsername}
           className="px-5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
         >
           {saving ? (
@@ -571,30 +579,99 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         onSubmit={handleSave}
         className="flex-1 px-4 sm:px-6 py-2 space-y-4 pb-24"
       >
-        {/* Full Name */}
+        {/* Full Name (Max 15 Characters) */}
         <div className="border border-slate-200 rounded-xl px-3.5 py-2 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 transition-all bg-white">
-          <label className="text-[11px] font-bold text-slate-500 block">
-            {category === "department"
-              ? "Official Name / Department Head"
-              : category === "business"
-              ? "Full Name / Executive Name"
-              : "Name"}
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-500 block">
+              {category === "department"
+                ? "Official Name / Department Head"
+                : category === "business"
+                ? "Full Name / Executive Name"
+                : "Name"}
+            </label>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {fullName.length}/15
+            </span>
+          </div>
           <input
             id="edit-fullname-input"
             type="text"
             required
+            maxLength={15}
             value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            onChange={(e) => setFullName(e.target.value.slice(0, 15))}
             placeholder={
               category === "department"
                 ? "e.g. Officer in Charge"
                 : category === "business"
                 ? "Your Name / Executive Name"
-                : "Your full name"
+                : "Your name"
             }
             className="w-full text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none bg-transparent pt-0.5"
           />
+        </div>
+
+        {/* Username / Handle (Max 15 Characters & Live Uniqueness Check) */}
+        <div
+          className={`border rounded-xl px-3.5 py-2 transition-all bg-white ${
+            usernameError
+              ? "border-rose-300 focus-within:border-rose-500 focus-within:ring-1 focus-within:ring-rose-500 bg-rose-50/20"
+              : usernameSuccess
+              ? "border-emerald-300 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 bg-emerald-50/20"
+              : "border-slate-200 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+              <span>User name</span>
+              <span className="text-slate-400 font-normal">(Unique handle)</span>
+            </label>
+            <span
+              className={`text-[10px] font-semibold ${
+                username.length >= 15 ? "text-amber-600 font-bold" : "text-slate-400"
+              }`}
+            >
+              {username.length}/15
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="text-sm font-bold text-slate-400 select-none">@</span>
+            <input
+              id="edit-username-input"
+              type="text"
+              required
+              maxLength={15}
+              value={username}
+              onChange={(e) => handleUsernameChange(e.target.value)}
+              placeholder="username"
+              className="w-full text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none bg-transparent lowercase"
+            />
+            {isCheckingUsername && (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+            )}
+            {usernameSuccess && !isCheckingUsername && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            {usernameError && !isCheckingUsername && (
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            )}
+          </div>
+
+          {/* Helper / Error Feedback Text */}
+          {usernameError ? (
+            <p className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1 leading-tight">
+              <span>{usernameError}</span>
+            </p>
+          ) : usernameSuccess ? (
+            <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-1 leading-tight">
+              <span>@{username} is available!</span>
+            </p>
+          ) : (
+            <p className="text-[10px] text-slate-400 mt-1">
+              Must be unique, 3-15 chars (letters, numbers, underscore).
+            </p>
+          )}
         </div>
 
         {/* Bio */}

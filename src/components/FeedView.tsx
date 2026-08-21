@@ -14,9 +14,15 @@ import {
   AtSign,
   Share,
   CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import { ReportIssue, UserProfile, IssueCategory } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import {
+  getCleanAuthorUsername,
+  isReportAuthorVerified,
+  cleanReportText,
+} from "../utils/reportUtils.ts";
 
 interface FeedViewProps {
   reports: ReportIssue[];
@@ -120,7 +126,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
           const isReReported = report.reReportedBy?.includes(userProfile.id);
           const isSaved = userProfile.savedReports?.includes(report.id);
           const isDeptUser = userProfile.category === "department";
-          const hasDeptClaimed = Boolean(report.claimedByDept);
+          const hasDeptClaimed = Boolean(
+            report.claimedByDept ||
+            report.claimedByOfficer ||
+            (typeof report.departmentStatusLevel === "number" && report.departmentStatusLevel > 0)
+          );
 
           // Multi-image list
           const imageList =
@@ -157,23 +167,33 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <h3
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onSelectUser) onSelectUser(report.authorId);
-                        }}
-                        className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
-                        title={report.authorName}
-                      >
-                        <span>{report.authorName}</span>
-                        {(report.authorBadge || report.authorCategory) && (
-                          <CategoryVerifiedTick
-                            category={report.authorCategory}
-                            size="xs"
-                          />
-                        )}
-                      </h3>
-                      {report.authorBadge && (
+                      {(() => {
+                        const cleanUsername = getCleanAuthorUsername(
+                          report.authorUsername,
+                          report.authorName
+                        );
+                        const isVerified = isReportAuthorVerified(report);
+
+                        return (
+                          <h3
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onSelectUser) onSelectUser(report.authorId);
+                            }}
+                            className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
+                            title={cleanUsername}
+                          >
+                            <span>{cleanUsername}</span>
+                            {isVerified && (
+                              <CategoryVerifiedTick
+                                category={report.authorCategory}
+                                size="xs"
+                              />
+                            )}
+                          </h3>
+                        );
+                      })()}
+                      {report.authorBadge && isReportAuthorVerified(report) && (
                         <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
                           {report.authorBadge}
                         </span>
@@ -204,7 +224,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
               {/* Text Description */}
               <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
-                {report.text}
+                {cleanReportText(report.text)}
               </p>
 
               {/* Structured Parameters Quick Badge Bar */}
@@ -275,28 +295,45 @@ export const FeedView: React.FC<FeedViewProps> = ({
               )}
 
               {/* Tagged Authorities Routing Chips */}
-              {(report.taggedOfficers?.length || report.taggedLeaders?.length) ? (
-                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                  {report.taggedOfficers?.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 font-extrabold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full"
-                    >
-                      <Building2 className="w-3 h-3 text-blue-600" />
-                      {tag}
-                    </span>
-                  ))}
-                  {report.taggedLeaders?.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full"
-                    >
-                      <AtSign className="w-3 h-3 text-indigo-600" />
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+              {(() => {
+                const officers = (report.taggedOfficers || []).map((t) => t.replace(/^@+/, ""));
+                const leaders = (report.taggedLeaders || []).map((t) => t.replace(/^@+/, ""));
+                const uniqueOfficers = Array.from(new Set(officers)).filter(Boolean);
+                const uniqueLeaders = Array.from(new Set(leaders)).filter(Boolean);
+
+                if (uniqueOfficers.length === 0 && uniqueLeaders.length === 0) return null;
+
+                return (
+                  <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
+                    {uniqueOfficers.map((tag) => (
+                      <span
+                        key={tag}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectUser) onSelectUser(tag);
+                        }}
+                        className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:underline border border-blue-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                      >
+                        <Building2 className="w-3 h-3 text-blue-600" />
+                        @{tag}
+                      </span>
+                    ))}
+                    {uniqueLeaders.map((tag) => (
+                      <span
+                        key={tag}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectUser) onSelectUser(tag);
+                        }}
+                        className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:underline border border-indigo-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                      >
+                        <AtSign className="w-3 h-3 text-indigo-600" />
+                        @{tag}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Statutory Triage Information Banner */}
               {report.aiTriage && (
@@ -316,53 +353,81 @@ export const FeedView: React.FC<FeedViewProps> = ({
               )}
 
               {/* Official Department Action Progress Card */}
-              {(hasDeptClaimed || isDeptUser) && (
-                <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                        Action Card: {report.claimedByDept || primaryDeptTag}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                      {hasDeptClaimed ? `Stage ${currentDeptLevel}/3: ${report.status}` : "Pending Dept Action"}
+              <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                      <span>Official Action:</span>
+                      {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const target = report.claimedByOfficer || report.claimedByDept || "";
+                            const clean = target.replace(/^@+/, "");
+                            if (onSelectUser && clean) onSelectUser(clean);
+                          }}
+                          className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
+                        >
+                          <span>
+                            @{report.claimedByOfficer
+                              ? report.claimedByOfficer.replace(/^@+/, "")
+                              : report.claimedByDept?.replace(/^@+/, "")}
+                          </span>
+                          <ExternalLink className="w-3 h-3 text-blue-600" />
+                        </button>
+                      ) : (
+                        <span className="text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px] font-extrabold normal-case">
+                          Waiting
+                        </span>
+                      )}
                     </span>
                   </div>
-
-                  {/* 4-Stage Progress Timeline */}
-                  <div className="grid grid-cols-4 gap-1.5 pt-1">
-                    {[
-                      { level: 0, label: "Triaged" },
-                      { level: 1, label: "Inspection" },
-                      { level: 2, label: "Field Work" },
-                      { level: 3, label: "Resolved" },
-                    ].map((step) => {
-                      const isComplete = currentDeptLevel >= step.level && hasDeptClaimed;
-                      const isCurrent = currentDeptLevel === step.level && hasDeptClaimed;
-                      return (
-                        <div
-                          key={step.level}
-                          className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
-                            isCurrent
-                              ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
-                              : isComplete
-                              ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
-                              : "bg-white text-slate-400 border-slate-200 font-medium"
-                          }`}
-                        >
-                          <span className="text-[10px] uppercase tracking-tighter block leading-tight">
-                            {step.label}
-                          </span>
-                          <span className="text-[9px] mt-0.5">
-                            {isComplete ? "✓" : `Step ${step.level + 1}`}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <span
+                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                      hasDeptClaimed
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {hasDeptClaimed
+                      ? `Stage ${currentDeptLevel}/3: ${report.status}`
+                      : "Waiting"}
+                  </span>
                 </div>
-              )}
+
+                {/* 4-Stage Progress Timeline */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  {[
+                    { level: 0, label: "Triaged" },
+                    { level: 1, label: "Inspection" },
+                    { level: 2, label: "Field Work" },
+                    { level: 3, label: "Resolved" },
+                  ].map((step) => {
+                    const isComplete = currentDeptLevel >= step.level && hasDeptClaimed;
+                    const isCurrent = currentDeptLevel === step.level && hasDeptClaimed;
+                    return (
+                      <div
+                        key={step.level}
+                        className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
+                          isCurrent
+                            ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
+                            : isComplete
+                            ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
+                            : "bg-white text-slate-400 border-slate-200 font-medium"
+                        }`}
+                      >
+                        <span className="text-[10px] uppercase tracking-tighter block leading-tight">
+                          {step.label}
+                        </span>
+                        <span className="text-[9px] mt-0.5">
+                          {isComplete ? "✓" : `Step ${step.level + 1}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               {/* Action Buttons Row (Twitter/X style) */}
               <div className="flex items-center justify-between pt-1 text-slate-500 text-xs border-t border-slate-100">

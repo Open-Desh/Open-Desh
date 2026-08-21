@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import {
+  getCleanAuthorUsername,
+  isReportAuthorVerified,
+  cleanReportText,
+} from "../utils/reportUtils.ts";
 
 interface BookmarksViewProps {
   bookmarkedReports: ReportIssue[];
@@ -127,15 +132,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                         onClick={() => onSelectUser && onSelectUser(reply.authorId)}
                         className="font-extrabold text-slate-900 cursor-pointer hover:underline flex items-center gap-1"
                       >
-                        <span>{reply.authorName}</span>
-                        {(reply.authorBadge || reply.authorCategory) && (
+                        <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
+                        {isReportAuthorVerified(reply) && (
                           <CategoryVerifiedTick
                             category={reply.authorCategory}
                             size="xs"
                           />
                         )}
                       </span>
-                      {reply.authorBadge && (
+                      {reply.authorBadge && isReportAuthorVerified(reply) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                             reply.isOfficialIntervention
@@ -279,15 +284,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                           onClick={() => onSelectUser && onSelectUser(report.authorId)}
                           className="font-extrabold text-slate-900 text-sm hover:underline cursor-pointer truncate flex items-center gap-1"
                         >
-                          <span>{report.authorName}</span>
-                          {(report.authorBadge || report.authorCategory) && (
+                          <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
+                          {isReportAuthorVerified(report) && (
                             <CategoryVerifiedTick
                               category={report.authorCategory}
                               size="xs"
                             />
                           )}
                         </span>
-                        {report.authorBadge && (
+                        {report.authorBadge && isReportAuthorVerified(report) && (
                           <span
                             className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                               report.authorCategory === "department"
@@ -301,7 +306,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                           </span>
                         )}
                         <span className="text-xs text-slate-400 truncate">
-                          @{report.authorUsername}
+                          @{getCleanAuthorUsername(report.authorUsername, report.authorName)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
@@ -334,7 +339,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
                 {/* Grievance Post Content Text */}
                 <p className="text-slate-800 text-sm sm:text-[15px] leading-relaxed break-words font-normal">
-                  {report.text}
+                  {cleanReportText(report.text)}
                 </p>
 
                 {/* Structured Audit Parameters (if present) */}

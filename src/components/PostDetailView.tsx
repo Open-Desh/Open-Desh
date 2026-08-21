@@ -27,6 +27,11 @@ import {
 } from "lucide-react";
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import {
+  getCleanAuthorUsername,
+  isReportAuthorVerified,
+  cleanReportText,
+} from "../utils/reportUtils.ts";
 
 interface PostDetailViewProps {
   report: ReportIssue;
@@ -89,7 +94,11 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   const isReReported = report.reReportedBy?.includes(userProfile.id);
   const isSaved = userProfile.savedReports?.includes(report.id);
   const isDeptUser = userProfile.category === "department";
-  const hasDeptClaimed = Boolean(report.claimedByDept);
+  const hasDeptClaimed = Boolean(
+    report.claimedByDept ||
+    report.claimedByOfficer ||
+    (typeof report.departmentStatusLevel === "number" && report.departmentStatusLevel > 0)
+  );
   const hasTaggedDept = Boolean(report.taggedOfficers && report.taggedOfficers.length > 0);
 
   // Check if current user is tagged in the report's taggedOfficers or is the claiming authority
@@ -350,15 +359,15 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                         }}
                         className="font-extrabold text-sm text-slate-900 cursor-pointer hover:underline truncate flex items-center gap-1"
                       >
-                        <span>{reply.authorName}</span>
-                        {(reply.authorBadge || reply.authorCategory) && (
+                        <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
+                        {isReportAuthorVerified(reply) && (
                           <CategoryVerifiedTick
                             category={reply.authorCategory}
                             size="xs"
                           />
                         )}
                       </span>
-                      {reply.authorBadge && (
+                      {reply.authorBadge && isReportAuthorVerified(reply) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
                             reply.isOfficialIntervention
@@ -659,19 +668,29 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h2
-                  onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                  className="text-base font-extrabold text-slate-900 cursor-pointer hover:underline leading-tight flex items-center gap-1"
-                >
-                  <span>{report.authorName}</span>
-                  {(report.authorBadge || report.authorCategory) && (
-                    <CategoryVerifiedTick
-                      category={report.authorCategory}
-                      size="sm"
-                    />
-                  )}
-                </h2>
-                {report.authorBadge && (
+                {(() => {
+                  const cleanUsername = getCleanAuthorUsername(
+                    report.authorUsername,
+                    report.authorName
+                  );
+                  const isVerified = isReportAuthorVerified(report);
+
+                  return (
+                    <h2
+                      onClick={() => onSelectUser && onSelectUser(report.authorId)}
+                      className="text-base font-extrabold text-slate-900 cursor-pointer hover:underline leading-tight flex items-center gap-1"
+                    >
+                      <span>{cleanUsername}</span>
+                      {isVerified && (
+                        <CategoryVerifiedTick
+                          category={report.authorCategory}
+                          size="sm"
+                        />
+                      )}
+                    </h2>
+                  );
+                })()}
+                {report.authorBadge && isReportAuthorVerified(report) && (
                   <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
                     {report.authorBadge}
                   </span>
@@ -685,7 +704,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
 
               {/* Username + Top-Shifted Location & Timestamp */}
               <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 mt-0.5">
-                <span>@{report.authorUsername || "citizen_user"}</span>
+                <span>@{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
                 <span>·</span>
                 <span className="text-slate-400">{report.timestamp || "Just now"}</span>
                 {report.location?.city && (
@@ -717,7 +736,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
 
         {/* Post Text Description */}
         <div className="text-base text-slate-900 leading-relaxed whitespace-pre-line font-normal">
-          {report.text}
+          {cleanReportText(report.text)}
         </div>
 
         {/* Structured Audit Parameters */}
@@ -787,37 +806,40 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           </div>
         )}
 
-        {/* Tagged Authorities Chips (Location moved to top header) */}
-        {report.taggedOfficers?.length || report.taggedLeaders?.length ? (
-          <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
-            {report.taggedOfficers?.map((tag) => {
-              const cleanTag = tag.replace(/^@/, "");
-              return (
+        {/* Tagged Authorities Chips */}
+        {(() => {
+          const officers = (report.taggedOfficers || []).map((t) => t.replace(/^@+/, ""));
+          const leaders = (report.taggedLeaders || []).map((t) => t.replace(/^@+/, ""));
+          const uniqueOfficers = Array.from(new Set(officers)).filter(Boolean);
+          const uniqueLeaders = Array.from(new Set(leaders)).filter(Boolean);
+
+          if (uniqueOfficers.length === 0 && uniqueLeaders.length === 0) return null;
+
+          return (
+            <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
+              {uniqueOfficers.map((cleanTag) => (
                 <span
-                  key={tag}
+                  key={cleanTag}
                   onClick={() => onSelectUser && onSelectUser(cleanTag)}
                   className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:underline border border-blue-200/60 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
                 >
                   <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                  {tag}
+                  @{cleanTag}
                 </span>
-              );
-            })}
-            {report.taggedLeaders?.map((tag) => {
-              const cleanTag = tag.replace(/^@/, "");
-              return (
+              ))}
+              {uniqueLeaders.map((cleanTag) => (
                 <span
-                  key={tag}
+                  key={cleanTag}
                   onClick={() => onSelectUser && onSelectUser(cleanTag)}
                   className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:underline border border-indigo-200/60 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
                 >
                   <AtSign className="w-3.5 h-3.5 text-indigo-600" />
-                  {tag}
+                  @{cleanTag}
                 </span>
-              );
-            })}
-          </div>
-        ) : null}
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Statutory Triage Card */}
         {report.aiTriage && (
@@ -838,239 +860,240 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
         )}
 
         {/* 4-Stage Official Progress Card */}
-        {(hasDeptClaimed || hasTaggedDept || isDeptUser) && (
-          <div className="bg-slate-50 border border-blue-200 rounded-2xl p-4 space-y-3 mt-2 shadow-2xs">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                <span className="text-xs font-black text-slate-900 uppercase flex items-center gap-1">
-                  Official Action:{" "}
-                  {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
-                    <button
-                      onClick={() => {
-                        const targetId = report.claimedByOfficer || report.claimedByDept || "";
-                        const cleanId = targetId.replace(/^@/, "");
-                        onSelectUser && onSelectUser(cleanId);
-                      }}
-                      className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer"
-                    >
-                      <span>
-                        {report.claimedByOfficer?.startsWith("@")
-                          ? report.claimedByOfficer
-                          : `@${report.claimedByOfficer || report.claimedByDept}`}
-                      </span>
-                      <ExternalLink className="w-3 h-3 text-blue-600" />
-                    </button>
-                  ) : (
-                    <span className="text-amber-600 font-bold">Waiting</span>
-                  )}
-                </span>
-              </div>
-              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                {hasDeptClaimed
-                  ? `Stage ${currentDeptLevel}/3: ${report.status}`
-                  : "Pending Dept Action"}
-              </span>
-            </div>
-
-            {/* 4 Steps Indicator */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { level: 0, label: "Triaged" },
-                { level: 1, label: "Inspection" },
-                { level: 2, label: "Field Work" },
-                { level: 3, label: "Resolved" },
-              ].map((step) => {
-                const isComplete =
-                  currentDeptLevel >= step.level && hasDeptClaimed;
-                const isCurrent =
-                  currentDeptLevel === step.level && hasDeptClaimed;
-                return (
-                  <div
-                    key={step.level}
-                    className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
-                      isCurrent
-                        ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
-                        : isComplete
-                        ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
-                        : "bg-white text-slate-400 border-slate-200 font-medium"
-                    }`}
-                  >
-                    <span className="text-[10px] uppercase block">
-                      {step.label}
-                    </span>
-                    <span className="text-[9px] mt-0.5">
-                      {isComplete ? "✓" : `Step ${step.level + 1}`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {report.departmentNotes && (
-              <div className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 space-y-0.5">
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
-                  <span>OFFICIAL DEPARTMENT REMARKS</span>
-                  <span>{report.claimedAt || "Verified"}</span>
-                </div>
-                <p className="text-slate-700">{report.departmentNotes}</p>
-              </div>
-            )}
-
-            {/* Resolved Proof Image Display */}
-            {report.resolvedImageUrl && (
-              <div className="bg-white border border-emerald-200 rounded-xl p-2.5 space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-bold text-emerald-700">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    OFFICIAL COMPLETION PROOF
-                  </span>
-                  {canCompare && (
-                    <button
-                      onClick={() => setShowComparisonModal(true)}
-                      className="text-blue-600 hover:underline flex items-center gap-0.5 text-[10px] font-bold cursor-pointer"
-                    >
-                      <Columns className="w-3 h-3" />
-                      <span>Compare</span>
-                    </button>
-                  )}
-                </div>
-                <img
-                  src={report.resolvedImageUrl}
-                  alt="Work Done Proof"
-                  className="w-full max-h-48 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-95"
-                  onClick={() => setShowComparisonModal(true)}
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            )}
-
-            {/* Department Actions: ONLY visible if user is a tagged/assigned department account */}
-            {isTaggedDepartmentOfficer ? (
-              <div className="pt-1 space-y-2">
-                {!hasDeptClaimed ? (
+        <div className="bg-slate-50 border border-blue-200 rounded-2xl p-4 space-y-3 mt-2 shadow-2xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
+                <span>Official Action:</span>
+                {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
                   <button
-                    onClick={() =>
-                      onUpdateStatus(
-                        report.id,
-                        1,
-                        `Acknowledged by @${userProfile.username || userProfile.fullName}. Official investigation initiated.`
-                      )
-                    }
-                    className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                    onClick={() => {
+                      const targetId = report.claimedByOfficer || report.claimedByDept || "";
+                      const cleanId = targetId.replace(/^@+/, "");
+                      onSelectUser && onSelectUser(cleanId);
+                    }}
+                    className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
                   >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Take Official Action & Acknowledge Grievance</span>
+                    <span>
+                      @{report.claimedByOfficer
+                        ? report.claimedByOfficer.replace(/^@+/, "")
+                        : report.claimedByDept?.replace(/^@+/, "")}
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-blue-600" />
                   </button>
                 ) : (
-                  <div className="space-y-2">
-                    {/* Optional Proof Image Upload for Final Stage (Step 3 -> Step 4 / Complete) */}
-                    {currentDeptLevel >= 2 && currentDeptLevel < 3 && (
-                      <div className="bg-white border border-dashed border-blue-300 rounded-xl p-2.5 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                            <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-                            Upload Completion Proof (Optional)
-                          </span>
-                          {proofImage && (
-                            <button
-                              onClick={() => setProofImage(null)}
-                              className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-
-                        {proofImage ? (
-                          <div className="relative rounded-lg overflow-hidden border border-slate-200">
-                            <img
-                              src={proofImage}
-                              alt="Proof preview"
-                              className="w-full h-28 object-cover"
-                            />
-                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">
-                              Proof Attached
-                            </span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => proofFileInputRef.current?.click()}
-                            className="w-full py-2 bg-slate-50 hover:bg-blue-50 text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <ImageIcon className="w-4 h-4" />
-                            <span>Select After-Fix Photo</span>
-                          </button>
-                        )}
-
-                        <input
-                          ref={proofFileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setProofImage(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Progress Update Note and Next Stage / Complete button */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add official progress update note..."
-                        value={statusUpdateNotes}
-                        onChange={(e) => setStatusUpdateNotes(e.target.value)}
-                        className="flex-1 min-w-0 text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                      />
-                      <button
-                        onClick={() => {
-                          const nextLevel = Math.min(3, currentDeptLevel + 1);
-                          onUpdateStatus(
-                            report.id,
-                            nextLevel,
-                            statusUpdateNotes ||
-                              (nextLevel === 3
-                                ? `Grievance successfully resolved and verified by @${userProfile.username || userProfile.fullName}.`
-                                : `Progress updated to stage ${nextLevel}.`),
-                            proofImage || undefined
-                          );
-                          setStatusUpdateNotes("");
-                          setProofImage(null);
-                        }}
-                        disabled={currentDeptLevel >= 3}
-                        className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shrink-0 cursor-pointer whitespace-nowrap"
-                      >
-                        {currentDeptLevel >= 2 ? "Complete ✓" : "Next Stage →"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              !hasDeptClaimed && (
-                <div className="text-[11px] text-slate-500 bg-white/80 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    Awaiting official response from {primaryDeptTag || "assigned authority"}
+                  <span className="text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px] font-extrabold normal-case">
+                    Waiting
                   </span>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                    SLA Active
+                )}
+              </span>
+            </div>
+            <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+              hasDeptClaimed ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
+            }`}>
+              {hasDeptClaimed
+                ? `Stage ${currentDeptLevel}/3: ${report.status}`
+                : "Waiting"}
+            </span>
+          </div>
+
+          {/* 4 Steps Indicator */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {[
+              { level: 0, label: "Triaged" },
+              { level: 1, label: "Inspection" },
+              { level: 2, label: "Field Work" },
+              { level: 3, label: "Resolved" },
+            ].map((step) => {
+              const isComplete =
+                currentDeptLevel >= step.level && hasDeptClaimed;
+              const isCurrent =
+                currentDeptLevel === step.level && hasDeptClaimed;
+              return (
+                <div
+                  key={step.level}
+                  className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
+                    isCurrent
+                      ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
+                      : isComplete
+                      ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
+                      : "bg-white text-slate-400 border-slate-200 font-medium"
+                  }`}
+                >
+                  <span className="text-[10px] uppercase block">
+                    {step.label}
+                  </span>
+                  <span className="text-[9px] mt-0.5">
+                    {isComplete ? "✓" : `Step ${step.level + 1}`}
                   </span>
                 </div>
-              )
-            )}
+              );
+            })}
           </div>
-        )}
+
+          {report.departmentNotes && (
+            <div className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 space-y-0.5">
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
+                <span>OFFICIAL DEPARTMENT REMARKS</span>
+                <span>{report.claimedAt || "Verified"}</span>
+              </div>
+              <p className="text-slate-700">{report.departmentNotes}</p>
+            </div>
+          )}
+
+          {report.resolvedImageUrl && (
+            <div className="bg-white border border-emerald-200 rounded-xl p-2.5 space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-700">
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  OFFICIAL COMPLETION PROOF
+                </span>
+                {canCompare && (
+                  <button
+                    onClick={() => setShowComparisonModal(true)}
+                    className="text-blue-600 hover:underline flex items-center gap-0.5 text-[10px] font-bold cursor-pointer"
+                  >
+                    <Columns className="w-3 h-3" />
+                    <span>Compare</span>
+                  </button>
+                )}
+              </div>
+              <img
+                src={report.resolvedImageUrl}
+                alt="Work Done Proof"
+                className="w-full max-h-48 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-95"
+                onClick={() => setShowComparisonModal(true)}
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
+
+          {/* Department Actions: ONLY visible if user is a tagged/assigned department account */}
+          {isTaggedDepartmentOfficer ? (
+            <div className="pt-1 space-y-2">
+              {!hasDeptClaimed ? (
+                <button
+                  onClick={() =>
+                    onUpdateStatus(
+                      report.id,
+                      1,
+                      `Acknowledged by @${userProfile.username || userProfile.fullName}. Official investigation initiated.`
+                    )
+                  }
+                  className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Take Official Action & Acknowledge Grievance</span>
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  {/* Optional Proof Image Upload for Final Stage (Step 3 -> Step 4 / Complete) */}
+                  {currentDeptLevel >= 2 && currentDeptLevel < 3 && (
+                    <div className="bg-white border border-dashed border-blue-300 rounded-xl p-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                          <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                          Upload Completion Proof (Optional)
+                        </span>
+                        {proofImage && (
+                          <button
+                            onClick={() => setProofImage(null)}
+                            className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      {proofImage ? (
+                        <div className="relative rounded-lg overflow-hidden border border-slate-200">
+                          <img
+                            src={proofImage}
+                            alt="Proof preview"
+                            className="w-full h-28 object-cover"
+                          />
+                          <span className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">
+                            Proof Attached
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => proofFileInputRef.current?.click()}
+                          className="w-full py-2 bg-slate-50 hover:bg-blue-50 text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                          <span>Select After-Fix Photo</span>
+                        </button>
+                      )}
+
+                      <input
+                        ref={proofFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setProofImage(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Progress Update Note and Next Stage / Complete button */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add official progress update note..."
+                      value={statusUpdateNotes}
+                      onChange={(e) => setStatusUpdateNotes(e.target.value)}
+                      className="flex-1 min-w-0 text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => {
+                        const nextLevel = Math.min(3, currentDeptLevel + 1);
+                        onUpdateStatus(
+                          report.id,
+                          nextLevel,
+                          statusUpdateNotes ||
+                            (nextLevel === 3
+                              ? `Grievance successfully resolved and verified by @${userProfile.username || userProfile.fullName}.`
+                              : `Progress updated to stage ${nextLevel}.`),
+                          proofImage || undefined
+                        );
+                        setStatusUpdateNotes("");
+                        setProofImage(null);
+                      }}
+                      disabled={currentDeptLevel >= 3}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shrink-0 cursor-pointer whitespace-nowrap"
+                    >
+                      {currentDeptLevel >= 2 ? "Complete ✓" : "Next Stage →"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            !hasDeptClaimed && (
+              <div className="text-[11px] text-slate-500 bg-white/80 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  Awaiting official response from {primaryDeptTag || "assigned authority"}
+                </span>
+                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  SLA Active
+                </span>
+              </div>
+            )
+          )}
+        </div>
 
         {/* Action Buttons Row */}
         <div className="flex items-center justify-between pt-2 text-slate-500 text-xs border-t border-slate-100">

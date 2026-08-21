@@ -32,6 +32,12 @@ import {
   UserProfile,
   ThreadedReply,
 } from "../types.ts";
+import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import {
+  getCleanAuthorUsername,
+  isReportAuthorVerified,
+  cleanReportText,
+} from "../utils/reportUtils.ts";
 
 interface SearchHubViewProps {
   reports: ReportIssue[];
@@ -401,11 +407,14 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         />
                         <div>
                           <div className="flex items-center gap-1">
-                            <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
-                              {report.authorName}
-                            </span>
-                            <span className="text-slate-400 font-normal">
-                              @{report.authorUsername}
+                            <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                              <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
+                              {isReportAuthorVerified(report) && (
+                                <CategoryVerifiedTick
+                                  category={report.authorCategory}
+                                  size="xs"
+                                />
+                              )}
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400">
@@ -421,7 +430,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
                     {/* Report Text */}
                     <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
-                      {report.text}
+                      {cleanReportText(report.text)}
                     </p>
 
                     {/* Report Image */}

@@ -22,7 +22,17 @@ import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { NotificationsView } from "./components/NotificationsView.tsx";
 import { initialSeedNotifications } from "./data/seedNotifications.ts";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
-import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  onSnapshot,
+  Unsubscribe,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import {
   getReportsDirect,
   getLeadersDirect,
@@ -35,6 +45,7 @@ import {
   submitLeaderReviewInFirestore,
   submitUserReviewInFirestore,
   updateReportStatusInFirestore,
+  toggleFollowInFirestore,
   seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
@@ -81,6 +92,7 @@ export default function App() {
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
+  const [composeInitialMention, setComposeInitialMention] = useState<string | null>(null);
 
   // Core Data States - defaults to guest citizen initially
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultGuestProfile);
@@ -503,7 +515,8 @@ export default function App() {
       authorUsername: userProfile.username,
       authorAvatar: userProfile.avatarUrl,
       authorCategory: userProfile.category,
-      authorBadge: userProfile.verified ? "Verified Citizen" : undefined,
+      authorVerified: Boolean(userProfile.verified),
+      authorBadge: userProfile.verified ? (userProfile.category === "citizen" ? "Verified Citizen" : undefined) : undefined,
       category: newReportData.category,
       text: newReportData.text,
       imageUrl: newReportData.imageUrl || (newReportData.images && newReportData.images[0]) || "",
@@ -715,7 +728,8 @@ export default function App() {
         authorUsername: userProfile.username,
         authorAvatar: userProfile.avatarUrl,
         authorCategory: userProfile.category,
-        authorBadge: userProfile.verified ? "Citizen" : undefined,
+        authorVerified: Boolean(userProfile.verified),
+        authorBadge: userProfile.verified ? (userProfile.category === "citizen" ? "Verified Citizen" : undefined) : undefined,
         text,
         imageUrl: replyImage || undefined,
         timestamp: "Just now",
@@ -1038,71 +1052,387 @@ export default function App() {
 
   const handleToggleFollow = async (targetUserId: string) => {
     requireAuth(async () => {
+      const cleanTargetId = targetUserId.replace(/^@/, "").trim().toLowerCase();
+      const targetUsername = selectedViewingProfile?.username
+        ? selectedViewingProfile.username.replace(/^@/, "").trim().toLowerCase()
+        : cleanTargetId;
+      const targetDocId = selectedViewingProfile?.id
+        ? selectedViewingProfile.id.replace(/^@/, "").trim().toLowerCase()
+        : cleanTargetId;
+
+      const followingList = userProfile.following || [];
+      const followingNormalizedSet = new Set(
+        followingList.map((f) => f.replace(/^@/, "").trim().toLowerCase())
+      );
+
+      const isCurrentlyFollowing =
+        followingNormalizedSet.has(cleanTargetId) ||
+        (targetUsername ? followingNormalizedSet.has(targetUsername) : false) ||
+        (targetDocId ? followingNormalizedSet.has(targetDocId) : false) ||
+        Boolean(selectedViewingProfile?.isFollowing);
+
+      const nextFollowing = !isCurrentlyFollowing;
+
+      // 1. Optimistic UI update for current user profile
+      const idsToRemove = new Set([
+        cleanTargetId,
+        targetUsername,
+        targetDocId,
+        targetUserId,
+        `@${cleanTargetId}`,
+        `@${targetUsername}`,
+      ]);
+
+      const newFollowing = nextFollowing
+        ? Array.from(
+            new Set([
+              ...followingList,
+              cleanTargetId,
+              ...(targetUsername ? [targetUsername] : []),
+            ])
+          )
+        : followingList.filter(
+            (id) =>
+              !idsToRemove.has(id.replace(/^@/, "").trim().toLowerCase()) &&
+              !idsToRemove.has(id)
+          );
+
+      setUserProfile((prev) => ({
+        ...prev,
+        following: newFollowing,
+        followingCount: nextFollowing
+          ? (prev.followingCount || 0) + 1
+          : Math.max(0, (prev.followingCount || 1) - 1),
+      }));
+
+      // 2. Optimistic UI update for target profile if currently viewing
+      setSelectedViewingProfile((prev) => {
+        if (!prev) return prev;
+        const prevId = prev.id?.replace(/^@/, "").trim().toLowerCase();
+        const prevUname = prev.username?.replace(/^@/, "").trim().toLowerCase();
+        const matches =
+          prevId === cleanTargetId ||
+          prevUname === cleanTargetId ||
+          prevUname === targetUsername;
+        if (!matches) return prev;
+
+        const currentFollowers =
+          typeof prev.followersCount === "number" ? prev.followersCount : 0;
+        return {
+          ...prev,
+          isFollowing: nextFollowing,
+          followersCount: nextFollowing
+            ? currentFollowers + 1
+            : Math.max(0, currentFollowers - 1),
+        };
+      });
+
+      // 3. Optimistic UI update for leaders list
+      setLeaders((prev) =>
+        prev.map((l) => {
+          const lId = l.id?.replace(/^@/, "").trim().toLowerCase();
+          const lUname = l.username?.replace(/^@/, "").trim().toLowerCase();
+          if (lId === cleanTargetId || lUname === cleanTargetId || lUname === targetUsername) {
+            const curCount =
+              typeof l.followersCount === "number" ? l.followersCount : 0;
+            return {
+              ...l,
+              isFollowing: nextFollowing,
+              followersCount: nextFollowing
+                ? curCount + 1
+                : Math.max(0, curCount - 1),
+            };
+          }
+          return l;
+        })
+      );
+
+      // 4. Real-time Firestore Database Persistence
+      const currentUid = currentUser?.uid || userProfile.id;
+      await toggleFollowInFirestore(currentUid, cleanTargetId, isCurrentlyFollowing);
+
+      // 5. Send Notification if user just followed someone
+      if (nextFollowing) {
+        triggerNotification({
+          recipientId: targetUserId,
+          type: "like",
+          actorId: userProfile.id,
+          actorName: userProfile.fullName,
+          actorUsername: userProfile.username,
+          actorAvatar: userProfile.avatarUrl,
+          actorCategory: userProfile.category,
+          actorBadge: userProfile.verified ? "Citizen" : undefined,
+          title: `${userProfile.fullName} started following you`,
+          message: `is now following your civic updates and reports`,
+          timestamp: "Just now",
+        });
+      }
+
+      // 6. Optional backend server proxy
       try {
-        await fetch(`/api/users/${targetUserId}/follow`, {
+        await fetch(`/api/users/${cleanTargetId}/follow`, {
           method: "POST",
         });
-        fetchData();
-      } catch (err) {
-        console.error("Follow error:", err);
+      } catch {
+        // Safe for serverless
       }
     }, "follow users and representatives");
   };
 
+  const handleMentionProfile = (targetProfile: UserProfile) => {
+    const rawUsername = targetProfile.username
+      ? targetProfile.username.replace(/^@+/, "").trim()
+      : targetProfile.fullName.toLowerCase().replace(/\s+/g, "_");
+    setComposeInitialMention(`@${rawUsername}`);
+    navigateTo("compose");
+  };
+
   // Inspect any user's profile dynamically
   const handleSelectUserProfile = async (userId: string) => {
-    if (isLoggedIn && userId === userProfile.id) {
+    const cleanId = (userId || "").trim();
+    const cleanUsername = cleanId.replace(/^@/, "").toLowerCase();
+
+    // If viewing own profile
+    if (
+      isLoggedIn &&
+      (cleanId.toLowerCase() === userProfile.id.toLowerCase() ||
+        cleanUsername === userProfile.username?.replace(/^@/, "").toLowerCase())
+    ) {
       setSelectedViewingProfile(null);
       navigateTo("profile", true);
       return;
     }
 
-    // Check if it's a leader ID first
+    const followingNormalizedSet = new Set(
+      (userProfile.following || []).map((f) =>
+        f.replace(/^@/, "").trim().toLowerCase()
+      )
+    );
+
+    // 1. Check if it's a leader in the leader list
     const matchedLeader = leaders.find(
-      (l) => l.id === userId || l.username.replace(/^@/, "").toLowerCase() === userId.replace(/^@/, "").toLowerCase()
+      (l) =>
+        l.id === cleanId ||
+        l.username.replace(/^@/, "").toLowerCase() === cleanUsername
     );
     if (matchedLeader) {
       handleSelectLeaderProfile(matchedLeader);
       return;
     }
 
+    // 2. Try Firestore Direct ID query
     try {
-      // 1. Try backend API
-      const res = await fetch(`/api/users/${userId}`);
-      if (res.ok) {
-        const targetProfile: UserProfile = await res.json();
-        setSelectedViewingProfile(targetProfile);
-        navigateTo("profile", false);
-        return;
-      }
-    } catch (err) {
-      console.warn("API user fetch error, trying Firestore fallback:", err);
-    }
-
-    try {
-      // 2. Direct Firestore fallback
-      const userDocRef = doc(db, "users", userId);
+      const userDocRef = doc(db, "users", cleanId);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
-        const targetProfile = { id: userDocSnap.id, ...userDocSnap.data() } as UserProfile;
+        const data = userDocSnap.data();
+        const followers = Array.isArray(data.followers) ? data.followers : [];
+        const isFollowed =
+          followingNormalizedSet.has(userDocSnap.id.toLowerCase()) ||
+          (data.username &&
+            followingNormalizedSet.has(
+              data.username.replace(/^@/, "").toLowerCase()
+            )) ||
+          followers.some(
+            (f: string) =>
+              f.replace(/^@/, "").toLowerCase() === userProfile.id.toLowerCase() ||
+              (userProfile.username &&
+                f.replace(/^@/, "").toLowerCase() ===
+                  userProfile.username.replace(/^@/, "").toLowerCase())
+          );
+
+        const authoredReports = reports.filter((r) => {
+          const rAuthorId = r.authorId?.toLowerCase();
+          const rAuthorUsername = r.authorUsername?.replace(/^@/, "").toLowerCase();
+          return (
+            rAuthorId === userDocSnap.id.toLowerCase() ||
+            (data.username &&
+              rAuthorUsername === data.username.replace(/^@/, "").toLowerCase())
+          );
+        });
+
+        const targetProfile: UserProfile = {
+          id: userDocSnap.id,
+          ...data,
+          followersCount:
+            typeof data.followersCount === "number"
+              ? data.followersCount
+              : followers.length,
+          followingCount:
+            typeof data.followingCount === "number"
+              ? data.followingCount
+              : Array.isArray(data.following)
+              ? data.following.length
+              : 0,
+          postsCount:
+            typeof data.postsCount === "number" && data.postsCount > 0
+              ? data.postsCount
+              : authoredReports.length,
+          isFollowing: isFollowed,
+        } as UserProfile;
+
         setSelectedViewingProfile(targetProfile);
         navigateTo("profile", false);
         return;
       }
     } catch (err) {
-      console.error("Firestore user fetch error:", err);
+      console.warn("Firestore ID fetch notice:", err);
+    }
+
+    // 3. Try Firestore query by username
+    try {
+      const usersCol = collection(db, "users");
+      const q = query(usersCol, where("username", "==", cleanUsername));
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        const foundDoc = querySnap.docs[0];
+        const data = foundDoc.data();
+        const followers = Array.isArray(data.followers) ? data.followers : [];
+        const isFollowed =
+          followingNormalizedSet.has(foundDoc.id.toLowerCase()) ||
+          (data.username &&
+            followingNormalizedSet.has(
+              data.username.replace(/^@/, "").toLowerCase()
+            )) ||
+          followers.some(
+            (f: string) =>
+              f.replace(/^@/, "").toLowerCase() === userProfile.id.toLowerCase() ||
+              (userProfile.username &&
+                f.replace(/^@/, "").toLowerCase() ===
+                  userProfile.username.replace(/^@/, "").toLowerCase())
+          );
+
+        const authoredReports = reports.filter((r) => {
+          const rAuthorId = r.authorId?.toLowerCase();
+          const rAuthorUsername = r.authorUsername?.replace(/^@/, "").toLowerCase();
+          return (
+            rAuthorId === foundDoc.id.toLowerCase() ||
+            rAuthorUsername === cleanUsername
+          );
+        });
+
+        const targetProfile: UserProfile = {
+          id: foundDoc.id,
+          ...data,
+          followersCount:
+            typeof data.followersCount === "number"
+              ? data.followersCount
+              : followers.length,
+          followingCount:
+            typeof data.followingCount === "number"
+              ? data.followingCount
+              : Array.isArray(data.following)
+              ? data.following.length
+              : 0,
+          postsCount:
+            typeof data.postsCount === "number" && data.postsCount > 0
+              ? data.postsCount
+              : authoredReports.length,
+          isFollowing: isFollowed,
+        } as UserProfile;
+
+        setSelectedViewingProfile(targetProfile);
+        navigateTo("profile", false);
+        return;
+      }
+    } catch (err) {
+      console.warn("Firestore username fetch notice:", err);
+    }
+
+    // 4. Try backend API fallback
+    try {
+      const res = await fetch(`/api/users/${cleanId}`);
+      if (res.ok) {
+        const targetProfile: UserProfile = await res.json();
+        const isFollowed =
+          followingNormalizedSet.has(targetProfile.id.toLowerCase()) ||
+          (targetProfile.username &&
+            followingNormalizedSet.has(
+              targetProfile.username.replace(/^@/, "").toLowerCase()
+            )) ||
+          targetProfile.isFollowing ||
+          false;
+        setSelectedViewingProfile({
+          ...targetProfile,
+          isFollowing: isFollowed,
+        });
+        navigateTo("profile", false);
+        return;
+      }
+    } catch (err) {
+      console.warn("API user fetch notice:", err);
+    }
+
+    // 5. Fallback from existing reports author data
+    const matchedReport = reports.find(
+      (r) =>
+        r.authorId === cleanId ||
+        r.authorUsername?.replace(/^@/, "").toLowerCase() === cleanUsername
+    );
+    if (matchedReport) {
+      const isFollowed =
+        followingNormalizedSet.has(matchedReport.authorId.toLowerCase()) ||
+        (matchedReport.authorUsername &&
+          followingNormalizedSet.has(
+            matchedReport.authorUsername.replace(/^@/, "").toLowerCase()
+          )) ||
+        false;
+
+      const matchingReports = reports.filter(
+        (r) =>
+          r.authorId === matchedReport.authorId ||
+          r.authorUsername?.replace(/^@/, "").toLowerCase() === cleanUsername
+      );
+
+      const fallbackProfile: UserProfile = {
+        id: matchedReport.authorId,
+        fullName: matchedReport.authorName,
+        username: matchedReport.authorUsername?.replace(/^@/, "") || cleanUsername,
+        bio: `Active civic contributor in Open Nation.`,
+        location: matchedReport.location?.city || "Jharkhand, India",
+        websiteUrl: "",
+        avatarUrl:
+          matchedReport.authorAvatar ||
+          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+        category: matchedReport.authorCategory || "citizen",
+        followersCount: isFollowed ? 1 : 0,
+        followingCount: 0,
+        postsCount: matchingReports.length,
+        systemScore: 80,
+        publicRating: 5.0,
+        reviewsCount: 0,
+        verified:
+          matchedReport.authorCategory === "department" ||
+          matchedReport.authorCategory === "representative",
+        isFollowing: isFollowed,
+      };
+
+      setSelectedViewingProfile(fallbackProfile);
+      navigateTo("profile", false);
+      return;
     }
   };
 
   // When a leader is clicked in LeaderTracker, synchronize their profile
   const handleSelectLeaderProfile = (leader: Leader) => {
+    const isFollowed =
+      (userProfile.following || []).includes(leader.id) ||
+      (leader.userId && (userProfile.following || []).includes(leader.userId)) ||
+      (leader.username &&
+        (userProfile.following || []).includes(
+          leader.username.replace(/^@/, "")
+        )) ||
+      leader.isFollowing ||
+      false;
+
     const leaderProfile: UserProfile = {
       id: leader.id,
       fullName: leader.name,
-      username: leader.username,
+      username: leader.username.replace(/^@/, ""),
       bio: leader.bio,
       location: leader.location,
-      websiteUrl: leader.websiteUrl || `https://instagram.com/${leader.username}`,
+      websiteUrl:
+        leader.websiteUrl || `https://instagram.com/${leader.username}`,
       avatarUrl: leader.image,
       category: "representative",
       representativeDetails: {
@@ -1112,7 +1442,12 @@ export default function App() {
         termYears: "2024-2029",
         legislativeBody: "State Assembly",
       },
-      followersCount: leader.category === "ruling" ? 380000 : 210000,
+      followersCount:
+        typeof leader.followersCount === "number"
+          ? leader.followersCount
+          : leader.category === "ruling"
+          ? 380000
+          : 210000,
       followingCount: 18,
       postsCount: 8235,
       systemScore: leader.systemScore,
@@ -1120,14 +1455,17 @@ export default function App() {
       reviewsCount: leader.reviewsCount || 14000,
       reviews: leader.reviews || [],
       verified: true,
-      isFollowing: false,
+      isFollowing: isFollowed,
     };
     setSelectedViewingProfile(leaderProfile);
     navigateTo("profile", false);
   };
 
   const handleOpenCompose = () => {
-    requireAuth(() => navigateTo("compose"), "file and report a civic grievance");
+    requireAuth(() => {
+      setComposeInitialMention(null);
+      navigateTo("compose");
+    }, "file and report a civic grievance");
   };
 
   const bookmarkedReports = reports.filter((r) =>
@@ -1289,9 +1627,14 @@ export default function App() {
             <ComposeGrievanceView
               userProfile={userProfile}
               leaders={leaders}
-              onCancel={() => navigateTo("dashboard")}
+              initialMention={composeInitialMention || undefined}
+              onCancel={() => {
+                setComposeInitialMention(null);
+                navigateTo("dashboard");
+              }}
               onSubmit={async (data) => {
                 await handleCreateReport(data);
+                setComposeInitialMention(null);
                 navigateTo("dashboard");
               }}
             />
@@ -1349,15 +1692,33 @@ export default function App() {
               activeUser={userProfile}
               isLoggedIn={isLoggedIn}
               allReports={reports}
-              userReports={reports.filter(
-                (r) =>
-                  r.authorId === activeProfileToRender.id ||
-                  (activeProfileToRender.username &&
-                    r.authorUsername?.toLowerCase() ===
-                      activeProfileToRender.username.toLowerCase()) ||
-                  (activeProfileToRender.category === "representative" &&
-                    r.category === "Infrastructure")
-              )}
+              userReports={reports.filter((r) => {
+                const targetUname = activeProfileToRender.username
+                  ?.replace(/^@/, "")
+                  .toLowerCase();
+                const targetId = activeProfileToRender.id?.toLowerCase();
+                const rAuthorUname = r.authorUsername
+                  ?.replace(/^@/, "")
+                  .toLowerCase();
+                const rAuthorId = r.authorId?.toLowerCase();
+
+                const isAuthor =
+                  (targetId && rAuthorId === targetId) ||
+                  (targetUname && rAuthorUname === targetUname);
+
+                const isTagged =
+                  targetUname &&
+                  (r.taggedOfficials?.some(
+                    (t) => t.replace(/^@/, "").toLowerCase() === targetUname
+                  ) ||
+                    r.routedDepartment?.toLowerCase().includes(targetUname));
+
+                return (
+                  isAuthor ||
+                  (activeProfileToRender.category === "department" && isTagged) ||
+                  (activeProfileToRender.category === "representative" && isTagged)
+                );
+              })}
               onBack={() => {
                 setSelectedViewingProfile(null);
                 navigateTo("dashboard");
@@ -1370,6 +1731,7 @@ export default function App() {
               }}
               onReplyToReview={handleReplyToReview}
               onToggleFollow={handleToggleFollow}
+              onMentionUser={handleMentionProfile}
               onNavigateToPost={(reportId) => {
                 handleSelectPost(reportId);
               }}

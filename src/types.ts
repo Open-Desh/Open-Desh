@@ -130,6 +130,7 @@ export interface ThreadedReply {
   authorAvatar: string;
   authorCategory: UserCategory;
   authorBadge?: string;
+  authorVerified?: boolean;
   text: string;
   imageUrl?: string;
   timestamp: string;
@@ -178,6 +179,7 @@ export interface ReportIssue {
   authorAvatar: string;
   authorCategory: UserCategory;
   authorBadge?: string;
+  authorVerified?: boolean;
   category: IssueCategory;
   text: string;
   imageUrl?: string;
@@ -241,6 +243,9 @@ export interface Leader {
   keyFocus: string[];
   recentPromises: PromiseItem[];
   reviews: UserReview[];
+  isFollowing?: boolean;
+  followersCount?: number;
+  followers?: string[];
 }
 
 export interface InfrastructureProject {

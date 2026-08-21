@@ -516,3 +516,112 @@ export async function checkUsernameAvailability(
   return { available: true };
 }
 
+// 13. Toggle Follow / Unfollow in Firestore Database for Users & Leaders
+export async function toggleFollowInFirestore(
+  currentUserId: string,
+  targetUserIdOrUsername: string,
+  isFollowing: boolean
+) {
+  try {
+    const cleanTarget = targetUserIdOrUsername.replace(/^@/, "").trim();
+    const userRef = doc(db, "users", currentUserId);
+
+    // Find actual target document
+    let targetRef = doc(db, "users", cleanTarget);
+    let targetSnap = await getDoc(targetRef).catch(() => null);
+
+    if (!targetSnap || !targetSnap.exists()) {
+      // Query by username in users collection
+      const q = query(
+        collection(db, "users"),
+        where("username", "==", cleanTarget.toLowerCase())
+      );
+      const snap = await getDocs(q).catch(() => null);
+      if (snap && !snap.empty) {
+        targetRef = snap.docs[0].ref;
+        targetSnap = snap.docs[0];
+      }
+    }
+
+    if (isFollowing) {
+      // User is currently following -> UNFOLLOW
+      await updateDoc(userRef, {
+        following: arrayRemove(cleanTarget, targetRef.id),
+        followingCount: increment(-1),
+      }).catch(async () => {
+        await setDoc(
+          userRef,
+          {
+            following: [],
+            followingCount: 0,
+          },
+          { merge: true }
+        );
+      });
+
+      if (targetSnap && targetSnap.exists()) {
+        await updateDoc(targetRef, {
+          followers: arrayRemove(currentUserId),
+          followersCount: increment(-1),
+        }).catch(async () => {
+          await setDoc(
+            targetRef,
+            {
+              followers: [],
+              followersCount: 0,
+            },
+            { merge: true }
+          );
+        });
+      }
+
+      // If target is in leaders collection
+      const leaderRef = doc(db, "leaders", cleanTarget);
+      await updateDoc(leaderRef, {
+        followers: arrayRemove(currentUserId),
+        followersCount: increment(-1),
+      }).catch(() => {});
+    } else {
+      // User is not following -> FOLLOW
+      await updateDoc(userRef, {
+        following: arrayUnion(cleanTarget, targetRef.id),
+        followingCount: increment(1),
+      }).catch(async () => {
+        await setDoc(
+          userRef,
+          {
+            following: [cleanTarget, targetRef.id],
+            followingCount: 1,
+          },
+          { merge: true }
+        );
+      });
+
+      if (targetSnap && targetSnap.exists()) {
+        await updateDoc(targetRef, {
+          followers: arrayUnion(currentUserId),
+          followersCount: increment(1),
+        }).catch(async () => {
+          await setDoc(
+            targetRef,
+            {
+              followers: [currentUserId],
+              followersCount: 1,
+            },
+            { merge: true }
+          );
+        });
+      }
+
+      // If target is in leaders collection
+      const leaderRef = doc(db, "leaders", cleanTarget);
+      await updateDoc(leaderRef, {
+        followers: arrayUnion(currentUserId),
+        followersCount: increment(1),
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("Follow Firestore notice:", err);
+  }
+}
+

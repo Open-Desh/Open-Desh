@@ -26,6 +26,7 @@ import {
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
+import { cleanReportText } from "../utils/reportUtils.ts";
 import {
   CategoryBadge,
   CategoryVerifiedTick,
@@ -45,6 +46,7 @@ interface ProfileViewProps {
   onRateUser?: (rating: number, comment: string) => Promise<void>;
   onReplyToReview?: (reviewId: string, replyText: string) => Promise<void>;
   onToggleFollow?: (targetUserId: string) => Promise<void>;
+  onMentionUser?: (userProfile: UserProfile) => void;
   onNavigateToPost?: (reportId: string) => void;
 }
 
@@ -61,28 +63,102 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onRateUser,
   onReplyToReview,
   onToggleFollow,
+  onMentionUser,
   onNavigateToPost,
 }) => {
   const [activeTab, setActiveTab] = useState<
     "Report" | "Services" | "Performance" | "Replies" | "Rereport"
   >("Report");
   const [evaluationViewTab, setEvaluationViewTab] = useState<"score" | "reviews" | "writereview" | null>(null);
-  const [isFollowing, setIsFollowing] = useState(userProfile.isFollowing || false);
-  const [followersCount, setFollowersCount] = useState(userProfile.followersCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [isFollowSubmitting, setIsFollowSubmitting] = useState(false);
 
-  // Effective list of reports authored by this user
+  // Normalize profile identifiers
+  const cleanProfileId = userProfile.id?.replace(/^@/, "").trim().toLowerCase();
+  const cleanProfileUsername = userProfile.username?.replace(/^@/, "").trim().toLowerCase();
+
+  // Derive isFollowing accurately from logged-in activeUser state
+  const isActivelyFollowing = React.useMemo(() => {
+    if (!activeUser) return Boolean(userProfile.isFollowing);
+    const followingList = (activeUser.following || []).map((f) =>
+      f.replace(/^@/, "").trim().toLowerCase()
+    );
+
+    const isIdInFollowing = cleanProfileId ? followingList.includes(cleanProfileId) : false;
+    const isUsernameInFollowing = cleanProfileUsername
+      ? followingList.includes(cleanProfileUsername)
+      : false;
+    const isUserInFollowers =
+      Array.isArray(userProfile.followers) && activeUser.id
+        ? userProfile.followers.some((f) => {
+            const cleanF = f.replace(/^@/, "").trim().toLowerCase();
+            return (
+              cleanF === activeUser.id.toLowerCase() ||
+              (activeUser.username && cleanF === activeUser.username.replace(/^@/, "").trim().toLowerCase())
+            );
+          })
+        : false;
+
+    return isIdInFollowing || isUsernameInFollowing || isUserInFollowers || Boolean(userProfile.isFollowing);
+  }, [activeUser?.following, activeUser?.id, activeUser?.username, cleanProfileId, cleanProfileUsername, userProfile.followers, userProfile.isFollowing]);
+
+  const [localFollowing, setLocalFollowing] = useState<boolean>(isActivelyFollowing);
+
+  React.useEffect(() => {
+    setLocalFollowing(isActivelyFollowing);
+  }, [isActivelyFollowing]);
+
+  const baseFollowersCount =
+    typeof userProfile.followersCount === "number"
+      ? userProfile.followersCount
+      : Array.isArray(userProfile.followers)
+      ? userProfile.followers.length
+      : 0;
+
+  const effectiveFollowersCount = React.useMemo(() => {
+    let count = baseFollowersCount;
+    if (localFollowing && !isActivelyFollowing) {
+      count += 1;
+    } else if (!localFollowing && isActivelyFollowing) {
+      count = Math.max(0, count - 1);
+    }
+    return count;
+  }, [baseFollowersCount, localFollowing, isActivelyFollowing]);
+
+  // Effective list of reports authored by or routed to this user
   const effectiveAuthoredReports = React.useMemo(() => {
     const source = allReports && allReports.length > 0 ? allReports : userReports;
-    const filtered = source.filter(
-      (r) =>
-        r.authorId === userProfile.id ||
-        (userProfile.username &&
-          r.authorUsername?.toLowerCase() === userProfile.username.toLowerCase())
-    );
-    return filtered.length > 0 ? filtered : userReports;
-  }, [allReports, userReports, userProfile.id, userProfile.username]);
+    const filtered = (source || []).filter((r) => {
+      const rAuthorId = r.authorId?.trim().toLowerCase();
+      const rAuthorUsername = r.authorUsername?.replace(/^@/, "").trim().toLowerCase();
+
+      const isAuthor =
+        (cleanProfileId && rAuthorId === cleanProfileId) ||
+        (cleanProfileUsername && rAuthorUsername === cleanProfileUsername);
+
+      const isTaggedOrRouted =
+        cleanProfileUsername &&
+        (r.taggedOfficials?.some(
+          (t) => t.replace(/^@/, "").trim().toLowerCase() === cleanProfileUsername
+        ) ||
+          r.routedDepartment?.toLowerCase().includes(cleanProfileUsername));
+
+      return (
+        isAuthor ||
+        (userProfile.category === "department" && isTaggedOrRouted) ||
+        (userProfile.category === "representative" && isTaggedOrRouted)
+      );
+    });
+
+    if (filtered.length > 0) return filtered;
+    return userReports || [];
+  }, [allReports, userReports, cleanProfileId, cleanProfileUsername, userProfile.category]);
+
+  const effectivePostsCount = Math.max(
+    effectiveAuthoredReports.length,
+    typeof userProfile.postsCount === "number" ? userProfile.postsCount : 0
+  );
 
   // Collect all real replies made by this userProfile across all reports
   const userReplies = React.useMemo(() => {
@@ -161,7 +237,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const availableTabs = isLeadershipOrDept
     ? ([
         { id: "Report", label: "Reports" },
-        { id: "Services", label: "Services (Mind Map)" },
+        { id: "Services", label: "Service" },
         { id: "Performance", label: "Performance & Impact" },
         { id: "Replies", label: "Replies" },
         { id: "Rereport", label: "Rereports" },
@@ -178,12 +254,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       : activeTab;
 
   const handleToggleFollowAction = async () => {
-    const nextFollowingState = !isFollowing;
-    setIsFollowing(nextFollowingState);
-    setFollowersCount((prev) => (nextFollowingState ? prev + 1 : Math.max(0, prev - 1)));
-
-    if (onToggleFollow) {
-      await onToggleFollow(userProfile.id);
+    if (isFollowSubmitting) return;
+    setIsFollowSubmitting(true);
+    const nextState = !localFollowing;
+    setLocalFollowing(nextState);
+    try {
+      if (onToggleFollow) {
+        await onToggleFollow(userProfile.id || userProfile.username);
+      }
+    } catch (err) {
+      console.warn("Follow toggle failed:", err);
+      setLocalFollowing(!nextState);
+    } finally {
+      setIsFollowSubmitting(false);
     }
   };
 
@@ -371,37 +454,40 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          {/* Right Info: Real Full Name with Verified Tick & Counters */}
+          {/* Right Info: Real Full Name & Counters */}
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 truncate flex items-center gap-1.5">
+            {/* Full Name with Verified Tick - Sized for mobile and multi-word names so it fits cleanly */}
+            <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 flex items-start gap-1.5 leading-snug line-clamp-2 break-words">
               <span>{profileFullName}</span>
               {userProfile.verified && (
-                <CategoryVerifiedTick
-                  category={userProfile.category}
-                  size="sm"
-                />
+                <span className="shrink-0 mt-0.5">
+                  <CategoryVerifiedTick
+                    category={userProfile.category}
+                    size="xs"
+                  />
+                </span>
               )}
             </h2>
 
             {/* 3 Stats Counters */}
-            <div className="flex items-center gap-4 sm:gap-6 mt-2.5 text-slate-900">
+            <div className="flex items-center gap-4 sm:gap-6 mt-2 text-slate-900">
               <div>
                 <span className="font-black text-sm sm:text-base block leading-none">
-                  {userProfile.postsCount?.toLocaleString() || userReports.length}
+                  {effectivePostsCount.toLocaleString()}
                 </span>
                 <span className="text-xs text-slate-500 font-medium">posts</span>
               </div>
               <div>
                 <span className="font-black text-sm sm:text-base block leading-none">
-                  {followersCount >= 1000
-                    ? `${(followersCount / 1000).toFixed(0)}K`
-                    : followersCount}
+                  {effectiveFollowersCount >= 1000
+                    ? `${(effectiveFollowersCount / 1000).toFixed(0)}K`
+                    : effectiveFollowersCount}
                 </span>
                 <span className="text-xs text-slate-500 font-medium">followers</span>
               </div>
               <div>
                 <span className="font-black text-sm sm:text-base block leading-none">
-                  {userProfile.followingCount}
+                  {userProfile.followingCount || 0}
                 </span>
                 <span className="text-xs text-slate-500 font-medium">following</span>
               </div>
@@ -558,38 +644,43 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         ) : (
           <div className="grid grid-cols-2 gap-3 pt-1">
             <button
+              id="mention-profile-btn"
               onClick={() => {
-                alert(`Mention @${userProfile.username} has been attached to your next report draft.`);
+                if (onMentionUser) {
+                  onMentionUser(userProfile);
+                }
               }}
-              className="py-2.5 px-4 rounded-full border border-slate-300 text-slate-900 text-xs sm:text-sm font-extrabold hover:bg-slate-50 transition-all text-center shadow-2xs cursor-pointer"
+              className="py-2.5 px-4 rounded-full border border-slate-300 text-slate-900 text-xs sm:text-sm font-extrabold hover:bg-slate-50 transition-all text-center shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
             >
-              Mention
+              <span>Mention</span>
             </button>
             <button
+              id="follow-profile-btn"
               onClick={handleToggleFollowAction}
-              className={`py-2.5 px-4 rounded-full text-xs sm:text-sm font-extrabold transition-all text-center shadow-xs cursor-pointer ${
-                isFollowing
+              disabled={isFollowSubmitting}
+              className={`py-2.5 px-4 rounded-full text-xs sm:text-sm font-extrabold transition-all text-center shadow-xs cursor-pointer disabled:opacity-60 ${
+                localFollowing
                   ? "bg-slate-100 text-slate-800 border border-slate-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
                   : "bg-slate-900 text-white hover:bg-black"
               }`}
             >
-              {isFollowing ? "Following" : "Follow"}
+              {localFollowing ? "Following" : "Follow"}
             </button>
           </div>
         )}
       </div>
 
       {/* 5. Sub-Navigation Tabs */}
-      <div className="border-b border-slate-200 bg-white sticky top-[53px] z-20">
-        <div className="flex justify-between overflow-x-auto no-scrollbar px-2 sm:px-4">
+      <div className="border-b border-slate-200 bg-white sticky top-[53px] z-20 shadow-2xs">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar px-3 sm:px-5">
           {availableTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-3 px-2 sm:px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+              className={`py-3.5 px-3 sm:px-4 text-sm sm:text-base font-extrabold transition-all border-b-2 whitespace-nowrap cursor-pointer shrink-0 ${
                 currentActiveTab === tab.id
-                  ? "border-blue-600 text-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-900"
               }`}
             >
               {tab.label}
@@ -618,7 +709,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
-                    {report.text}
+                    {cleanReportText(report.text)}
                   </p>
 
                   {report.imageUrl && (
@@ -842,7 +933,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       </div>
 
                       <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
-                        {report.text}
+                        {cleanReportText(report.text)}
                       </p>
 
                       {report.imageUrl && (
