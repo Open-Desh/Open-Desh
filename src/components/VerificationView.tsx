@@ -708,7 +708,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Registering Submission on Open Nation Registry</span>
+                <span>Registering Submission on Open Desh Registry</span>
               </p>
               <p
                 className={`flex items-center justify-center gap-2 font-bold ${
@@ -752,7 +752,7 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
               Verification Request Sent!
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Aapke documents aur verification details successfully Open Nation queue mein submit ho gaye hain.
+              Aapke documents aur verification details successfully Open Desh queue mein submit ho gaye hain.
             </p>
 
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-left space-y-2 text-xs">

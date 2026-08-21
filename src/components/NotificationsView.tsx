@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AppNotification, ReportIssue, UserProfile } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { formatReportTimestamp } from "../utils/reportUtils.ts";
 
 interface NotificationsViewProps {
   notifications: AppNotification[];
@@ -277,7 +278,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                         <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="truncate max-w-[150px] sm:max-w-[220px]">{report.location.city}</span>
                         <span>•</span>
-                        <span className="shrink-0">{report.timestamp}</span>
+                        <span className="shrink-0">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                       </p>
                     </div>
                   </div>

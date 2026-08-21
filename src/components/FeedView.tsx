@@ -18,10 +18,12 @@ import {
 } from "lucide-react";
 import { ReportIssue, UserProfile, IssueCategory } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   cleanReportText,
+  formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 
 interface FeedViewProps {
@@ -208,7 +210,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                       <span className="truncate max-w-[150px] sm:max-w-[220px]">{report.location.city}</span>
                       <span>•</span>
-                      <span className="shrink-0">{report.timestamp}</span>
+                      <span className="shrink-0">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                     </p>
                   </div>
                 </div>
@@ -245,53 +247,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               )}
 
-              {/* Cloudflare R2 Multi-Image Carousel */}
-              {imageList.length > 0 && (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
-                  <img
-                    src={imageList[currentSlide]}
-                    alt={`Evidence ${currentSlide + 1}`}
-                    className="w-full max-h-96 object-contain rounded-2xl"
-                    referrerPolicy="no-referrer"
-                  />
-
-                  {/* Multi-photo indicator badge */}
-                  {imageList.length > 1 && (
-                    <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                      {currentSlide + 1} / {imageList.length} Evidence
-                    </div>
-                  )}
-
-                  {/* Carousel Controls */}
-                  {imageList.length > 1 && (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveImageSlideIndex((prev) => ({
-                            ...prev,
-                            [report.id]: currentSlide > 0 ? currentSlide - 1 : imageList.length - 1,
-                          }));
-                        }}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveImageSlideIndex((prev) => ({
-                            ...prev,
-                            [report.id]: currentSlide < imageList.length - 1 ? currentSlide + 1 : 0,
-                          }));
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
+              {/* Media Section: Cloudflare R2 Multi-Image Carousel or Before/After/Compare Viewer */}
+              {(imageList.length > 0 || report.resolvedImageUrl) && (
+                <MediaBeforeAfterViewer
+                  beforeImages={imageList}
+                  afterImage={report.resolvedImageUrl}
+                  reportId={report.id}
+                  isCompact={true}
+                />
               )}
 
               {/* Tagged Authorities Routing Chips */}
@@ -358,36 +321,30 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   <div className="flex items-center gap-1.5 min-w-0">
                     <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
                     <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
-                      <span>Official Action:</span>
+                      <span>Official Action{hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? ":" : ""}</span>
                       {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             const target = report.claimedByOfficer || report.claimedByDept || "";
-                            const clean = target.replace(/^@+/, "");
+                            const clean = getCleanAuthorUsername(target);
                             if (onSelectUser && clean) onSelectUser(clean);
                           }}
                           className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
                         >
                           <span>
-                            @{report.claimedByOfficer
-                              ? report.claimedByOfficer.replace(/^@+/, "")
-                              : report.claimedByDept?.replace(/^@+/, "")}
+                            @{getCleanAuthorUsername(report.claimedByOfficer || report.claimedByDept || "")}
                           </span>
                           <ExternalLink className="w-3 h-3 text-blue-600" />
                         </button>
-                      ) : (
-                        <span className="text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px] font-extrabold normal-case">
-                          Waiting
-                        </span>
-                      )}
+                      ) : null}
                     </span>
                   </div>
                   <span
-                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                       hasDeptClaimed
                         ? "bg-blue-100 text-blue-800"
-                        : "bg-amber-100 text-amber-800"
+                        : "bg-amber-100 text-amber-800 border border-amber-200"
                     }`}
                   >
                     {hasDeptClaimed

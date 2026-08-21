@@ -22,11 +22,26 @@ import {
   RefreshCw,
   Sliders,
   Scale,
+  Pin,
+  Trash2,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Building2,
+  AtSign,
+  Bookmark,
+  AlertTriangle,
 } from "lucide-react";
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
-import { cleanReportText } from "../utils/reportUtils.ts";
+import {
+  cleanReportText,
+  getCleanAuthorUsername,
+  isReportAuthorVerified,
+  formatReportTimestamp,
+} from "../utils/reportUtils.ts";
 import {
   CategoryBadge,
   CategoryVerifiedTick,
@@ -48,6 +63,13 @@ interface ProfileViewProps {
   onToggleFollow?: (targetUserId: string) => Promise<void>;
   onMentionUser?: (userProfile: UserProfile) => void;
   onNavigateToPost?: (reportId: string) => void;
+  onLikeReport?: (reportId: string) => void;
+  onReReport?: (reportId: string) => void;
+  onBookmark?: (reportId: string) => void;
+  onReply?: (reportId: string, replyText: string) => void;
+  onDeleteReport?: (reportId: string) => Promise<void>;
+  onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onSelectUser?: (userId: string) => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -65,6 +87,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onToggleFollow,
   onMentionUser,
   onNavigateToPost,
+  onLikeReport,
+  onReReport,
+  onBookmark,
+  onReply,
+  onDeleteReport,
+  onTogglePinReport,
+  onSelectUser,
 }) => {
   const [activeTab, setActiveTab] = useState<
     "Report" | "Services" | "Performance" | "Replies" | "Rereport"
@@ -73,6 +102,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [isFollowSubmitting, setIsFollowSubmitting] = useState(false);
+
+  // Active slide index for multi-image evidence carousels
+  const [activeImageSlideIndex, setActiveImageSlideIndex] = useState<
+    Record<string, number>
+  >({});
+
+  // Slide-up action sheet state for 3-dot report options
+  const [selectedReportForActions, setSelectedReportForActions] =
+    useState<ReportIssue | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [actionToast, setActionToast] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setActionToast(message);
+    setTimeout(() => {
+      setActionToast((prev) => (prev === message ? null : prev));
+    }, 3000);
+  };
 
   // Normalize profile identifiers
   const cleanProfileId = userProfile.id?.replace(/^@/, "").trim().toLowerCase();
@@ -118,10 +165,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const effectiveFollowersCount = React.useMemo(() => {
     let count = baseFollowersCount;
-    if (localFollowing && !isActivelyFollowing) {
-      count += 1;
-    } else if (!localFollowing && isActivelyFollowing) {
-      count = Math.max(0, count - 1);
+    if (localFollowing) {
+      if (!isActivelyFollowing) {
+        count += 1;
+      } else if (count === 0) {
+        count = 1;
+      }
+    } else {
+      if (isActivelyFollowing) {
+        count = Math.max(0, count - 1);
+      }
     }
     return count;
   }, [baseFollowersCount, localFollowing, isActivelyFollowing]);
@@ -151,8 +204,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       );
     });
 
-    if (filtered.length > 0) return filtered;
-    return userReports || [];
+    const list = filtered.length > 0 ? filtered : userReports || [];
+    // Sort pinned reports first
+    return [...list].sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return 0;
+    });
   }, [allReports, userReports, cleanProfileId, cleanProfileUsername, userProfile.category]);
 
   const effectivePostsCount = Math.max(
@@ -334,9 +392,47 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleResetCache = () => {
+    localStorage.removeItem("open_desh_profile_cache");
     localStorage.removeItem("open_nation_profile_cache");
     alert("Profile local state cache cleared successfully.");
     setIsMenuOpen(false);
+  };
+
+  const handlePinAction = async () => {
+    if (!selectedReportForActions) return;
+    const targetReport = selectedReportForActions;
+    const isPinned = Boolean(targetReport.isPinned);
+    setSelectedReportForActions(null);
+    if (onTogglePinReport) {
+      await onTogglePinReport(targetReport.id, isPinned);
+      showToast(
+        isPinned ? "Report unpinned from profile" : "Report pinned to top of profile"
+      );
+    }
+  };
+
+  const handleDeleteAction = async () => {
+    if (!selectedReportForActions) return;
+    const targetReport = selectedReportForActions;
+    setSelectedReportForActions(null);
+    setShowDeleteConfirm(false);
+    if (onDeleteReport) {
+      await onDeleteReport(targetReport.id);
+      showToast("Report deleted successfully");
+    }
+  };
+
+  const getStatusPill = (status: string) => {
+    switch (status) {
+      case "Resolved":
+        return "bg-emerald-50 text-emerald-800 border border-emerald-200";
+      case "In Progress":
+        return "bg-blue-50 text-blue-800 border border-blue-200";
+      case "Under Dept Review":
+        return "bg-amber-50 text-amber-800 border border-amber-200";
+      default:
+        return "bg-rose-50 text-rose-800 border border-rose-200";
+    }
   };
 
   // If user clicked System Score, Public Rating, or Reviews, render the dedicated EvaluationDetailView page
@@ -427,7 +523,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
               <div className="px-4 py-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                <span>Open Nation Governance v3</span>
+                <span>Open Desh Governance v3</span>
               </div>
             </div>
           )}
@@ -454,20 +550,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          {/* Right Info: Real Full Name & Counters */}
+          {/* Right Info: Real Full Name, Username Handle with Verified Tick & Counters */}
           <div className="flex-1 min-w-0">
-            {/* Full Name with Verified Tick - Sized for mobile and multi-word names so it fits cleanly */}
-            <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 flex items-start gap-1.5 leading-snug line-clamp-2 break-words">
-              <span>{profileFullName}</span>
+            {/* Full Name WITHOUT verified badge (badge belongs next to username) */}
+            <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 leading-snug line-clamp-2 break-words">
+              {profileFullName}
+            </h2>
+
+            {/* Username Handle WITH verified badge next to it */}
+            <div className="flex items-center gap-1 text-xs text-slate-500 font-bold mt-0.5">
+              <span>@{cleanProfileUsername || userProfile.username?.replace(/^@+/, "")}</span>
               {userProfile.verified && (
-                <span className="shrink-0 mt-0.5">
+                <span className="shrink-0">
                   <CategoryVerifiedTick
                     category={userProfile.category}
                     size="xs"
                   />
                 </span>
               )}
-            </h2>
+            </div>
 
             {/* 3 Stats Counters */}
             <div className="flex items-center gap-4 sm:gap-6 mt-2 text-slate-900">
@@ -691,55 +792,478 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       {/* 6. Tab Content Display */}
       <div className="divide-y divide-slate-100">
-        {/* TAB 1: REPORTS */}
+        {/* TAB 1: REPORTS (Full Home Feed Layout + 3-Dot Options) */}
         {activeTab === "Report" && (
           <div className="divide-y divide-slate-100">
             {effectiveAuthoredReports.length > 0 ? (
-              effectiveAuthoredReports.map((report) => (
-                <div
-                  key={report.id}
-                  onClick={() => onNavigateToPost && onNavigateToPost(report.id)}
-                  className="p-4 hover:bg-slate-50/70 transition-colors cursor-pointer space-y-2"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                      {report.category}
-                    </span>
-                    <span className="text-slate-400 font-medium">{report.timestamp}</span>
-                  </div>
+              effectiveAuthoredReports.map((report) => {
+                const imageList =
+                  Array.isArray(report.images) && report.images.length > 0
+                    ? report.images
+                    : report.imageUrl
+                    ? [report.imageUrl]
+                    : [];
+                const currentSlide = activeImageSlideIndex[report.id] || 0;
+                const hasDeptClaimed = Boolean(
+                  report.claimedByDept ||
+                    report.claimedByOfficer ||
+                    (report.departmentStatusLevel &&
+                      report.departmentStatusLevel > 0)
+                );
+                const currentDeptLevel =
+                  report.departmentStatusLevel ?? (hasDeptClaimed ? 1 : 0);
+                const isLiked =
+                  report.likedBy?.includes(activeUser?.id) || false;
+                const isReReported =
+                  report.reReportedBy?.includes(activeUser?.id) || false;
+                const isBookmarked =
+                  activeUser?.savedReports?.includes(report.id) || false;
 
-                  <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
-                    {cleanReportText(report.text)}
-                  </p>
+                return (
+                  <article
+                    key={report.id}
+                    id={`profile-report-card-${report.id}`}
+                    onClick={() =>
+                      onNavigateToPost && onNavigateToPost(report.id)
+                    }
+                    className="p-4 sm:p-5 hover:bg-slate-50/70 transition-colors space-y-3 cursor-pointer select-none group/card"
+                  >
+                    {/* Pinned Report Banner (if pinned) */}
+                    {report.isPinned && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-black text-blue-600 pb-0.5">
+                        <Pin className="w-3.5 h-3.5 rotate-45 text-blue-600 fill-blue-600" />
+                        <span>Pinned Report</span>
+                      </div>
+                    )}
 
-                  {report.imageUrl && (
-                    <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
-                      <img
-                        src={report.imageUrl}
-                        alt="Evidence"
-                        className="w-full h-auto object-contain rounded-2xl"
-                      />
+                    {/* Header: Author + GPS + Status Badge + 3-Dot Button */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <img
+                          src={report.authorAvatar || userProfile.avatarUrl}
+                          alt={report.authorName}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectUser) onSelectUser(report.authorId);
+                          }}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-200 cursor-pointer shadow-2xs shrink-0 hover:opacity-85"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {(() => {
+                              const cleanUsername = getCleanAuthorUsername(
+                                report.authorUsername,
+                                report.authorName
+                              );
+                              const isVerified = isReportAuthorVerified(report);
+
+                              return (
+                                <h3
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onSelectUser)
+                                      onSelectUser(report.authorId);
+                                  }}
+                                  className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
+                                  title={cleanUsername}
+                                >
+                                  <span>{cleanUsername}</span>
+                                  {isVerified && (
+                                    <CategoryVerifiedTick
+                                      category={report.authorCategory}
+                                      size="xs"
+                                    />
+                                  )}
+                                </h3>
+                              );
+                            })()}
+
+                            {report.authorBadge &&
+                              isReportAuthorVerified(report) && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
+                                  {report.authorBadge}
+                                </span>
+                              )}
+
+                            {report.urgencyLevel === "Critical Emergency" && (
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5 shrink-0">
+                                <Flame className="w-2.5 h-2.5" /> Urgent
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 min-w-0">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[150px] sm:max-w-[220px]">
+                              {report.location?.city || "Jharkhand, India"}
+                            </span>
+                            <span>•</span>
+                            <span className="shrink-0">
+                              {formatReportTimestamp(report.createdAt || report.timestamp)}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right: Status Pill + 3-Dot Action Button */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${getStatusPill(
+                            report.status
+                          )}`}
+                        >
+                          {report.status}
+                        </span>
+
+                        {/* 3-Dot Action Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedReportForActions(report);
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                          title="Report Options"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center justify-between pt-2 text-xs text-slate-500 font-semibold">
-                    <span className="flex items-center gap-1 text-slate-600">
-                      <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />{" "}
-                      {report.likesCount}
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-600">
-                      <Repeat2 className="w-4 h-4 text-emerald-600" /> {report.reReportsCount}
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-600">
-                      <MessageCircle className="w-4 h-4 text-blue-500" />{" "}
-                      {report.repliesCount}
-                    </span>
-                    <span className="font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                      {report.status}
-                    </span>
-                  </div>
-                </div>
-              ))
+                    {/* Text Description */}
+                    <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
+                      {cleanReportText(report.text)}
+                    </p>
+
+                    {/* Structured Parameters Quick Badge Bar */}
+                    {report.structuredDetails &&
+                      Object.keys(report.structuredDetails).length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {Object.entries(report.structuredDetails).map(
+                            ([key, val]) => {
+                              if (!val) return null;
+                              const label = key
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/^./, (s) => s.toUpperCase());
+                              return (
+                                <span
+                                  key={key}
+                                  className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200/80 px-2 py-0.5 rounded-md font-semibold"
+                                >
+                                  <strong className="text-slate-900">
+                                    {label}:
+                                  </strong>{" "}
+                                  {val}
+                                </span>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+
+                    {/* Multi-Image Evidence Carousel */}
+                    {imageList.length > 0 && (
+                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
+                        <img
+                          src={imageList[currentSlide]}
+                          alt={`Evidence ${currentSlide + 1}`}
+                          className="w-full max-h-96 object-contain rounded-2xl"
+                          referrerPolicy="no-referrer"
+                        />
+
+                        {/* Multi-photo indicator badge */}
+                        {imageList.length > 1 && (
+                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                            {currentSlide + 1} / {imageList.length} Evidence
+                          </div>
+                        )}
+
+                        {/* Carousel Controls */}
+                        {imageList.length > 1 && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveImageSlideIndex((prev) => ({
+                                  ...prev,
+                                  [report.id]:
+                                    currentSlide > 0
+                                      ? currentSlide - 1
+                                      : imageList.length - 1,
+                                }));
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveImageSlideIndex((prev) => ({
+                                  ...prev,
+                                  [report.id]:
+                                    currentSlide < imageList.length - 1
+                                      ? currentSlide + 1
+                                      : 0,
+                                }));
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tagged Authorities Routing Chips */}
+                    {(() => {
+                      const officers = (report.taggedOfficers || []).map((t) =>
+                        t.replace(/^@+/, "")
+                      );
+                      const leaders = (report.taggedLeaders || []).map((t) =>
+                        t.replace(/^@+/, "")
+                      );
+                      const uniqueOfficers = Array.from(
+                        new Set(officers)
+                      ).filter(Boolean);
+                      const uniqueLeaders = Array.from(
+                        new Set(leaders)
+                      ).filter(Boolean);
+
+                      if (
+                        uniqueOfficers.length === 0 &&
+                        uniqueLeaders.length === 0
+                      )
+                        return null;
+
+                      return (
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
+                          {uniqueOfficers.map((tag) => (
+                            <span
+                              key={tag}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onSelectUser) onSelectUser(tag);
+                              }}
+                              className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:underline border border-blue-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                            >
+                              <Building2 className="w-3 h-3 text-blue-600" />
+                              @{tag}
+                            </span>
+                          ))}
+                          {uniqueLeaders.map((tag) => (
+                            <span
+                              key={tag}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onSelectUser) onSelectUser(tag);
+                              }}
+                              className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:underline border border-indigo-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                            >
+                              <AtSign className="w-3 h-3 text-indigo-600" />
+                              @{tag}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Statutory Triage Information Banner */}
+                    {report.aiTriage && (
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3 text-blue-600" />{" "}
+                            Statutory Triage: {report.aiTriage.departmentTag}
+                          </span>
+                          <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
+                            Urgency Score: {report.aiTriage.urgencyScore}/10
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-normal">
+                          {report.aiTriage.sentimentSummary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Official Department Action Progress Card */}
+                    <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                            <span>
+                              Official Action
+                              {hasDeptClaimed &&
+                              (report.claimedByOfficer || report.claimedByDept)
+                                ? ":"
+                                : ""}
+                            </span>
+                            {hasDeptClaimed &&
+                            (report.claimedByOfficer ||
+                              report.claimedByDept) ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const target =
+                                    report.claimedByOfficer ||
+                                    report.claimedByDept ||
+                                    "";
+                                  const clean = getCleanAuthorUsername(target);
+                                  if (onSelectUser && clean) onSelectUser(clean);
+                                }}
+                                className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
+                              >
+                                <span>
+                                  @
+                                  {getCleanAuthorUsername(
+                                    report.claimedByOfficer ||
+                                      report.claimedByDept ||
+                                      ""
+                                  )}
+                                </span>
+                                <ExternalLink className="w-3 h-3 text-blue-600" />
+                              </button>
+                            ) : null}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                            hasDeptClaimed
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                          }`}
+                        >
+                          {hasDeptClaimed
+                            ? `Stage ${currentDeptLevel}/3: ${report.status}`
+                            : "Waiting"}
+                        </span>
+                      </div>
+
+                      {/* 4-Stage Progress Timeline */}
+                      <div className="grid grid-cols-4 gap-1.5 pt-1">
+                        {[
+                          { level: 0, label: "Triaged" },
+                          { level: 1, label: "Inspection" },
+                          { level: 2, label: "Field Work" },
+                          { level: 3, label: "Resolved" },
+                        ].map((step) => {
+                          const isComplete =
+                            currentDeptLevel >= step.level && hasDeptClaimed;
+                          const isCurrent =
+                            currentDeptLevel === step.level && hasDeptClaimed;
+                          return (
+                            <div
+                              key={step.level}
+                              className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
+                                isCurrent
+                                  ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
+                                  : isComplete
+                                  ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
+                                  : "bg-white text-slate-400 border-slate-200 font-medium"
+                              }`}
+                            >
+                              <span className="text-[10px] uppercase tracking-tighter block leading-tight">
+                                {step.label}
+                              </span>
+                              <span className="text-[9px] mt-0.5">
+                                {isComplete ? "✓" : `Step ${step.level + 1}`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons Row (Twitter/X style) */}
+                    <div className="flex items-center justify-between pt-1 text-slate-500 text-xs border-t border-slate-100">
+                      {/* Reply Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onNavigateToPost) onNavigateToPost(report.id);
+                        }}
+                        className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer group"
+                      >
+                        <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-bold">
+                          {report.replies?.length || report.repliesCount || 0}
+                        </span>
+                      </button>
+
+                      {/* Re-Report / Amplify */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onReReport) onReReport(report.id);
+                        }}
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
+                          isReReported
+                            ? "text-emerald-600 font-extrabold"
+                            : "hover:text-emerald-600"
+                        }`}
+                      >
+                        <Repeat2 className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                        <span className="font-bold">
+                          {report.reReportsCount || 0}
+                        </span>
+                      </button>
+
+                      {/* Like Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onLikeReport) onLikeReport(report.id);
+                        }}
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
+                          isLiked
+                            ? "text-rose-600 font-extrabold"
+                            : "hover:text-rose-600"
+                        }`}
+                      >
+                        <Heart
+                          className={`w-4 h-4 group-hover:scale-110 transition-transform ${
+                            isLiked ? "fill-rose-600 text-rose-600" : ""
+                          }`}
+                        />
+                        <span className="font-bold">{report.likesCount || 0}</span>
+                      </button>
+
+                      {/* Bookmark Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onBookmark) onBookmark(report.id);
+                        }}
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
+                          isBookmarked
+                            ? "text-blue-600 font-extrabold"
+                            : "hover:text-blue-600"
+                        }`}
+                      >
+                        <Bookmark
+                          className={`w-4 h-4 group-hover:scale-110 transition-transform ${
+                            isBookmarked ? "fill-blue-600 text-blue-600" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {/* Share Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url = `${window.location.origin}/post/${report.id}`;
+                          navigator.clipboard?.writeText(url);
+                          showToast("Post link copied to clipboard!");
+                        }}
+                        className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer group"
+                      >
+                        <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
             ) : (
               <div className="py-12 text-center text-xs text-slate-400">
                 No reports published by this user yet.
@@ -868,7 +1392,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         </span>
                       </div>
                       <span className="text-slate-400 text-[11px] font-medium">
-                        {reply.timestamp}
+                        {formatReportTimestamp(reply.createdAt || reply.timestamp)}
                       </span>
                     </div>
 
@@ -929,7 +1453,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         <span className="font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
                           {report.category}
                         </span>
-                        <span className="text-slate-400 font-medium">{report.timestamp}</span>
+                        <span className="text-slate-400 font-medium">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                       </div>
 
                       <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
@@ -995,7 +1519,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                           </span>
                         </div>
                         <span className="text-slate-400 text-[11px] font-medium">
-                          {reply.timestamp}
+                          {formatReportTimestamp(reply.createdAt || reply.timestamp)}
                         </span>
                       </div>
 
@@ -1035,6 +1559,142 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 No re-reports shared by this user yet.
               </div>
             )}
+          </div>
+        )}
+        {/* Toast Feedback Notification */}
+        {actionToast && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-full shadow-xl animate-fadeIn flex items-center gap-2 border border-slate-700">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{actionToast}</span>
+          </div>
+        )}
+
+        {/* 7. Modern Slide-Up Action Sheet for Report (Pin / Delete Options) */}
+        {selectedReportForActions && (
+          <div
+            className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50 backdrop-blur-xs animate-fadeIn"
+            onClick={() => {
+              setSelectedReportForActions(null);
+              setShowDeleteConfirm(false);
+            }}
+          >
+            <div
+              className="bg-white rounded-t-3xl border-t border-slate-200 shadow-2xl p-5 space-y-4 max-w-lg w-full mx-auto animate-slideUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top Pull Handle Indicator */}
+              <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto -mt-1 mb-2"></div>
+
+              {/* Header / Post Summary */}
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700">
+                    {selectedReportForActions.category} Report
+                  </span>
+                  <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
+                    "{cleanReportText(selectedReportForActions.text)}"
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSelectedReportForActions(null);
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Action Options */}
+              {!showDeleteConfirm ? (
+                <div className="space-y-2">
+                  {/* Option 1: Pin / Unpin Report */}
+                  <button
+                    onClick={handlePinAction}
+                    className="w-full p-3.5 bg-slate-50 hover:bg-blue-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-blue-200"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Pin
+                        className={`w-5 h-5 ${
+                          selectedReportForActions.isPinned
+                            ? "fill-blue-600 rotate-0"
+                            : "rotate-45"
+                        }`}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors">
+                        {selectedReportForActions.isPinned
+                          ? "Unpin Report from Profile"
+                          : "Pin Report to Profile"}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {selectedReportForActions.isPinned
+                          ? "Remove this report from top position"
+                          : "Feature this grievance at the very top of your profile"}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Delete Report */}
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full p-3.5 bg-slate-50 hover:bg-rose-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-rose-200"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-extrabold text-rose-600">
+                        Delete Report
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Permanently remove this grievance and all official updates
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                /* Confirmation Screen for Deletion */
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-3 animate-fadeIn">
+                  <div className="flex items-center gap-2 text-rose-800 font-extrabold text-sm">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                    <span>Confirm Permanent Deletion?</span>
+                  </div>
+                  <p className="text-xs text-rose-700 leading-relaxed font-normal">
+                    Are you sure you want to delete this report? This action cannot
+                    be undone and will erase all verification records and thread
+                    history.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteAction}
+                      className="flex-1 py-2.5 bg-rose-600 text-white font-black text-xs rounded-xl hover:bg-rose-700 transition-colors cursor-pointer shadow-xs"
+                    >
+                      Yes, Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Cancel Button */}
+              {!showDeleteConfirm && (
+                <button
+                  onClick={() => setSelectedReportForActions(null)}
+                  className="w-full py-3 text-center text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

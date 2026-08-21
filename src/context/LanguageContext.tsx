@@ -51,7 +51,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.signInBtn": "Sign In to Account",
     
     // Header
-    "header.title": "Open Nation",
+    "header.title": "Open Desh",
     "header.subtitle": "Civic Governance & Leader Accountability",
     "header.searchPlaceholder": "Search complaints, leaders, departments...",
     "header.postGrievance": "Post Grievance",
@@ -88,7 +88,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
 
     // Language Modal
     "lang.selectTitle": "Select App Language",
-    "lang.selectSubtitle": "Choose your preferred Indian language to navigate Open Nation.",
+    "lang.selectSubtitle": "Choose your preferred Indian language to navigate Open Desh.",
     "lang.searchPlaceholder": "Search Indian language (हिन्दी, বাংলা, தமிழ்...)",
     "lang.active": "Active",
     "lang.apply": "Apply Language",

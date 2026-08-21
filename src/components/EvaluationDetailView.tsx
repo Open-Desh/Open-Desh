@@ -89,8 +89,8 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
       scoreAwarded: 12.5,
       description:
         "Geo-tagged photographic confirmations uploaded by registered local resident verifiers and third-party civil engineering monitors.",
-      publicSource: "Open Nation Verified Geo-Audit Protocol & Ward Inspection Reports",
-      sourceUrl: "https://opennation.org/audits",
+      publicSource: "Open Desh Verified Geo-Audit Protocol & Ward Inspection Reports",
+      sourceUrl: "https://opendesh.in/audits",
       sourceType: "Geo-Tagged Audit",
     },
     {
@@ -99,8 +99,8 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
       scoreAwarded: 13.5,
       description:
         "Aggregated satisfaction scores from Aadhaar-verified constituency voters and verified resident reviews.",
-      publicSource: "Open Nation Public Voter Sentiment Registry",
-      sourceUrl: "https://opennation.org/ratings",
+      publicSource: "Open Desh Public Voter Sentiment Registry",
+      sourceUrl: "https://opendesh.in/ratings",
       sourceType: "Verified Voter Index",
     },
   ];

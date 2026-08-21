@@ -22,7 +22,7 @@ export async function refineCivicReportTextWithAI(
   const trimmed = rawText.trim();
   if (!trimmed) return "";
 
-  const systemPrompt = `You are Open Nation's Civic AI Assistant. The user is a citizen in India reporting an actual municipal/civic/infrastructure problem.
+  const systemPrompt = `You are Open Desh's Civic AI Assistant. The user is a citizen in India reporting an actual municipal/civic/infrastructure problem.
 Your task is to take the citizen's exact words and rewrite it into a well-crafted, polite, high-impact, and compelling grievance for public governance feed.
 Rules:
 1. NEVER add generic bracket titles like "[URGENT CIVIC NOTICE]" or "[OFFICIAL REPORT]".
@@ -221,6 +221,11 @@ export function determineResponsibleAuthorities(
   availableAuthorities: RegisteredAuthority[],
   locationStr: string = ""
 ): RegisteredAuthority[] {
+  // STRICT RULE: Do not auto-tag on empty or short posts (< 75 characters)
+  if (!text || text.trim().length < 70) {
+    return [];
+  }
+
   if (!availableAuthorities || availableAuthorities.length === 0) {
     return [];
   }
@@ -465,5 +470,5 @@ export function determineResponsibleAuthorities(
     }
   });
 
-  return Array.from(matchedAuthorities);
+  return Array.from(matchedAuthorities).slice(0, 4);
 }

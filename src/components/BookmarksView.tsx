@@ -20,6 +20,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   cleanReportText,
+  formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 
 interface BookmarksViewProps {
@@ -152,7 +153,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-400 font-medium">{reply.timestamp}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">{formatReportTimestamp(reply.createdAt || reply.timestamp)}</span>
                   </div>
 
                   {targetUsername && (
@@ -310,7 +311,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
-                        <span>{report.timestamp}</span>
+                        <span>{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                         <span>•</span>
                         <span className="text-blue-600 font-bold uppercase text-[10px] bg-blue-50 px-1.5 py-0.2 rounded">
                           {report.category}
@@ -520,7 +521,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     onClick={() => {
                       if (navigator.share) {
                         navigator.share({
-                          title: `Open Nation - Grievance #${report.id}`,
+                          title: `Open Desh - Grievance #${report.id}`,
                           text: report.text,
                           url: window.location.href,
                         });

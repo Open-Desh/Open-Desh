@@ -37,6 +37,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   cleanReportText,
+  formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 
 interface SearchHubViewProps {
@@ -150,7 +151,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       tag: "#MLALADFundAudit",
       category: "Governance & Transparency",
       postsCount: "12.8K",
-      description: "Open Nation 100-pt algorithm public audit verification",
+      description: "Open Desh 100-pt algorithm public audit verification",
     },
     {
       tag: "#KankeChowkFlyover",
@@ -204,7 +205,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search Open Nation, leaders, issues..."
+            placeholder="Search Open Desh, leaders, issues..."
             className="w-full pl-9 pr-8 py-2 bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-full text-xs sm:text-sm font-medium text-slate-900 focus:outline-none transition-all placeholder:text-slate-500"
             autoFocus
           />
@@ -418,7 +419,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400">
-                            {report.timestamp} • {report.location.city}
+                            {formatReportTimestamp(report.createdAt || report.timestamp)} • {report.location.city}
                           </span>
                         </div>
                       </div>

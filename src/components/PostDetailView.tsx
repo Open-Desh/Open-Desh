@@ -31,6 +31,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   cleanReportText,
+  formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 
 interface PostDetailViewProps {
@@ -83,6 +84,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [comparisonSliderPos, setComparisonSliderPos] = useState(50);
+  const [mediaTab, setMediaTab] = useState<"before" | "after" | "compare">("before");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -383,7 +385,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       </span>
                       <span className="text-xs text-slate-400">·</span>
                       <span className="text-xs text-slate-400 shrink-0">
-                        {reply.timestamp}
+                        {formatReportTimestamp(reply.createdAt || reply.timestamp)}
                       </span>
                     </div>
                   </div>
@@ -655,19 +657,19 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
         </div>
       )}
 
-      {/* Main Single Post Card (ALWAYS fully rendered in exact same design) */}
-      <article className="p-4 sm:p-5 border-b border-slate-200 space-y-4">
-        {/* Author Details Header with Location & Timestamp at top */}
-        <div className="flex items-start justify-between gap-3">
+      {/* Main Single Post Card (Matching Home Feed Layout & High Craft) */}
+      <article className="p-4 sm:p-5 border-b border-slate-200 space-y-3">
+        {/* Author Details Header with Location & Timestamp at top - EXACT HOME FEED DESIGN */}
+        <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <img
               src={report.authorAvatar}
               alt={report.authorName}
               onClick={() => onSelectUser && onSelectUser(report.authorId)}
-              className="w-12 h-12 rounded-full object-cover border border-slate-200 cursor-pointer shadow-xs shrink-0 hover:opacity-90"
+              className="w-10 h-10 rounded-full object-cover border border-slate-200 cursor-pointer shadow-2xs shrink-0 hover:opacity-85"
             />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 min-w-0">
                 {(() => {
                   const cleanUsername = getCleanAuthorUsername(
                     report.authorUsername,
@@ -676,52 +678,44 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                   const isVerified = isReportAuthorVerified(report);
 
                   return (
-                    <h2
+                    <h3
                       onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                      className="text-base font-extrabold text-slate-900 cursor-pointer hover:underline leading-tight flex items-center gap-1"
+                      className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
+                      title={cleanUsername}
                     >
                       <span>{cleanUsername}</span>
                       {isVerified && (
                         <CategoryVerifiedTick
                           category={report.authorCategory}
-                          size="sm"
+                          size="xs"
                         />
                       )}
-                    </h2>
+                    </h3>
                   );
                 })()}
+
                 {report.authorBadge && isReportAuthorVerified(report) && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
                     {report.authorBadge}
                   </span>
                 )}
+
                 {report.urgencyLevel === "Critical Emergency" && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5">
-                    <Flame className="w-3 h-3" /> Critical
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5 shrink-0">
+                    <Flame className="w-2.5 h-2.5" /> Urgent
                   </span>
                 )}
               </div>
 
-              {/* Username + Top-Shifted Location & Timestamp */}
-              <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 mt-0.5">
-                <span>@{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
-                <span>·</span>
-                <span className="text-slate-400">{report.timestamp || "Just now"}</span>
-                {report.location?.city && (
-                  <>
-                    <span>·</span>
-                    <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                      <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      {report.location.city}
-                      {report.location.address && (
-                        <span className="text-slate-400 font-normal truncate max-w-[140px] sm:max-w-xs">
-                          , {report.location.address}
-                        </span>
-                      )}
-                    </span>
-                  </>
-                )}
-              </div>
+              {/* Location & Timestamp - Clean, Single Non-Duplicated String */}
+              <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 min-w-0">
+                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[150px] sm:max-w-[220px]">
+                  {report.location?.city || report.location?.address || "Jharkhand, India"}
+                </span>
+                <span>•</span>
+                <span className="shrink-0">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
+              </p>
             </div>
           </div>
 
@@ -735,14 +729,14 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
         </div>
 
         {/* Post Text Description */}
-        <div className="text-base text-slate-900 leading-relaxed whitespace-pre-line font-normal">
+        <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
           {cleanReportText(report.text)}
-        </div>
+        </p>
 
         {/* Structured Audit Parameters */}
         {report.structuredDetails &&
           Object.keys(report.structuredDetails).length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap pt-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {Object.entries(report.structuredDetails).map(([key, val]) => {
                 if (!val) return null;
                 const label = key
@@ -751,7 +745,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                 return (
                   <span
                     key={key}
-                    className="text-xs bg-slate-100 text-slate-800 border border-slate-200 px-2.5 py-1 rounded-lg font-medium"
+                    className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200/80 px-2 py-0.5 rounded-md font-semibold"
                   >
                     <strong className="text-slate-900 font-bold">
                       {label}:
@@ -763,19 +757,211 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             </div>
           )}
 
-        {/* Cloudflare R2 Multi-Image Display */}
-        {imageList.length > 0 && (
-          <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900/5 flex items-center justify-center group my-2">
+        {/* Media Section: Interactive Before | After | Compare Tabs */}
+        {resolvedAfterImage && imageList.length > 0 ? (
+          <div className="space-y-2 pt-1">
+            {/* Before vs After Work Tab Bar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("before")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    mediaTab === "before"
+                      ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  <span>Before ({imageList.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("after")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    mediaTab === "after"
+                      ? "bg-white text-emerald-700 shadow-xs border border-emerald-200"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>After (Work Done)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("compare")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    mediaTab === "compare"
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span>Split Compare</span>
+                </button>
+              </div>
+
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                Resolution Verified ✓
+              </span>
+            </div>
+
+            {/* Tab 1: Before Evidence Carousel */}
+            {mediaTab === "before" && (
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
+                <img
+                  src={imageList[activeSlide]}
+                  alt={`Before Evidence ${activeSlide + 1}`}
+                  className="w-full max-h-96 object-contain rounded-2xl"
+                  referrerPolicy="no-referrer"
+                />
+
+                <div className="absolute top-3 left-3 bg-rose-600/90 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs">
+                  Before (Reported)
+                  {imageList.length > 1 && ` • ${activeSlide + 1}/${imageList.length}`}
+                </div>
+
+                {imageList.length > 1 && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveSlide((prev) =>
+                          prev > 0 ? prev - 1 : imageList.length - 1
+                        );
+                      }}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveSlide((prev) =>
+                          prev < imageList.length - 1 ? prev + 1 : 0
+                        );
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: After Resolved Work Photo */}
+            {mediaTab === "after" && (
+              <div className="relative rounded-2xl overflow-hidden border border-emerald-200 bg-slate-50 flex items-center justify-center my-1 group">
+                <img
+                  src={resolvedAfterImage}
+                  alt="After Resolution Work"
+                  className="w-full max-h-96 object-contain rounded-2xl"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute top-3 left-3 bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>After Fix (Authority Completed)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Interactive Split-View Comparison Slider directly in post */}
+            {mediaTab === "compare" && (
+              <div className="space-y-3 pt-1">
+                <div className="relative w-full aspect-4/3 rounded-2xl overflow-hidden bg-slate-900 select-none shadow-inner border border-slate-200">
+                  {/* After Image (Base) */}
+                  <img
+                    src={resolvedAfterImage}
+                    alt="After Fix"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+
+                  {/* Before Image (Clipped overlay) */}
+                  <div
+                    className="absolute inset-0 overflow-hidden border-r-2 border-white shadow-2xl"
+                    style={{ width: `${comparisonSliderPos}%` }}
+                  >
+                    <img
+                      src={originalBeforeImage}
+                      alt="Before Fix"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      style={{
+                        width: "100%",
+                        maxWidth: "none",
+                        minWidth: "100%",
+                      }}
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-3 left-3 bg-rose-600/90 backdrop-blur-md text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow-md">
+                      Before (Reported)
+                    </div>
+                  </div>
+
+                  <div className="absolute top-3 right-3 bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow-md">
+                    After (Resolved)
+                  </div>
+
+                  {/* Vertical Divider Handle */}
+                  <div
+                    className="absolute top-0 bottom-0 -ml-3 flex items-center justify-center pointer-events-none"
+                    style={{ left: `${comparisonSliderPos}%` }}
+                  >
+                    <div className="w-7 h-7 bg-white text-slate-800 rounded-full shadow-xl flex items-center justify-center border-2 border-blue-600">
+                      <Columns className="w-3.5 h-3.5 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Slider Controller */}
+                <div className="space-y-1 px-1">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span className="text-rose-600">◀ Original Grievance</span>
+                    <span className="text-xs text-slate-400 font-medium">Slide to compare improvement</span>
+                    <span className="text-emerald-600">Completed Fix ▶</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={comparisonSliderPos}
+                    onChange={(e) => setComparisonSliderPos(Number(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : resolvedAfterImage ? (
+          /* Only After Fix photo exists */
+          <div className="relative rounded-2xl overflow-hidden border border-emerald-200 bg-slate-50 flex items-center justify-center my-1 group">
+            <img
+              src={resolvedAfterImage}
+              alt="After Resolution Work"
+              className="w-full max-h-96 object-contain rounded-2xl"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute top-3 left-3 bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Official Completion Proof</span>
+            </div>
+          </div>
+        ) : imageList.length > 0 ? (
+          /* Standard Multi-Image Carousel (Before work resolved) */
+          <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
             <img
               src={imageList[activeSlide]}
               alt={`Evidence ${activeSlide + 1}`}
-              className="w-full max-h-[480px] object-contain rounded-2xl"
+              className="w-full max-h-96 object-contain rounded-2xl"
               referrerPolicy="no-referrer"
             />
 
             {imageList.length > 1 && (
               <>
-                <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full">
+                <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
                   {activeSlide + 1} / {imageList.length} Photos
                 </div>
 
@@ -786,9 +972,9 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       prev > 0 ? prev - 1 : imageList.length - 1
                     );
                   }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full cursor-pointer transition-all"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={(e) => {
@@ -797,14 +983,14 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       prev < imageList.length - 1 ? prev + 1 : 0
                     );
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full cursor-pointer transition-all"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Tagged Authorities Chips */}
         {(() => {
@@ -816,14 +1002,14 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           if (uniqueOfficers.length === 0 && uniqueLeaders.length === 0) return null;
 
           return (
-            <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
               {uniqueOfficers.map((cleanTag) => (
                 <span
                   key={cleanTag}
                   onClick={() => onSelectUser && onSelectUser(cleanTag)}
-                  className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:underline border border-blue-200/60 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:underline border border-blue-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
                 >
-                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  <Building2 className="w-3 h-3 text-blue-600" />
                   @{cleanTag}
                 </span>
               ))}
@@ -831,9 +1017,9 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                 <span
                   key={cleanTag}
                   onClick={() => onSelectUser && onSelectUser(cleanTag)}
-                  className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:underline border border-indigo-200/60 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:underline border border-indigo-200/70 px-2.5 py-0.5 rounded-full cursor-pointer transition-colors"
                 >
-                  <AtSign className="w-3.5 h-3.5 text-indigo-600" />
+                  <AtSign className="w-3 h-3 text-indigo-600" />
                   @{cleanTag}
                 </span>
               ))}
@@ -843,54 +1029,48 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
 
         {/* Statutory Triage Card */}
         {report.aiTriage && (
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-1.5 mt-2">
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" /> Statutory
+              <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-blue-600" /> Statutory
                 Triage: {report.aiTriage.departmentTag}
               </span>
-              <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
                 Urgency Score: {report.aiTriage.urgencyScore}/10
               </span>
             </div>
-            <p className="text-slate-600 leading-relaxed">
+            <p className="text-[11px] text-slate-600 leading-normal">
               {report.aiTriage.sentimentSummary}
             </p>
           </div>
         )}
 
         {/* 4-Stage Official Progress Card */}
-        <div className="bg-slate-50 border border-blue-200 rounded-2xl p-4 space-y-3 mt-2 shadow-2xs">
+        <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 min-w-0">
               <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
-                <span>Official Action:</span>
+              <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                <span>Official Action{hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? ":" : ""}</span>
                 {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
                   <button
                     onClick={() => {
                       const targetId = report.claimedByOfficer || report.claimedByDept || "";
-                      const cleanId = targetId.replace(/^@+/, "");
+                      const cleanId = getCleanAuthorUsername(targetId);
                       onSelectUser && onSelectUser(cleanId);
                     }}
                     className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
                   >
                     <span>
-                      @{report.claimedByOfficer
-                        ? report.claimedByOfficer.replace(/^@+/, "")
-                        : report.claimedByDept?.replace(/^@+/, "")}
+                      @{getCleanAuthorUsername(report.claimedByOfficer || report.claimedByDept || "")}
                     </span>
                     <ExternalLink className="w-3 h-3 text-blue-600" />
                   </button>
-                ) : (
-                  <span className="text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px] font-extrabold normal-case">
-                    Waiting
-                  </span>
-                )}
+                ) : null}
               </span>
             </div>
             <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
-              hasDeptClaimed ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
+              hasDeptClaimed ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800 border border-amber-200"
             }`}>
               {hasDeptClaimed
                 ? `Stage ${currentDeptLevel}/3: ${report.status}`
@@ -899,7 +1079,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           </div>
 
           {/* 4 Steps Indicator */}
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5 pt-1">
             {[
               { level: 0, label: "Triaged" },
               { level: 1, label: "Inspection" },
@@ -921,7 +1101,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       : "bg-white text-slate-400 border-slate-200 font-medium"
                   }`}
                 >
-                  <span className="text-[10px] uppercase block">
+                  <span className="text-[10px] uppercase tracking-tighter block leading-tight">
                     {step.label}
                   </span>
                   <span className="text-[9px] mt-0.5">
@@ -942,33 +1122,6 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             </div>
           )}
 
-          {report.resolvedImageUrl && (
-            <div className="bg-white border border-emerald-200 rounded-xl p-2.5 space-y-2">
-              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-700">
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  OFFICIAL COMPLETION PROOF
-                </span>
-                {canCompare && (
-                  <button
-                    onClick={() => setShowComparisonModal(true)}
-                    className="text-blue-600 hover:underline flex items-center gap-0.5 text-[10px] font-bold cursor-pointer"
-                  >
-                    <Columns className="w-3 h-3" />
-                    <span>Compare</span>
-                  </button>
-                )}
-              </div>
-              <img
-                src={report.resolvedImageUrl}
-                alt="Work Done Proof"
-                className="w-full max-h-48 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-95"
-                onClick={() => setShowComparisonModal(true)}
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          )}
-
           {/* Department Actions: ONLY visible if user is a tagged/assigned department account */}
           {isTaggedDepartmentOfficer ? (
             <div className="pt-1 space-y-2">
@@ -986,6 +1139,17 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                   <ShieldCheck className="w-4 h-4" />
                   <span>Take Official Action & Acknowledge Grievance</span>
                 </button>
+              ) : currentDeptLevel >= 3 || report.status === "Resolved" ? (
+                /* Completed State: The input box is closed and ended! */
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs text-emerald-900 font-bold">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Resolution Completed & Verified (Work Closed)</span>
+                  </span>
+                  <span className="text-[10px] font-black uppercase bg-emerald-600 text-white px-2 py-0.5 rounded">
+                    Completed
+                  </span>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {/* Optional Proof Image Upload for Final Stage (Step 3 -> Step 4 / Complete) */}
@@ -1071,8 +1235,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                         setStatusUpdateNotes("");
                         setProofImage(null);
                       }}
-                      disabled={currentDeptLevel >= 3}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shrink-0 cursor-pointer whitespace-nowrap"
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 cursor-pointer whitespace-nowrap shadow-xs"
                     >
                       {currentDeptLevel >= 2 ? "Complete ✓" : "Next Stage →"}
                     </button>
@@ -1245,7 +1408,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       </span>
                       <span className="text-xs text-slate-400">·</span>
                       <span className="text-xs text-slate-400 shrink-0">
-                        {currentFocusedReply.timestamp}
+                        {formatReportTimestamp(currentFocusedReply.createdAt || currentFocusedReply.timestamp)}
                       </span>
                     </div>
                   </div>

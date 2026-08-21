@@ -571,7 +571,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {renderHeader("Privacy and safety", "Audience & Data Protection", () => setCurrentScreen("main"))}
 
         <div className="p-4 sm:p-5 text-xs text-slate-500 border-b border-slate-100">
-          Manage what information you share on Open Nation, anonymous whistleblower protections, and location tracking precision.
+          Manage what information you share on Open Desh, anonymous whistleblower protections, and location tracking precision.
         </div>
 
         <div className="divide-y divide-slate-100">

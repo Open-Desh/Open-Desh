@@ -46,6 +46,8 @@ import {
   submitUserReviewInFirestore,
   updateReportStatusInFirestore,
   toggleFollowInFirestore,
+  deleteReportInFirestore,
+  togglePinReportInFirestore,
   seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
@@ -105,7 +107,7 @@ export default function App() {
   // Real-time Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
-      const saved = localStorage.getItem("open_nation_notifications");
+      const saved = localStorage.getItem("open_desh_notifications") || localStorage.getItem("open_nation_notifications");
       return saved ? JSON.parse(saved) : initialSeedNotifications;
     } catch {
       return initialSeedNotifications;
@@ -115,7 +117,7 @@ export default function App() {
   // Sync notifications to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem("open_nation_notifications", JSON.stringify(notifications));
+      localStorage.setItem("open_desh_notifications", JSON.stringify(notifications));
     } catch (e) {
       console.error("Failed to persist notifications:", e);
     }
@@ -292,7 +294,7 @@ export default function App() {
               id: firebaseUser.uid,
               fullName: displayName,
               username: username,
-              bio: "Active citizen contributor in Open Nation civic governance.",
+              bio: "Active citizen contributor in Open Desh civic governance.",
               location: "Jharkhand, India",
               websiteUrl: "",
               avatarUrl:
@@ -526,7 +528,8 @@ export default function App() {
       taggedLeaders: newReportData.taggedLeaders || [],
       urgencyLevel: newReportData.urgencyLevel || "Normal",
       location: newReportData.location,
-      timestamp: "Just now",
+      timestamp: new Date().toISOString(),
+      createdAt: Date.now(),
       status: "Open",
       departmentStatusLevel: 0,
       likesCount: 0,
@@ -603,7 +606,7 @@ export default function App() {
           title: `${userProfile.fullName} upvoted your report`,
           message: `upvoted your civic report on ${target.category || "Issue"}`,
           targetReportId: id,
-          timestamp: "Just now",
+          timestamp: new Date().toISOString(),
         });
       }
 
@@ -732,7 +735,8 @@ export default function App() {
         authorBadge: userProfile.verified ? (userProfile.category === "citizen" ? "Verified Citizen" : undefined) : undefined,
         text,
         imageUrl: replyImage || undefined,
-        timestamp: "Just now",
+        timestamp: new Date().toISOString(),
+        createdAt: Date.now(),
         likesCount: 0,
         likedBy: [],
         reReportsCount: 0,
@@ -778,7 +782,7 @@ export default function App() {
           title: `${userProfile.fullName} replied to your post`,
           message: text.length > 100 ? `${text.slice(0, 100)}...` : text,
           targetReportId: id,
-          timestamp: "Just now",
+          timestamp: new Date().toISOString(),
         });
       }
 
@@ -882,8 +886,10 @@ export default function App() {
       const newStatus = statusLabels[level] || "Under Dept Review";
       const claimingDept =
         userProfile.departmentDetails?.name ||
-        (userProfile.category === "department" ? userProfile.fullName : "Municipal Corp / PWD");
-      const claimingOfficer = userProfile.fullName;
+        (userProfile.category === "department"
+          ? (userProfile.username || userProfile.fullName)
+          : (userProfile.username || userProfile.fullName || "Municipal Corp / PWD"));
+      const claimingOfficer = userProfile.username || userProfile.fullName;
 
       // 1. Optimistic Local State Update for Instant Visual Feedback
       setReports((prev) =>
@@ -929,7 +935,7 @@ export default function App() {
         title: `Report Status: ${newStatus}`,
         message: `${userProfile.fullName} updated ticket #${id.slice(-6).toUpperCase()} to ${newStatus}.${notes ? ` Note: "${notes}"` : ""}`,
         targetReportId: id,
-        timestamp: "Just now",
+        timestamp: new Date().toISOString(),
         metadata: {
           newStatus: newStatus,
           category: targetRep?.category,
@@ -1164,7 +1170,7 @@ export default function App() {
           actorBadge: userProfile.verified ? "Citizen" : undefined,
           title: `${userProfile.fullName} started following you`,
           message: `is now following your civic updates and reports`,
-          timestamp: "Just now",
+          timestamp: new Date().toISOString(),
         });
       }
 
@@ -1177,6 +1183,39 @@ export default function App() {
         // Safe for serverless
       }
     }, "follow users and representatives");
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    // 1. Optimistic removal from state
+    setReports((prev) => prev.filter((r) => r.id !== reportId));
+    // 2. Delete from Firestore
+    await deleteReportInFirestore(reportId);
+    // 3. Delete from backend server
+    try {
+      await fetch(`/api/reports/${reportId}`, { method: "DELETE" });
+    } catch (e) {
+      console.warn("Delete API notice:", e);
+    }
+  };
+
+  const handleTogglePinReport = async (reportId: string, isCurrentlyPinned?: boolean) => {
+    const nextPinned = !isCurrentlyPinned;
+    // 1. Optimistic update in state
+    setReports((prev) =>
+      prev.map((r) => (r.id === reportId ? { ...r, isPinned: nextPinned } : r))
+    );
+    // 2. Update Firestore
+    await togglePinReportInFirestore(reportId, nextPinned);
+    // 3. Update backend server
+    try {
+      await fetch(`/api/reports/${reportId}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPinned: nextPinned }),
+      });
+    } catch (e) {
+      console.warn("Pin API notice:", e);
+    }
   };
 
   const handleMentionProfile = (targetProfile: UserProfile) => {
@@ -1388,7 +1427,7 @@ export default function App() {
         id: matchedReport.authorId,
         fullName: matchedReport.authorName,
         username: matchedReport.authorUsername?.replace(/^@/, "") || cleanUsername,
-        bio: `Active civic contributor in Open Nation.`,
+        bio: `Active civic contributor in Open Desh.`,
         location: matchedReport.location?.city || "Jharkhand, India",
         websiteUrl: "",
         avatarUrl:
@@ -1735,6 +1774,13 @@ export default function App() {
               onNavigateToPost={(reportId) => {
                 handleSelectPost(reportId);
               }}
+              onLikeReport={handleLikeReport}
+              onReReport={handleReReport}
+              onBookmark={handleBookmark}
+              onReply={handleReply}
+              onDeleteReport={handleDeleteReport}
+              onTogglePinReport={handleTogglePinReport}
+              onSelectUser={handleSelectUserProfile}
             />
           )}
 

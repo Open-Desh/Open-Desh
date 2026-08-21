@@ -443,6 +443,7 @@ export const INITIAL_REPORTS: ReportIssue[] = [
       address: "Kanke Chowk, Main arterial corridor",
     },
     timestamp: "2 hours ago",
+    createdAt: Date.now() - 2 * 60 * 60 * 1000,
     status: "Under Dept Review",
     departmentStatusLevel: 1,
     claimedByDept: "Public Works Department (PWD)",
@@ -525,6 +526,7 @@ export const INITIAL_REPORTS: ReportIssue[] = [
       address: "Harmu Housing Colony Block B",
     },
     timestamp: "4 hours ago",
+    createdAt: Date.now() - 4 * 60 * 60 * 1000,
     status: "Open",
     departmentStatusLevel: 0,
     aiTriage: {

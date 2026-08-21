@@ -134,6 +134,7 @@ export interface ThreadedReply {
   text: string;
   imageUrl?: string;
   timestamp: string;
+  createdAt?: number | string;
   likesCount: number;
   likedBy?: string[];
   reReportsCount?: number;
@@ -190,6 +191,7 @@ export interface ReportIssue {
   urgencyLevel?: "Normal" | "High Priority" | "Critical Emergency";
   location: LocationGeo;
   timestamp: string;
+  createdAt?: number | string;
   status: "Open" | "Under Dept Review" | "In Progress" | "Resolved";
   departmentStatusLevel: 0 | 1 | 2 | 3;
   claimedByDept?: string;
@@ -199,6 +201,7 @@ export interface ReportIssue {
   resolvedImageUrl?: string;
   resolutionProof?: string;
   aiTriage?: AiTriageMeta;
+  isPinned?: boolean;
   likesCount: number;
   likedBy?: string[];
   reReportsCount: number;

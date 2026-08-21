@@ -28,7 +28,8 @@ import {
   AtSign,
   RotateCcw,
   Bot,
-  ArrowRight,
+  Search,
+  Users,
 } from "lucide-react";
 import { IssueCategory, LocationGeo, UserProfile, Leader } from "../types.ts";
 import { LocationPickerMap } from "./LocationPickerMap.tsx";
@@ -80,6 +81,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     return "";
   });
   const [originalRawText, setOriginalRawText] = useState<string | null>(null);
+  const [aiRefinedDraft, setAiRefinedDraft] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<IssueCategory>(initialCategory || "Infrastructure");
   const [urgencyLevel, setUrgencyLevel] = useState<"Normal" | "High Priority" | "Critical Emergency">("Normal");
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -93,10 +95,15 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Modern Bottom Slider & Modal States
+  // Modals & Bottom Slider States
   const [showCategorySlider, setShowCategorySlider] = useState(false);
   const [showLocationMapModal, setShowLocationMapModal] = useState(false);
+  const [showAuthorityDirectoryModal, setShowAuthorityDirectoryModal] = useState(false);
   const [showQuickForm, setShowQuickForm] = useState(false);
+
+  // Authority Directory Modal Search & Filter States
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [directoryFilter, setDirectoryFilter] = useState<"all" | "department" | "representative">("all");
 
   // GPS / Geolocation states
   const [locationStatus, setLocationStatus] = useState<"locating" | "locked" | "error">("locating");
@@ -257,16 +264,26 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   }, [selectedCategory]);
 
   // 3. AI Automatic Responsible Department Decider:
-  // Evaluates text, category, and location against ONLY real registered authorities from the DB
-  const aiDeterminedAuthorities = useMemo(() => {
-    return determineResponsibleAuthorities(text, selectedCategory, dbAuthorities, resolvedAddress);
-  }, [text, selectedCategory, dbAuthorities, resolvedAddress]);
+  // Evaluates text (ONLY when >= 75 chars), category, and location against authentic registered profiles in the DB
+  const isEligibleForAIRouting = text.trim().length >= 75;
 
-  // Auto-synchronize AI responsible department tags when text changes, category switches, or location changes
+  const aiDeterminedAuthorities = useMemo(() => {
+    if (!isEligibleForAIRouting) {
+      return [];
+    }
+    return determineResponsibleAuthorities(text, selectedCategory, dbAuthorities, resolvedAddress);
+  }, [text, selectedCategory, dbAuthorities, resolvedAddress, isEligibleForAIRouting]);
+
+  // Auto-synchronize AI responsible department tags when post is >= 75 chars
   useEffect(() => {
-    const aiTags = aiDeterminedAuthorities.map((a) => `@${a.username}`);
-    setActiveSelectedTags(aiTags);
-  }, [aiDeterminedAuthorities]);
+    if (isEligibleForAIRouting && aiDeterminedAuthorities.length > 0) {
+      const aiTags = aiDeterminedAuthorities.map((a) => `@${a.username}`);
+      setActiveSelectedTags((prev) => {
+        // Keep existing manual tags, merge in AI decided tags
+        return Array.from(new Set([...prev, ...aiTags]));
+      });
+    }
+  }, [aiDeterminedAuthorities, isEligibleForAIRouting]);
 
   // Handle @ mention detection in textarea
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -311,7 +328,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     }
   };
 
-  // Filtered mention list from verified database profiles
+  // Filtered mention list from verified database profiles for inline autocomplete
   const matchingMentions = useMemo(() => {
     if (mentionQuery === null) return [];
     return dbAuthorities.filter(
@@ -321,6 +338,25 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         (a.badge && a.badge.toLowerCase().includes(mentionQuery))
     ).slice(0, 5);
   }, [mentionQuery, dbAuthorities]);
+
+  // Filtered list for the full Authority Directory modal
+  const allFilteredAuthorities = useMemo(() => {
+    return dbAuthorities.filter((auth) => {
+      if (directoryFilter !== "all" && auth.category !== directoryFilter) {
+        return false;
+      }
+      if (!directorySearch.trim()) return true;
+      const q = directorySearch.toLowerCase();
+      return (
+        auth.username.toLowerCase().includes(q) ||
+        auth.fullName.toLowerCase().includes(q) ||
+        (auth.role && auth.role.toLowerCase().includes(q)) ||
+        (auth.location && auth.location.toLowerCase().includes(q)) ||
+        (auth.constituency && auth.constituency.toLowerCase().includes(q)) ||
+        (auth.badge && auth.badge.toLowerCase().includes(q))
+      );
+    });
+  }, [dbAuthorities, directorySearch, directoryFilter]);
 
   const toggleTag = (tag: string) => {
     setActiveSelectedTags((prev) =>
@@ -356,8 +392,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     setImages((prev) => prev.filter((_, i) => i !== indexToRemove));
   };
 
-  // 4. AI Refine & Suggestion: Calls Cloudflare Worker (https://oj.opendesh.workers.dev)
-  // Refines user's complaint text and upgrades it seamlessly
+  // 4. AI Refine & Civic Structuring: Synthesizes user text + category + location
   const handleAIRefine = async () => {
     if (!text.trim() || isAIPolishing) return;
     setIsAIPolishing(true);
@@ -372,15 +407,29 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         resolvedAddress
       );
       if (refined && refined.trim()) {
-        setText(refined.trim());
-        setAiRefinedSuccess(true);
-        setTimeout(() => setAiRefinedSuccess(false), 5000);
+        setAiRefinedDraft(refined.trim());
       }
     } catch (err) {
       console.warn("AI refine notice:", err);
     } finally {
       setIsAIPolishing(false);
     }
+  };
+
+  const handleApplyAIDraft = () => {
+    if (aiRefinedDraft) {
+      if (!originalRawText) {
+        setOriginalRawText(text);
+      }
+      setText(aiRefinedDraft);
+      setAiRefinedDraft(null);
+      setAiRefinedSuccess(true);
+      setTimeout(() => setAiRefinedSuccess(false), 4000);
+    }
+  };
+
+  const handleDismissAIDraft = () => {
+    setAiRefinedDraft(null);
   };
 
   // Revert back to original raw text
@@ -416,7 +465,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       }
 
       if (isAnonymous) {
-        fullReportText = `[WHISTLEBLOWER VERIFIED REPORT - IDENTITY PROTECTED]\n${fullReportText}`;
+        fullReportText = `[PROTECTED IDENTITY REPORT]\n${fullReportText}`;
       }
 
       // Collect all tagged mentions from both activeSelectedTags and manual @ tags in text
@@ -453,7 +502,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         }
       });
 
-      // Clean all manual @tags and Cc blocks from the text so they only live cleanly in verified pills below
+      // Clean all manual @tags from the text so they live cleanly as structured verified pills
       let cleanContentText = cleanReportText(fullReportText);
 
       await onSubmit({
@@ -650,7 +699,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   onClick={() => setShowCategorySlider(true)}
                   id="compose-category-slider-trigger"
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full border border-blue-200 transition-all cursor-pointer shadow-2xs"
-                  title="Tap to select Category"
+                  title="Select category for municipal routing"
                 >
                   <CategoryIcon className="w-3.5 h-3.5 text-blue-600" />
                   <span>{selectedCategoryMeta.label}</span>
@@ -663,13 +712,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   onClick={() => setIsAnonymous(!isAnonymous)}
                   className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
                     isAnonymous
-                      ? "bg-slate-900 text-white border-slate-900"
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   }`}
-                  title="Protect identity for anti-corruption and sensitive reports"
+                  title="Hide your name and profile to protect your identity"
                 >
                   <EyeOff className="w-3 h-3" />
-                  <span>{isAnonymous ? "Anonymous ON" : "Anonymous"}</span>
+                  <span>{isAnonymous ? "Protected Identity" : "Anonymous"}</span>
                 </button>
 
                 {/* Urgent/Critical Active Indicator Badge */}
@@ -687,7 +736,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   type="button"
                   onClick={() => setShowLocationMapModal(true)}
                   className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600 font-medium cursor-pointer transition-colors max-w-full truncate py-0.5"
-                  title="Click to view/change on map"
+                  title="Click to view and adjust location on map"
                 >
                   <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   <span className="truncate">{resolvedAddress}</span>
@@ -702,7 +751,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               ref={textareaRef}
               value={text}
               onChange={handleTextChange}
-              placeholder="Kya Problem ha ? (Apni samasya yaha likhein, road, pani, bijli, safai, ghooskhori...)"
+              placeholder="What civic issue would you like to report? Describe the problem, location details, and citizen impact..."
               rows={4}
               className="w-full text-base sm:text-lg font-medium text-slate-900 placeholder:text-slate-400 border-none outline-none resize-none p-0 focus:ring-0 leading-relaxed bg-transparent flex-1"
             />
@@ -710,8 +759,11 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             {/* Real-time @ mention autocomplete dropdown */}
             {matchingMentions.length > 0 && (
               <div className="absolute left-0 right-0 top-16 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-1.5 space-y-1 animate-fade-in max-h-48 overflow-y-auto">
-                <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider flex items-center gap-1">
-                  <AtSign className="w-3 h-3 text-blue-600" /> Verified Database Authorities
+                <div className="text-[10px] font-bold text-slate-500 px-2 py-1 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <AtSign className="w-3 h-3 text-blue-600" /> Civic Authority Directory
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-normal">Verified Profiles</span>
                 </div>
                 {matchingMentions.map((auth) => (
                   <button
@@ -743,50 +795,98 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               </div>
             )}
 
-            {/* AI Refine Button directly at the end of user's written text */}
-            {text.trim().length > 4 && (
-              <div className="pt-2 flex items-center justify-between flex-wrap gap-2 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAIRefine}
-                    disabled={isAIPolishing}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
-                    title="AI will refine your problem into a professional official civic complaint"
-                  >
-                    {isAIPolishing ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
-                        <span>AI सुधार रहा है...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
-                        <span>AI Suggest / सुधारें</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Undo Button if user wants their original raw text back */}
-                  {originalRawText && (
+            {/* AI Assistant Section: Triggers when user writes >= 75 characters */}
+            {isEligibleForAIRouting ? (
+              <div className="pt-2.5 space-y-2 animate-fade-in">
+                {/* AI Action Bar */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={handleRevertText}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors cursor-pointer"
-                      title="Revert to your original raw text"
+                      onClick={handleAIRefine}
+                      disabled={isAIPolishing}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs hover:shadow-sm hover:from-blue-700 hover:to-indigo-700 transition-all cursor-pointer active:scale-95"
+                      title="AI will synthesize your text, category & location into an articulate official civic complaint"
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Undo</span>
+                      {isAIPolishing ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                          <span>Generating AI Draft...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-white" />
+                          <span>✨ AI Enhance & Draft</span>
+                        </>
+                      )}
                     </button>
+
+                    {/* Undo Button if user applied AI text and wants original back */}
+                    {originalRawText && (
+                      <button
+                        type="button"
+                        onClick={handleRevertText}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-full transition-colors cursor-pointer"
+                        title="Revert to your original text"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Undo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {aiRefinedSuccess && (
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-fade-in">
+                      <Check className="w-3 h-3" /> AI Draft Applied
+                    </span>
                   )}
                 </div>
 
-                {aiRefinedSuccess && (
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-fade-in">
-                    <Check className="w-3 h-3" /> AI Refined
-                  </span>
+                {/* AI Draft Comparison Preview Box (If generated) */}
+                {aiRefinedDraft && (
+                  <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 space-y-2.5 animate-fade-in shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        AI Structured Civic Draft
+                      </span>
+                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-full">
+                        Synthesized from Text + {selectedCategoryMeta.label} + Location
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-normal bg-white p-3 rounded-xl border border-blue-100 shadow-2xs">
+                      {aiRefinedDraft}
+                    </p>
+
+                    <div className="flex items-center justify-end gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={handleDismissAIDraft}
+                        className="px-3 py-1 rounded-full text-xs font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        Keep My Original
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyAIDraft}
+                        className="px-4 py-1 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Apply AI Draft
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
+            ) : (
+              /* Helpful writing hint for user before reaching 75 chars */
+              charLength > 0 && charLength < 75 && (
+                <div className="pt-2 flex items-center gap-1.5 text-[11px] text-slate-400 animate-fade-in">
+                  <Info className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span>Write {75 - charLength} more characters for AI smart routing & professional draft synthesis.</span>
+                </div>
+              )
             )}
           </div>
 
@@ -882,85 +982,76 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           )}
         </div>
 
-        {/* 3. Intelligent Real-Time Tagging & AI Authority Routing */}
+        {/* 3. Responsible Civic Authorities & Authority Directory Section */}
         <div className="pt-3 pb-1 border-t border-slate-100 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-bold text-slate-700 flex items-center gap-1">
-                <Bot className="w-3.5 h-3.5 text-blue-600" />
-                AI Decided Responsible Authorities:
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-slate-800 flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                Assigned Responsible Authorities:
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">
-                (Verified from Firebase DB)
-              </span>
+              {activeSelectedTags.length > 0 && (
+                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                  {activeSelectedTags.length} Active
+                </span>
+              )}
             </div>
-            {activeSelectedTags.length > 0 && (
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                {activeSelectedTags.length} Tagged
-              </span>
-            )}
+
+            {/* Find Authorities Directory Button */}
+            <button
+              type="button"
+              onClick={() => setShowAuthorityDirectoryModal(true)}
+              className="text-blue-600 hover:text-blue-700 font-bold text-[11px] flex items-center gap-1 hover:underline cursor-pointer"
+            >
+              <Search className="w-3 h-3" />
+              <span>Find Authorities</span>
+            </button>
           </div>
 
-          {/* Real Registered Profiles Chips */}
+          {/* Tag Pills Display */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {aiDeterminedAuthorities.length > 0 ? (
-              aiDeterminedAuthorities.map((auth) => {
-                const tag = `@${auth.username}`;
-                const isSelected = activeSelectedTags.includes(tag);
+            {activeSelectedTags.length > 0 ? (
+              activeSelectedTags.map((tag) => {
+                const cleanH = tag.replace(/^@+/, "").toLowerCase();
+                const matchedAuth = dbAuthorities.find(
+                  (a) => a.username.replace(/^@+/, "").toLowerCase() === cleanH
+                );
                 return (
                   <button
-                    key={auth.id}
+                    key={tag}
                     type="button"
                     onClick={() => toggleTag(tag)}
-                    className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border shrink-0 transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-blue-600 border-blue-600 text-white font-bold shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 font-medium"
-                    }`}
-                    title={`${auth.fullName} (${auth.role})`}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-600 border border-blue-600 text-white font-bold shrink-0 transition-all cursor-pointer shadow-xs"
+                    title={matchedAuth ? `${matchedAuth.fullName} (${matchedAuth.role})` : tag}
                   >
-                    <img
-                      src={auth.avatarUrl}
-                      alt={auth.fullName}
-                      className="w-4 h-4 rounded-full object-cover"
-                    />
-                    <span>{tag}</span>
-                    <span
-                      className={`text-[10px] ${
-                        isSelected ? "text-blue-100" : "text-slate-400"
-                      }`}
-                    >
-                      ({auth.badge})
-                    </span>
-                    {isSelected ? (
-                      <Check className="w-3 h-3 text-white ml-0.5 stroke-[2.5]" />
-                    ) : (
-                      <span className="text-slate-400 text-xs ml-0.5 font-bold">+</span>
+                    {matchedAuth?.avatarUrl && (
+                      <img
+                        src={matchedAuth.avatarUrl}
+                        alt={tag}
+                        className="w-4 h-4 rounded-full object-cover"
+                      />
                     )}
+                    <span>{tag}</span>
+                    {matchedAuth?.badge && (
+                      <span className="text-[10px] text-blue-100 font-normal">
+                        ({matchedAuth.badge})
+                      </span>
+                    )}
+                    <X className="w-3 h-3 text-white ml-0.5 hover:scale-125 transition-transform" />
                   </button>
                 );
               })
-            ) : (
-              <div className="text-[11px] text-slate-500 italic py-1 px-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-1.5">
+            ) : isEligibleForAIRouting ? (
+              <div className="text-[11px] text-slate-500 py-1 px-2.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-1.5 w-full">
                 <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>No local department registered in DB for this area. Tag manually with @ if needed.</span>
+                <span>No matching local department registered in directory for this area. Tag manually using the directory.</span>
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-400 py-1 px-2.5 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl flex items-center gap-1.5 w-full">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Type 75+ characters for AI auto-routing or click "Find Authorities" to select manually.</span>
               </div>
             )}
-
-            {/* Location GPS Chip - Click opens interactive map */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowLocationMapModal(true);
-                fetchLiveGPS();
-              }}
-              className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 font-semibold border border-blue-200 shrink-0 cursor-pointer hover:bg-blue-100 transition-colors"
-              title="Click to view and adjust location on map"
-            >
-              <MapPin className="w-3 h-3 text-blue-600" />
-              <span className="truncate max-w-[140px]">{resolvedAddress}</span>
-              <RefreshCw className={`w-2.5 h-2.5 ${isRefreshingLocation ? "animate-spin" : ""}`} />
-            </button>
           </div>
         </div>
       </main>
@@ -1003,7 +1094,20 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             <Sliders className="w-5 h-5" />
           </button>
 
-          {/* 4. Quick-fill structured parameters */}
+          {/* 4. Find & Tag Authorities Directory Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowAuthorityDirectoryModal(true)}
+            id="toolbar-directory-btn"
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+              activeSelectedTags.length > 0 ? "bg-blue-100 text-blue-700" : "hover:bg-blue-50 text-blue-600"
+            }`}
+            title="Find & Tag Responsible Authorities"
+          >
+            <Users className="w-5 h-5" />
+          </button>
+
+          {/* 5. Quick-fill structured parameters */}
           <button
             type="button"
             onClick={() => setShowQuickForm(!showQuickForm)}
@@ -1016,7 +1120,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             <BarChart2 className="w-5 h-5" />
           </button>
 
-          {/* 5. Interactive Location Map Trigger */}
+          {/* 6. Interactive Location Map Trigger */}
           <button
             type="button"
             onClick={() => {
@@ -1024,14 +1128,14 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               fetchLiveGPS();
             }}
             id="toolbar-location-btn"
-            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer relative hover:bg-blue-50 text-blue-600`}
+            className="w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer relative hover:bg-blue-50 text-blue-600"
             title="Open Interactive Map to Pin Exact Location"
           >
             <MapPin className="w-5 h-5" />
             <span className="w-2 h-2 bg-emerald-500 rounded-full absolute top-1.5 right-1.5 border border-white"></span>
           </button>
 
-          {/* 6. Urgent / Critical Emergency Tag Button */}
+          {/* 7. Urgent / Critical Emergency Tag Button */}
           <button
             type="button"
             onClick={() =>
@@ -1162,7 +1266,168 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 6. INTERACTIVE MAP SLIDE-UP MODAL */}
+      {/* 6. CIVIC AUTHORITY DIRECTORY MODAL (Search & Tag Authorities) */}
+      {/* ========================================================================= */}
+      {showAuthorityDirectoryModal && (
+        <div className="fixed inset-0 z-[450] bg-white flex flex-col h-[100dvh] max-h-[100dvh] w-full overflow-hidden animate-fade-in font-sans">
+          <header className="h-14 px-4 flex items-center justify-between border-b border-slate-200 bg-white shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAuthorityDirectoryModal(false)}
+                className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5 text-slate-800" />
+              </button>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Civic Authority Directory</h3>
+                <p className="text-[10px] text-slate-500">
+                  Search & tag verified departments or elected leaders
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAuthorityDirectoryModal(false)}
+              className="px-4 py-1.5 rounded-full text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs"
+            >
+              Done ({activeSelectedTags.length})
+            </button>
+          </header>
+
+          <div className="p-3 border-b border-slate-100 bg-slate-50 space-y-2.5">
+            {/* Search Box */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={directorySearch}
+                onChange={(e) => setDirectorySearch(e.target.value)}
+                placeholder="Search department, leader, role, or city..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 font-medium"
+              />
+              {directorySearch && (
+                <button
+                  type="button"
+                  onClick={() => setDirectorySearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setDirectoryFilter("all")}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  directoryFilter === "all"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                All ({dbAuthorities.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDirectoryFilter("department")}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  directoryFilter === "department"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                Departments
+              </button>
+              <button
+                type="button"
+                onClick={() => setDirectoryFilter("representative")}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  directoryFilter === "representative"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                Elected Leaders
+              </button>
+            </div>
+          </div>
+
+          {/* Directory List */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 max-w-xl mx-auto w-full">
+            {allFilteredAuthorities.length > 0 ? (
+              allFilteredAuthorities.map((auth) => {
+                const tag = `@${auth.username}`;
+                const isSelected = activeSelectedTags.includes(tag);
+                return (
+                  <button
+                    key={auth.id}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`w-full text-left p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-50/80 border-blue-600 ring-1 ring-blue-600/30"
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={auth.avatarUrl}
+                        alt={auth.fullName}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {auth.fullName}
+                          </p>
+                          <span className="text-[10px] text-blue-600 font-bold">
+                            @{auth.username}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {auth.role} {auth.constituency ? `• ${auth.constituency}` : ""}
+                        </p>
+                        {auth.location && (
+                          <p className="text-[10px] text-slate-400 truncate">
+                            📍 {auth.location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                        {auth.badge || "Verified"}
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center border transition-colors ${
+                          isSelected
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="text-center py-12 text-slate-400 space-y-2">
+                <Building2 className="w-8 h-8 mx-auto text-slate-300" />
+                <p className="text-xs font-medium">No matching authorities found</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. INTERACTIVE MAP SLIDE-UP MODAL */}
       {/* ========================================================================= */}
       {showLocationMapModal && (
         <div className="fixed inset-0 z-[400] bg-white flex flex-col h-[100dvh] max-h-[100dvh] w-full overflow-hidden animate-fade-in">

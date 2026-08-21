@@ -873,8 +873,55 @@ async function startServer() {
   // Follow / Unfollow User
   app.post("/api/users/:identifier/follow", (req, res) => {
     const { identifier } = req.params;
-    const targetUser = usersDatabase[identifier];
+    const clean = identifier.replace(/^@/, "").trim().toLowerCase();
+    let targetUser =
+      usersDatabase[identifier] ||
+      usersDatabase[clean] ||
+      Object.values(usersDatabase).find(
+        (u) =>
+          u.id.toLowerCase() === clean ||
+          u.username.replace(/^@/, "").toLowerCase() === clean
+      );
+
     let isFollowing = false;
+
+    if (!targetUser) {
+      // Check in leaders database
+      const leader = leadersDatabase.find(
+        (l) =>
+          l.id.toLowerCase() === clean ||
+          l.username.replace(/^@/, "").toLowerCase() === clean
+      );
+      if (leader) {
+        leader.isFollowing = !leader.isFollowing;
+        leader.followersCount = leader.isFollowing
+          ? (leader.followersCount || 0) + 1
+          : Math.max(0, (leader.followersCount || 1) - 1);
+        isFollowing = leader.isFollowing;
+        return res.json({ status: "ok", isFollowing });
+      }
+
+      // Create fallback profile in usersDatabase
+      targetUser = {
+        id: clean,
+        fullName: clean,
+        username: clean,
+        bio: "Active civic contributor in Open Desh.",
+        location: "Jharkhand, India",
+        websiteUrl: "",
+        avatarUrl:
+          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+        category: "citizen",
+        followersCount: 0,
+        followingCount: 0,
+        postsCount: 0,
+        systemScore: 80,
+        publicRating: 5.0,
+        reviewsCount: 0,
+        verified: false,
+      };
+      usersDatabase[clean] = targetUser;
+    }
 
     if (targetUser) {
       targetUser.isFollowing = !targetUser.isFollowing;
@@ -884,7 +931,26 @@ async function startServer() {
       isFollowing = targetUser.isFollowing;
     }
 
-    res.json({ status: "ok", isFollowing });
+    res.json({ status: "ok", isFollowing, followersCount: targetUser?.followersCount });
+  });
+
+  // Pin / Unpin Report
+  app.post("/api/reports/:id/pin", (req, res) => {
+    const { isPinned } = req.body;
+    const report = reportsDatabase.find((r) => r.id === req.params.id);
+    if (!report) return res.status(404).json({ error: "Report not found" });
+    report.isPinned = typeof isPinned === "boolean" ? isPinned : !report.isPinned;
+    res.json({ status: "ok", isPinned: report.isPinned });
+  });
+
+  // Delete Report
+  app.delete("/api/reports/:id", (req, res) => {
+    const idx = reportsDatabase.findIndex((r) => r.id === req.params.id);
+    if (idx >= 0) {
+      reportsDatabase.splice(idx, 1);
+      return res.json({ status: "ok" });
+    }
+    res.status(404).json({ error: "Report not found" });
   });
 
   // 3. Civic Reports Feed
@@ -1136,7 +1202,7 @@ async function startServer() {
             config: {
               systemInstruction:
                 systemInstruction ||
-                "You are the official Civic AI Legal Advisor for Open Nation (Open Desh), India's premier civic tech governance and leader accountability platform. Provide structured, empathetic, legally accurate advice in Hindi/Hinglish or English covering RTI Act 2005, CPGRAMS, Citizen SLA Charters, and Municipal Acts.",
+                "You are the official Civic AI Legal Advisor for Open Desh, India's premier civic tech governance and leader accountability platform. Provide structured, empathetic, legally accurate advice in Hindi/Hinglish or English covering RTI Act 2005, CPGRAMS, Citizen SLA Charters, and Municipal Acts.",
               temperature: 0.4,
               maxOutputTokens: 1200,
             },
@@ -1155,7 +1221,7 @@ async function startServer() {
       }
 
       // Built-in resilient Civic Knowledge Engine Fallback
-      let fallbackText = `⚖️ **नागरिक अधिकार व समाधान प्रक्रिया (Open Nation Civic Guidance)**\n\n1. **शिकायत दर्ज करें:** Open Nation पर फोटो और GPS के साथ अपनी समस्या पोस्ट करें।\n2. **विभाग का निर्धारण:** सड़क हेतु PWD / नगर निगम, बिजली हेतु विद्युत बोर्ड, पानी हेतु जल संस्थान।\n3. **सूचना का अधिकार (RTI 2005):** 30 दिन में कार्रवाई न होने पर PIO को ₹10 शुल्क के साथ आवेदन देकर ऑडिट व बिल रिपोर्ट माँगें।`;
+      let fallbackText = `⚖️ **नागरिक अधिकार व समाधान प्रक्रिया (Open Desh Civic Guidance)**\n\n1. **शिकायत दर्ज करें:** Open Desh पर फोटो और GPS के साथ अपनी समस्या पोस्ट करें।\n2. **विभाग का निर्धारण:** सड़क हेतु PWD / नगर निगम, बिजली हेतु विद्युत बोर्ड, पानी हेतु जल संस्थान।\n3. **सूचना का अधिकार (RTI 2005):** 30 दिन में कार्रवाई न होने पर PIO को ₹10 शुल्क के साथ आवेदन देकर ऑडिट व बिल रिपोर्ट माँगें।`;
       
       const q = prompt.toLowerCase();
       if (q.includes("sadak") || q.includes("road") || q.includes("gaddha") || q.includes("pothole")) {

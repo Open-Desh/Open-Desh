@@ -1,7 +1,7 @@
-# Open Nation - System Architecture & Long-Term Project Memory
+# Open Desh - System Architecture & Long-Term Project Memory
 
 ## Project Overview
-**Open Nation** is a high-scale, enterprise-grade civic governance, leader accountability, and real-time grievance reporting platform designed for 100,000+ citizens and elected representatives.
+**Open Desh** (Tagline: "Open Voice, Open Desh") is a high-scale, enterprise-grade civic governance, leader accountability, and real-time grievance reporting platform designed for 100,000+ citizens and elected representatives.
 
 ## Core Pillars & Product Design
 1. **Feed & Grievance Reporting (Twitter/X-style)**:

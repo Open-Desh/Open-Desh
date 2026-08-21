@@ -5,6 +5,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   arrayUnion,
   arrayRemove,
   increment,
@@ -47,7 +48,11 @@ export async function getReportsDirect(): Promise<ReportIssue[]> {
         reports.push(docSnap.data() as ReportIssue);
       });
       // Sort newest first
-      return reports.sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
+      return reports.sort((a, b) => {
+        const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || a.timestamp).getTime() || 0;
+        const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || b.timestamp).getTime() || 0;
+        return timeB - timeA;
+      });
     } else {
       // Seed Firestore with initial reports
       for (const rep of INITIAL_REPORTS) {
@@ -516,7 +521,27 @@ export async function checkUsernameAvailability(
   return { available: true };
 }
 
-// 13. Toggle Follow / Unfollow in Firestore Database for Users & Leaders
+// 13. Delete Report from Firestore
+export async function deleteReportInFirestore(reportId: string): Promise<void> {
+  try {
+    const repDoc = doc(db, "reports", reportId);
+    await deleteDoc(repDoc);
+  } catch (err) {
+    console.warn("Firestore delete report notice:", err);
+  }
+}
+
+// 14. Toggle Pin Report in Firestore
+export async function togglePinReportInFirestore(reportId: string, isPinned: boolean): Promise<void> {
+  try {
+    const repDoc = doc(db, "reports", reportId);
+    await updateDoc(repDoc, { isPinned });
+  } catch (err) {
+    console.warn("Firestore pin report notice:", err);
+  }
+}
+
+// 15. Toggle Follow / Unfollow in Firestore Database for Users & Leaders
 export async function toggleFollowInFirestore(
   currentUserId: string,
   targetUserIdOrUsername: string,
@@ -611,6 +636,17 @@ export async function toggleFollowInFirestore(
             { merge: true }
           );
         });
+      } else {
+        await setDoc(
+          targetRef,
+          {
+            id: cleanTarget,
+            username: cleanTarget,
+            followers: [currentUserId],
+            followersCount: 1,
+          },
+          { merge: true }
+        );
       }
 
       // If target is in leaders collection
