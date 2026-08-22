@@ -120,6 +120,11 @@ export interface UserProfile {
   verificationSubmittedDocs?: string;
   savedReports?: string[];
   isFollowing?: boolean;
+  email?: string;
+  userId?: string;
+  birthDate?: string;
+  birthDayFormatted?: string;
+  joiningDate?: string;
 }
 
 export interface ThreadedReply {

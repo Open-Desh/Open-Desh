@@ -7,6 +7,7 @@ interface BottomNavProps {
   onNavigate: (view: string) => void;
   onOpenCreateReport: () => void;
   unreadNotificationsCount?: number;
+  visible?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -14,13 +15,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onNavigate,
   onOpenCreateReport,
   unreadNotificationsCount = 0,
+  visible = true,
 }) => {
   const { t } = useLanguage();
 
   return (
     <nav
       id="bottom-nav"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white rounded-t-2xl border-t border-slate-200/80 shadow-[0_-5px_25px_rgba(0,0,0,0.08)] px-2"
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white rounded-t-2xl border-t border-slate-200/80 shadow-[0_-5px_25px_rgba(0,0,0,0.08)] px-2 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+        visible ? "translate-y-0" : "translate-y-[150%] pointer-events-none"
+      }`}
     >
       <div className="flex items-center justify-around h-16 relative">
         {/* 1. Home */}

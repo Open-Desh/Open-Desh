@@ -48,20 +48,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenLogin,
   onLogout,
 }) => {
-  const [darkMode, setDarkMode] = React.useState(false);
+  const [darkMode, setDarkMode] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem("open_desh_theme");
+      if (saved) return saved === "dark";
+      return document.documentElement.classList.contains("dark");
+    } catch {
+      return false;
+    }
+  });
+
   const { t, currentLanguageInfo, openLanguageModal } = useLanguage();
 
-  // Navigation links with Notifications, Budget below Profile and Language below Setting & Privacy
+  // Sync dark mode class on <html> document element and save in localStorage
+  React.useEffect(() => {
+    try {
+      if (darkMode) {
+        document.documentElement.classList.add("dark");
+        localStorage.setItem("open_desh_theme", "dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+        localStorage.setItem("open_desh_theme", "light");
+      }
+    } catch (e) {
+      console.warn("Theme storage error:", e);
+    }
+  }, [darkMode]);
+
+  const toggleTheme = () => {
+    setDarkMode((prev) => !prev);
+  };
+
+  // Navigation links with Budget below Profile and Language below Setting & Privacy
   const navItems = [
     { id: "profile", label: t("nav.profile", "Profile"), icon: User },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: Bell,
-      badge: unreadNotificationsCount > 0 ? `${unreadNotificationsCount}` : undefined,
-    },
     { id: "budget", label: t("nav.budget", "National Budget"), icon: IndianRupee },
-    { id: "connect", label: "Connect & Leaders", icon: Users },
     { id: "infrastructure", label: t("nav.infrastructure", "Infrastructure"), icon: Building2 },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
@@ -295,7 +316,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             id="theme-toggle-btn"
-            onClick={() => setDarkMode(!darkMode)}
+            onClick={toggleTheme}
             className="w-full p-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-3 text-xs sm:text-sm font-bold cursor-pointer"
             title="Toggle Theme"
           >

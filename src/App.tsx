@@ -15,12 +15,10 @@ import { SettingsView } from "./components/SettingsView.tsx";
 import { LoginView } from "./components/LoginView.tsx";
 import { EditProfileView } from "./components/EditProfileView.tsx";
 import { VerificationView } from "./components/VerificationView.tsx";
-import { AgePromptModal } from "./components/AgePromptModal.tsx";
 import { BudgetView } from "./components/BudgetView.tsx";
 import { PostDetailView } from "./components/PostDetailView.tsx";
 import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { NotificationsView } from "./components/NotificationsView.tsx";
-import { initialSeedNotifications } from "./data/seedNotifications.ts";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
 import {
   doc,
@@ -48,7 +46,6 @@ import {
   toggleFollowInFirestore,
   deleteReportInFirestore,
   togglePinReportInFirestore,
-  seedAllCollectionsToFirestore,
 } from "./lib/firestoreSync.ts";
 import {
   UserProfile,
@@ -88,13 +85,13 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authActionReason, setAuthActionReason] = useState<string | null>(null);
-  const [showAgeModal, setShowAgeModal] = useState(false);
 
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
   const [composeInitialMention, setComposeInitialMention] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
   // Core Data States - defaults to guest citizen initially
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultGuestProfile);
@@ -104,13 +101,13 @@ export default function App() {
   const [infrastructure, setInfrastructure] = useState<InfrastructureProject[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
 
-  // Real-time Notifications State
+  // Real-time Notifications State (Strictly real user notifications)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
       const saved = localStorage.getItem("open_desh_notifications") || localStorage.getItem("open_nation_notifications");
-      return saved ? JSON.parse(saved) : initialSeedNotifications;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return initialSeedNotifications;
+      return [];
     }
   });
 
@@ -242,6 +239,38 @@ export default function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
+  // Scroll detection to hide/show top category bar and bottom navigation bar
+  const [isNavVisible, setIsNavVisible] = useState(true);
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          // Always visible at the very top
+          if (currentScrollY <= 15) {
+            setIsNavVisible(true);
+          } else if (currentScrollY > lastScrollY + 3) {
+            // Scrolling down (reading feed) -> hide immediately
+            setIsNavVisible(false);
+          } else if (currentScrollY < lastScrollY - 3) {
+            // Scrolling up (navigating back up) -> show immediately
+            setIsNavVisible(true);
+          }
+          lastScrollY = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   // Ref to hold the active Firestore user snapshot unsubscribe function
   const [profileUnsub, setProfileUnsub] = useState<Unsubscribe | null>(null);
 
@@ -259,30 +288,35 @@ export default function App() {
             const isVerified =
               typeof savedData.verified === "boolean" ? savedData.verified : false;
 
-            setUserProfile((prev) => ({
+            const rawData = userDocSnap.data() as any;
+            const existingJoiningDate =
+              savedData.joiningDate ||
+              rawData?.createdAt ||
+              new Date().toISOString();
+
+            setUserProfile((prevProfile) => ({
               ...defaultGuestProfile,
-              ...prev,
+              ...prevProfile,
               ...savedData,
               id: firebaseUser.uid,
-              fullName: savedData.fullName || firebaseUser.displayName || prev.fullName,
+              fullName: savedData.fullName || firebaseUser.displayName || prevProfile.fullName,
               username:
                 savedData.username ||
                 (firebaseUser.email
                   ? firebaseUser.email.split("@")[0]
                   : `citizen_${firebaseUser.uid.slice(0, 6)}`),
-              avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prev.avatarUrl,
+              avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prevProfile.avatarUrl,
               verified: isVerified,
               verificationStatus:
                 savedData.verificationStatus || (isVerified ? "approved" : "none"),
               category: savedData.category || "citizen",
-              age: savedData.age,
+              age: savedData.age || prevProfile.age,
+              birthDate: (savedData as any).birthDate || prevProfile.birthDate,
+              joiningDate: existingJoiningDate || prevProfile.joiningDate,
             }));
-
-            if (!savedData.age) {
-              setShowAgeModal(true);
-            }
           } else {
             // Automatic New User Profile Generation & Firestore Provisioning
+            const nowIso = new Date().toISOString();
             const displayName =
               firebaseUser.displayName ||
               (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Citizen Resident");
@@ -310,17 +344,26 @@ export default function App() {
               verified: false, // Default to false for all new accounts
               verificationStatus: "none",
               savedReports: [],
+              joiningDate: nowIso,
             };
 
-            setUserProfile(newProfile);
-            setShowAgeModal(true);
-
-            await setDoc(userDocRef, {
+            setUserProfile((prevProfile) => ({
               ...newProfile,
-              email: firebaseUser.email || "",
-              createdAt: new Date().toISOString(),
-              lastLogin: new Date().toISOString(),
-            });
+              age: prevProfile.age,
+              birthDate: prevProfile.birthDate,
+            }));
+
+            await setDoc(
+              userDocRef,
+              {
+                ...newProfile,
+                email: firebaseUser.email || "",
+                joiningDate: nowIso,
+                createdAt: nowIso,
+                lastLogin: nowIso,
+              },
+              { merge: true }
+            );
           }
         },
         (error) => {
@@ -450,39 +493,24 @@ export default function App() {
     }
   };
 
-  // Fetch initial feed & civic data (Directly from Firestore database + Server proxy fallback)
+  // Fetch initial feed & civic data directly from Firestore database
   const fetchData = async () => {
     try {
       setLoadingReports(true);
 
-      // 1. Proactively seed all collections into Firestore if needed
-      seedAllCollectionsToFirestore().catch((err) => console.warn("Seed notice:", err));
-
-      // 2. Fetch Reports directly from Firestore
+      // 1. Fetch Reports directly from Firestore
       const reportsList = await getReportsDirect();
       setReports(reportsList);
 
-      // 3. Fetch Leaders directly from Firestore
+      // 2. Fetch Leaders directly from Firestore
       const leadersList = await getLeadersDirect();
       setLeaders(leadersList);
 
-      // 4. Fetch Infrastructure directly from Firestore
+      // 3. Fetch Infrastructure directly from Firestore
       const infraList = await getInfrastructureDirect();
       setInfrastructure(infraList);
     } catch (err) {
-      console.warn("Direct Firestore fetch exception, attempting fallback:", err);
-      try {
-        const [repRes, leadRes, infraRes] = await Promise.all([
-          fetch("/api/reports"),
-          fetch("/api/leaders"),
-          fetch("/api/infrastructure"),
-        ]);
-        if (repRes.ok) setReports(await repRes.json());
-        if (leadRes.ok) setLeaders(await leadRes.json());
-        if (infraRes.ok) setInfrastructure(await infraRes.json());
-      } catch (fbErr) {
-        console.error("All fetch sources failed:", fbErr);
-      }
+      console.warn("Firestore fetch error:", err);
     } finally {
       setLoadingReports(false);
     }
@@ -1231,12 +1259,17 @@ export default function App() {
     const cleanId = (userId || "").trim();
     const cleanUsername = cleanId.replace(/^@/, "").toLowerCase();
 
-    // If viewing own profile
-    if (
+    // If viewing own profile (check all possible identity matchers)
+    const isSelf =
       isLoggedIn &&
-      (cleanId.toLowerCase() === userProfile.id.toLowerCase() ||
-        cleanUsername === userProfile.username?.replace(/^@/, "").toLowerCase())
-    ) {
+      (
+        cleanId.toLowerCase() === userProfile.id?.toLowerCase() ||
+        (currentUser?.uid && cleanId.toLowerCase() === currentUser.uid.toLowerCase()) ||
+        (userProfile.username && cleanUsername === userProfile.username.replace(/^@/, "").toLowerCase()) ||
+        (userProfile.email && cleanId.toLowerCase() === userProfile.email.toLowerCase())
+      );
+
+    if (isSelf) {
       setSelectedViewingProfile(null);
       navigateTo("profile", true);
       return;
@@ -1290,8 +1323,29 @@ export default function App() {
           );
         });
 
+        const matchingReport = reports.find(
+          (r) => r.authorId?.toLowerCase() === userDocSnap.id.toLowerCase()
+        );
+        const isRawUidString = (str?: string) => Boolean(str && /^[a-zA-Z0-9_-]{20,}$/.test(str.replace(/^@/, "")));
+
+        const resolvedFullName =
+          (data.fullName && !isRawUidString(data.fullName))
+            ? data.fullName
+            : matchingReport?.authorName || (data.username && !isRawUidString(data.username) ? data.username : `Citizen (${userDocSnap.id.slice(0, 6)})`);
+            
+        const resolvedUsername =
+          (data.username && !isRawUidString(data.username))
+            ? data.username.replace(/^@/, "")
+            : matchingReport?.authorUsername?.replace(/^@/, "") || `citizen_${userDocSnap.id.slice(0, 6)}`;
+            
+        const resolvedAvatar =
+          data.avatarUrl || matchingReport?.authorAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80";
+
         const targetProfile: UserProfile = {
           id: userDocSnap.id,
+          fullName: resolvedFullName,
+          username: resolvedUsername,
+          avatarUrl: resolvedAvatar,
           ...data,
           followersCount:
             typeof data.followersCount === "number"
@@ -1303,10 +1357,7 @@ export default function App() {
               : Array.isArray(data.following)
               ? data.following.length
               : 0,
-          postsCount:
-            typeof data.postsCount === "number" && data.postsCount > 0
-              ? data.postsCount
-              : authoredReports.length,
+          postsCount: authoredReports.length,
           isFollowing: isFollowed,
         } as UserProfile;
 
@@ -1454,6 +1505,22 @@ export default function App() {
 
   // When a leader is clicked in LeaderTracker, synchronize their profile
   const handleSelectLeaderProfile = (leader: Leader) => {
+    const isLeaderSelf =
+      isLoggedIn &&
+      (
+        leader.id?.toLowerCase() === userProfile.id?.toLowerCase() ||
+        (currentUser?.uid && leader.id?.toLowerCase() === currentUser.uid.toLowerCase()) ||
+        (leader.userId && leader.userId.toLowerCase() === userProfile.id?.toLowerCase()) ||
+        (currentUser?.uid && leader.userId && leader.userId.toLowerCase() === currentUser.uid.toLowerCase()) ||
+        (userProfile.username && leader.username?.replace(/^@/, "").toLowerCase() === userProfile.username.replace(/^@/, "").toLowerCase())
+      );
+
+    if (isLeaderSelf) {
+      setSelectedViewingProfile(null);
+      navigateTo("profile", true);
+      return;
+    }
+
     const isFollowed =
       (userProfile.following || []).includes(leader.id) ||
       (leader.userId && (userProfile.following || []).includes(leader.userId)) ||
@@ -1571,6 +1638,9 @@ export default function App() {
               bookmarkedCount={bookmarkedReports.length}
               unreadNotificationsCount={unreadNotificationsCount}
               isLoggedIn={isLoggedIn}
+              visible={isNavVisible}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
               onOpenLogin={() => {
                 setAuthActionReason("Sign in to your Open Desh account.");
                 navigateTo("login");
@@ -1593,6 +1663,8 @@ export default function App() {
               onSelectUser={handleSelectUserProfile}
               onSelectPost={handleSelectPost}
               loading={loadingReports}
+              isNavVisible={isNavVisible}
+              selectedCategory={selectedCategory}
             />
           )}
 
@@ -1836,32 +1908,25 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose, Login, and Post Detail thread view) */}
+      {/* Mobile Bottom Navigation Bar (Hidden during full-screen Compose, Login, Profile views, and Post Detail thread view) */}
       {currentView !== "compose" &&
         currentView !== "login" &&
         currentView !== "profile_edit" &&
         currentView !== "post_detail" &&
-        currentView !== "post" && (
+        currentView !== "post" &&
+        currentView !== "profile" &&
+        currentView !== "public-profile" && (
           <BottomNav
             currentView={currentView}
             onNavigate={navigateTo}
             onOpenCreateReport={handleOpenCompose}
             unreadNotificationsCount={unreadNotificationsCount}
+            visible={isNavVisible}
           />
         )}
 
       {/* Global Indian Language Selection Modal */}
       <LanguageSelectModal />
-
-      {/* Age Capture Modal for Verified Citizen Profile */}
-      <AgePromptModal
-        isOpen={showAgeModal && isLoggedIn}
-        userId={currentUser?.uid || userProfile.id}
-        onSaveAge={(newAge) => {
-          setUserProfile((prev) => ({ ...prev, age: newAge }));
-          setShowAgeModal(false);
-        }}
-      />
     </div>
   );
 }

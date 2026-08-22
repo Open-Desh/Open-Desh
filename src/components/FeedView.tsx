@@ -15,6 +15,8 @@ import {
   Share,
   CheckCircle2,
   ExternalLink,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 import { ReportIssue, UserProfile, IssueCategory } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
@@ -38,6 +40,8 @@ interface FeedViewProps {
   onSelectUser?: (userId: string) => void;
   onSelectPost: (reportId: string) => void;
   loading?: boolean;
+  isNavVisible?: boolean;
+  selectedCategory?: string;
 }
 
 export const FeedView: React.FC<FeedViewProps> = ({
@@ -46,25 +50,18 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onLike,
   onReReport,
   onBookmark,
+  onReply,
   onUpdateStatus,
   onOpenCreateModal,
   onSelectUser,
   onSelectPost,
   loading = false,
+  isNavVisible = true,
+  selectedCategory = "All",
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [activeImageSlideIndex, setActiveImageSlideIndex] = useState<Record<string, number>>({});
   const [statusUpdateNotes, setStatusUpdateNotes] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const categories = [
-    "All",
-    "Infrastructure",
-    "Water",
-    "Electricity",
-    "Sanitation",
-    "Corruption",
-  ];
 
   const filteredReports = reports.filter(
     (r) => selectedCategory === "All" || r.category === selectedCategory
@@ -101,29 +98,34 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* Category Horizontal Filter Pills - Edge-to-Edge Fluid Scrolling */}
-      <div className="w-full bg-white border-b border-slate-100/90 sticky top-0 z-10 backdrop-blur-md bg-white/95">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-3.5 sm:px-4 py-2.5 scroll-smooth overscroll-x-contain">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-black shrink-0 transition-all cursor-pointer whitespace-nowrap ${
-                selectedCategory === cat
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-          <div className="shrink-0 w-2 h-1" aria-hidden="true" />
-        </div>
-      </div>
-
       {/* Reports Feed Container */}
       <div className="divide-y divide-slate-100">
-        {filteredReports.map((report) => {
+        {loading ? (
+          <div className="py-20 text-center text-slate-400 font-medium animate-pulse flex flex-col items-center justify-center gap-3">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-semibold text-slate-500">Loading verified reports...</p>
+          </div>
+        ) : filteredReports.length === 0 ? (
+          <div className="py-24 text-center px-4">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+              <MessageSquare className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-black text-slate-800 mb-1">
+              {selectedCategory === "All" ? "No Civic Grievances Yet" : `No Reports in ${selectedCategory}`}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto mb-5 leading-relaxed font-medium">
+              Database is clean. Tap the + button to post the first real citizen grievance report.
+            </p>
+            <button
+              onClick={onOpenCreateModal}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer inline-flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Report an Issue
+            </button>
+          </div>
+        ) : (
+          filteredReports.map((report) => {
           const isLiked = report.likedBy?.includes(userProfile.id);
           const isReReported = report.reReportedBy?.includes(userProfile.id);
           const isSaved = userProfile.savedReports?.includes(report.id);
@@ -462,7 +464,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               </div>
             </article>
           );
-        })}
+        }))}
       </div>
     </div>
   );

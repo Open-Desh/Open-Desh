@@ -4,6 +4,7 @@ import {
   MoreVertical,
   MapPin,
   Link as LinkIcon,
+  Calendar,
   Star,
   Sparkles,
   Edit3,
@@ -204,7 +205,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       );
     });
 
-    const list = filtered.length > 0 ? filtered : userReports || [];
+    const list = filtered;
     // Sort pinned reports first
     return [...list].sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
@@ -213,10 +214,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     });
   }, [allReports, userReports, cleanProfileId, cleanProfileUsername, userProfile.category]);
 
-  const effectivePostsCount = Math.max(
-    effectiveAuthoredReports.length,
-    typeof userProfile.postsCount === "number" ? userProfile.postsCount : 0
-  );
+  const effectivePostsCount = effectiveAuthoredReports.length;
 
   // Collect all real replies made by this userProfile across all reports
   const userReplies = React.useMemo(() => {
@@ -285,7 +283,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     return list;
   }, [allReports, userReports, userProfile.id, userProfile.username]);
 
-  const isOwnProfile = Boolean(isLoggedIn && activeUser && userProfile.id === activeUser.id);
+  const isOwnProfile = Boolean(
+    isLoggedIn &&
+    activeUser &&
+    (
+      (userProfile.id && activeUser.id && userProfile.id.toLowerCase() === activeUser.id.toLowerCase()) ||
+      (userProfile.username && activeUser.username && userProfile.username.replace(/^@/, "").toLowerCase() === activeUser.username.replace(/^@/, "").toLowerCase()) ||
+      (userProfile.email && activeUser.email && userProfile.email.toLowerCase() === activeUser.email.toLowerCase()) ||
+      (userProfile.userId && activeUser.id && userProfile.userId.toLowerCase() === activeUser.id.toLowerCase()) ||
+      (userProfile.id && activeUser.username && userProfile.id.replace(/^@/, "").toLowerCase() === activeUser.username.replace(/^@/, "").toLowerCase()) ||
+      (userProfile.username && activeUser.id && userProfile.username.replace(/^@/, "").toLowerCase() === activeUser.id.toLowerCase())
+    )
+  );
 
   const isLeadershipOrDept =
     userProfile.category === "representative" ||
@@ -373,15 +382,31 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const badgeInfo = getBadges();
 
+  // Helper to check if a string looks like an unformatted raw Firebase Auth UID
+  const isRawUid = (str?: string) => Boolean(str && /^[a-zA-Z0-9_-]{20,}$/.test(str.replace(/^@/, "")));
+
   // 1. Top Bar: Clean username ONLY without '@' and WITHOUT verified tick (Instagram layout)
-  const headerUsername = userProfile.username
-    ? userProfile.username.replace(/^@+/, "")
-    : (userProfile.fullName ? userProfile.fullName.toLowerCase().replace(/\s+/g, "_") : "citizen");
+  const headerUsername = (() => {
+    const rawUname = userProfile.username ? userProfile.username.replace(/^@+/, "") : "";
+    if (rawUname && !isRawUid(rawUname)) {
+      return rawUname;
+    }
+    if (userProfile.fullName && !isRawUid(userProfile.fullName)) {
+      return userProfile.fullName.toLowerCase().replace(/[^a-zA-Z0-9_]/g, "_");
+    }
+    return `citizen_${(userProfile.id || "resident").slice(0, 6)}`;
+  })();
 
   // 2. Profile Card: Real Full Name WITH verified tick
-  const profileFullName = userProfile.fullName && userProfile.fullName.trim() !== ""
-    ? userProfile.fullName
-    : headerUsername;
+  const profileFullName = (() => {
+    if (userProfile.fullName && userProfile.fullName.trim() !== "" && !isRawUid(userProfile.fullName)) {
+      return userProfile.fullName;
+    }
+    if (userProfile.username && !isRawUid(userProfile.username)) {
+      return userProfile.username.replace(/^@+/, "");
+    }
+    return `Citizen (${(userProfile.id || "resident").slice(0, 6)})`;
+  })();
 
   const handleCopyProfileLink = () => {
     if (navigator.clipboard) {
@@ -458,9 +483,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   }
 
   return (
-    <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* 1. X/Twitter-Style Fixed Top Header */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 py-2.5 border-b border-slate-200 flex items-center justify-between">
+    <div className="max-w-xl mx-auto pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
+      {/* 1. Seamless Fixed Top Header (Without bottom border to mix directly with profile card) */}
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {onBack && (
             <button
@@ -472,7 +497,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </button>
           )}
           <div className="flex items-center gap-1.5 min-w-0">
-            {/* Top Bar: Clean Username Only (NO verified tick here) */}
+            {/* Top Bar: Clean Username */}
             <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none truncate">
               {headerUsername}
             </h1>
@@ -531,7 +556,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* 2. Main Profile Card */}
-      <div className="p-4 sm:p-5 space-y-4">
+      <div className="p-4 sm:p-5 pt-2 space-y-4">
         {/* DP & Top Metrics Row */}
         <div className="flex items-center gap-4 sm:gap-6">
           {/* Avatar Picture */}
@@ -550,16 +575,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          {/* Right Info: Real Full Name, Username Handle with Verified Tick & Counters */}
+          {/* Right Info: Real Full Name WITH Verified Badge & Counters (No duplicate @username) */}
           <div className="flex-1 min-w-0">
-            {/* Full Name WITHOUT verified badge (badge belongs next to username) */}
-            <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 leading-snug line-clamp-2 break-words">
-              {profileFullName}
-            </h2>
-
-            {/* Username Handle WITH verified badge next to it */}
-            <div className="flex items-center gap-1 text-xs text-slate-500 font-bold mt-0.5">
-              <span>@{cleanProfileUsername || userProfile.username?.replace(/^@+/, "")}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 leading-snug line-clamp-2 break-words">
+                {profileFullName}
+              </h2>
               {userProfile.verified && (
                 <span className="shrink-0">
                   <CategoryVerifiedTick
@@ -571,7 +592,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             {/* 3 Stats Counters */}
-            <div className="flex items-center gap-4 sm:gap-6 mt-2 text-slate-900">
+            <div className="flex items-center gap-4 sm:gap-6 mt-2.5 text-slate-900">
               <div>
                 <span className="font-black text-sm sm:text-base block leading-none">
                   {effectivePostsCount.toLocaleString()}
@@ -645,10 +666,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="space-y-1.5">
           <p className="text-xs sm:text-sm text-slate-800 font-normal leading-relaxed">
             {userProfile.bio ||
-              "Public Representative & Civic Tech Advocate working for urban transparency and infrastructural acceleration in Jharkhand."}
+              (userProfile.category === "representative"
+                ? "Public Representative & Civic Tech Advocate working for urban transparency and infrastructural acceleration in Jharkhand."
+                : userProfile.category === "department"
+                ? "Official government authority desk handling citizen grievances and SLA resolution."
+                : userProfile.category === "business"
+                ? "Registered enterprise and civic partner organization."
+                : "Active citizen contributor in Open Desh civic governance.")}
           </p>
 
-          {/* Location & External Link */}
+          {/* Location & External Link & Joined Date */}
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-medium pt-1">
             <span className="flex items-center gap-1 text-slate-600">
               <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -666,6 +693,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <span>{userProfile.websiteUrl.replace(/^https?:\/\//, "")}</span>
               </a>
             )}
+
+            <span className="flex items-center gap-1 text-slate-500">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                Joined{" "}
+                {userProfile.joiningDate
+                  ? new Date(userProfile.joiningDate).toLocaleDateString("en-US", {
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : "August 2026"}
+              </span>
+            </span>
           </div>
         </div>
 

@@ -23,20 +23,13 @@ import {
   UserReview,
   ThreadedReply,
 } from "../types";
-import {
-  INITIAL_LEADERS,
-  INITIAL_REPORTS,
-  INITIAL_INFRASTRUCTURE,
-  INITIAL_USERS,
-  INITIAL_USER_PROFILE,
-} from "../data/seedData";
 
 // Helper to sanitize Firestore documents
 function sanitizeData<T>(data: T): any {
   return JSON.parse(JSON.stringify(data));
 }
 
-// 1. Fetch Reports with Firestore direct + Auto-Seed
+// 1. Fetch Reports directly from Firestore (No Dummy / No Auto-Seed)
 export async function getReportsDirect(): Promise<ReportIssue[]> {
   try {
     const repRef = collection(db, "reports");
@@ -53,24 +46,15 @@ export async function getReportsDirect(): Promise<ReportIssue[]> {
         const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || b.timestamp).getTime() || 0;
         return timeB - timeA;
       });
-    } else {
-      // Seed Firestore with initial reports
-      for (const rep of INITIAL_REPORTS) {
-        try {
-          await setDoc(doc(db, "reports", rep.id), sanitizeData(rep));
-        } catch (e) {
-          console.warn("Seeding report error:", e);
-        }
-      }
-      return INITIAL_REPORTS;
     }
+    return [];
   } catch (err) {
-    console.warn("Firestore reports fetch notice (using local seed fallback):", err);
-    return INITIAL_REPORTS;
+    console.warn("Firestore reports fetch notice:", err);
+    return [];
   }
 }
 
-// 2. Fetch Leaders with Firestore direct + Auto-Seed
+// 2. Fetch Leaders directly from Firestore (No Dummy / No Auto-Seed)
 export async function getLeadersDirect(): Promise<Leader[]> {
   try {
     const leadRef = collection(db, "leaders");
@@ -82,24 +66,15 @@ export async function getLeadersDirect(): Promise<Leader[]> {
         leaders.push(docSnap.data() as Leader);
       });
       return leaders;
-    } else {
-      // Seed Firestore with initial leaders
-      for (const leader of INITIAL_LEADERS) {
-        try {
-          await setDoc(doc(db, "leaders", leader.id), sanitizeData(leader));
-        } catch (e) {
-          console.warn("Seeding leader error:", e);
-        }
-      }
-      return INITIAL_LEADERS;
     }
+    return [];
   } catch (err) {
-    console.warn("Firestore leaders fetch notice (using local seed fallback):", err);
-    return INITIAL_LEADERS;
+    console.warn("Firestore leaders fetch notice:", err);
+    return [];
   }
 }
 
-// 3. Fetch Infrastructure Projects with Firestore direct + Auto-Seed
+// 3. Fetch Infrastructure Projects directly from Firestore (No Dummy / No Auto-Seed)
 export async function getInfrastructureDirect(): Promise<InfrastructureProject[]> {
   try {
     const infraRef = collection(db, "infrastructure");
@@ -111,20 +86,11 @@ export async function getInfrastructureDirect(): Promise<InfrastructureProject[]
         projects.push(docSnap.data() as InfrastructureProject);
       });
       return projects;
-    } else {
-      // Seed Firestore with initial infrastructure projects
-      for (const proj of INITIAL_INFRASTRUCTURE) {
-        try {
-          await setDoc(doc(db, "infrastructure", proj.id), sanitizeData(proj));
-        } catch (e) {
-          console.warn("Seeding infra project error:", e);
-        }
-      }
-      return INITIAL_INFRASTRUCTURE;
     }
+    return [];
   } catch (err) {
-    console.warn("Firestore infrastructure fetch notice (using local seed fallback):", err);
-    return INITIAL_INFRASTRUCTURE;
+    console.warn("Firestore infrastructure fetch notice:", err);
+    return [];
   }
 }
 
@@ -252,32 +218,13 @@ export async function updateReportStatusInFirestore(
   }
 }
 
-// 10. Explicit Seeder that writes all collections immediately to Firestore
+// 10. Seeder disabled - Data is strictly preserved as-is in Firestore
 export async function seedAllCollectionsToFirestore(): Promise<void> {
-  try {
-    // Seed Leaders
-    for (const leader of INITIAL_LEADERS) {
-      await setDoc(doc(db, "leaders", leader.id), sanitizeData(leader), { merge: true });
-    }
-    // Seed Reports
-    for (const rep of INITIAL_REPORTS) {
-      await setDoc(doc(db, "reports", rep.id), sanitizeData(rep), { merge: true });
-    }
-    // Seed Infrastructure
-    for (const proj of INITIAL_INFRASTRUCTURE) {
-      await setDoc(doc(db, "infrastructure", proj.id), sanitizeData(proj), { merge: true });
-    }
-    // Seed System Users
-    for (const [uid, uProf] of Object.entries(INITIAL_USERS)) {
-      await setDoc(doc(db, "users", uid), sanitizeData(uProf), { merge: true });
-    }
-    console.log("Firestore: All collections successfully populated in Asia database!");
-  } catch (err) {
-    console.warn("Firestore seeding notice:", err);
-  }
+  // Auto-seeding disabled to ensure real database integrity
+  return;
 }
 
-// 11. Fetch All Registered Official Authorities & Leaders from Firestore
+// 11. Fetch All Registered Official Authorities & Leaders strictly from Firestore
 export interface RegisteredAuthority {
   id: string;
   username: string;
@@ -297,49 +244,8 @@ export interface RegisteredAuthority {
 export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthority[]> {
   const authoritiesMap = new Map<string, RegisteredAuthority>();
 
-  // 1. Load initial hardcoded seeds first as baseline
-  Object.values(INITIAL_USERS).forEach((u) => {
-    if (u.category === "department" || u.category === "representative") {
-      const uname = u.username.toLowerCase();
-      authoritiesMap.set(uname, {
-        id: u.id,
-        username: u.username,
-        fullName: u.fullName,
-        avatarUrl: u.avatarUrl,
-        category: u.category,
-        role: u.departmentDetails?.designation || u.representativeDetails?.position || (u.category === "department" ? "Official Department" : "Elected Representative"),
-        badge: u.departmentDetails?.officialBadge || u.representativeDetails?.party || "Verified Profile",
-        departmentCode: u.departmentDetails?.departmentCode,
-        party: u.representativeDetails?.party,
-        verified: u.verified ?? true,
-        location: u.location,
-        jurisdictionRegion: u.departmentDetails?.jurisdictionRegion,
-        constituency: u.representativeDetails?.constituency,
-      });
-    }
-  });
-
-  INITIAL_LEADERS.forEach((l) => {
-    const uname = l.username.toLowerCase();
-    if (!authoritiesMap.has(uname)) {
-      authoritiesMap.set(uname, {
-        id: l.id,
-        username: l.username,
-        fullName: l.name,
-        avatarUrl: l.image,
-        category: "representative",
-        role: l.title,
-        badge: l.party,
-        party: l.party,
-        verified: true,
-        location: l.location,
-        constituency: l.constituency,
-      });
-    }
-  });
-
   try {
-    // 2. Fetch live users from Firestore `users` collection
+    // 1. Fetch live users from Firestore `users` collection
     const usersRef = collection(db, "users");
     const userSnaps = await getDocs(usersRef);
     userSnaps.forEach((docSnap) => {
@@ -366,7 +272,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
       }
     });
 
-    // 3. Fetch live leaders from Firestore `leaders` collection
+    // 2. Fetch live leaders from Firestore `leaders` collection
     const leadersRef = collection(db, "leaders");
     const leaderSnaps = await getDocs(leadersRef);
     leaderSnaps.forEach((docSnap) => {
@@ -389,13 +295,13 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
       }
     });
   } catch (err) {
-    console.warn("Notice: Firestore authorities fetch fallback to seeded profiles:", err);
+    console.warn("Notice: Firestore authorities fetch:", err);
   }
 
   return Array.from(authoritiesMap.values());
 }
 
-// 12. Check Real-Time Username Uniqueness against Firestore users, leaders & system seeds
+// 12. Check Real-Time Username Uniqueness against Firestore users, leaders & backend
 export async function checkUsernameAvailability(
   username: string,
   currentUserId: string,
@@ -437,34 +343,7 @@ export async function checkUsernameAvailability(
     return { available: true };
   }
 
-  // 1. Check local seed users
-  for (const [uid, uProf] of Object.entries(INITIAL_USERS)) {
-    if (
-      uid !== currentUserId &&
-      uProf.username?.toLowerCase() === clean
-    ) {
-      return {
-        available: false,
-        reason: `@${clean} is already registered in the system. Please choose another handle.`,
-      };
-    }
-  }
-
-  // 2. Check local seed leaders
-  for (const leader of INITIAL_LEADERS) {
-    if (
-      leader.id !== currentUserId &&
-      (leader as any).userId !== currentUserId &&
-      leader.username?.toLowerCase() === clean
-    ) {
-      return {
-        available: false,
-        reason: `@${clean} is reserved for an official representative profile.`,
-      };
-    }
-  }
-
-  // 3. Check Firestore `users` collection
+  // 1. Check Firestore `users` collection
   try {
     const usersRef = collection(db, "users");
     const q = query(usersRef, where("username", "==", clean));
@@ -481,7 +360,7 @@ export async function checkUsernameAvailability(
     console.warn("Firestore username query warning:", err);
   }
 
-  // 4. Check Firestore `leaders` collection
+  // 2. Check Firestore `leaders` collection
   try {
     const leadersRef = collection(db, "leaders");
     const qLeaders = query(leadersRef, where("username", "==", clean));
@@ -498,7 +377,7 @@ export async function checkUsernameAvailability(
     console.warn("Firestore leader query warning:", err);
   }
 
-  // 5. Query Express API backend validation if available
+  // 3. Query Express API backend validation if available
   try {
     const res = await fetch(
       `/api/users/check-username/${encodeURIComponent(clean)}?currentUserId=${encodeURIComponent(
@@ -636,17 +515,6 @@ export async function toggleFollowInFirestore(
             { merge: true }
           );
         });
-      } else {
-        await setDoc(
-          targetRef,
-          {
-            id: cleanTarget,
-            username: cleanTarget,
-            followers: [currentUserId],
-            followersCount: 1,
-          },
-          { merge: true }
-        );
       }
 
       // If target is in leaders collection

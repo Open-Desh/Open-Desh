@@ -1,37 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Search,
   Settings2,
   X,
   MapPin,
-  TrendingUp,
   Building2,
-  FileText,
-  Sparkles,
+  Users,
+  ShieldCheck,
+  Star,
+  CheckCircle2,
   Heart,
   Repeat2,
   MessageCircle,
-  Share2,
-  Bookmark,
-  CheckCircle2,
-  ShieldCheck,
-  Star,
-  Users,
-  Sliders,
-  Check,
   Send,
-  AlertCircle,
+  Sparkles,
+  Award,
+  Filter,
+  Check,
+  Phone,
+  Mail,
   ExternalLink,
   ChevronRight,
-  Clock,
+  Flame,
+  FileText,
+  Briefcase,
+  AlertTriangle,
 } from "lucide-react";
 import {
   ReportIssue,
   Leader,
   InfrastructureProject,
   UserProfile,
-  ThreadedReply,
+  UserCategory,
 } from "../types.ts";
+import { db } from "../firebase.ts";
+import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import {
   getCleanAuthorUsername,
@@ -56,6 +59,8 @@ interface SearchHubViewProps {
   onOpenMobileSidebar?: () => void;
 }
 
+type SearchTab = "all" | "departments" | "leaders" | "reports" | "public";
+
 export const SearchHubView: React.FC<SearchHubViewProps> = ({
   reports,
   leaders,
@@ -72,94 +77,410 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
   onOpenMobileSidebar,
 }) => {
   const [query, setQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"foryou" | "trending" | "reports" | "leaders" | "projects">("foryou");
+  const [activeTab, setActiveTab] = useState<SearchTab>("all");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Settings State
+  // Filter settings
   const [isNearMeOnly, setIsNearMeOnly] = useState(true);
-  const [showPersonalizedTrends, setShowPersonalizedTrends] = useState(true);
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState("All");
+  const [selectedDeptCategory, setSelectedDeptCategory] = useState("All");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  // Live Database States
+  const [dbUsers, setDbUsers] = useState<UserProfile[]>([]);
+  const [dbLeaders, setDbLeaders] = useState<Leader[]>(leaders || []);
+  const [dbReports, setDbReports] = useState<ReportIssue[]>(reports || []);
+  const [loading, setLoading] = useState(true);
 
   // Interaction State for Reports
   const [replyInputMap, setReplyInputMap] = useState<Record<string, string>>({});
   const [activeReplyBoxReportId, setActiveReplyBoxReportId] = useState<string | null>(null);
-  const [expandedRepliesReportId, setExpandedRepliesReportId] = useState<Record<string, boolean>>({});
 
-  const userCity = userProfile.location || "Jharkhand, India";
-  const userCityKeyword = userCity.split(",")[0].trim().toLowerCase();
+  // Location Parsing for Priority Ranking
+  const rawUserLocation = (userProfile.location || "Jharkhand, India").trim();
+  const locationTokens = useMemo(() => {
+    return rawUserLocation
+      .toLowerCase()
+      .split(/[,–\-\/]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 2);
+  }, [rawUserLocation]);
 
-  // Filter based on query and location
-  const filterByLocationAndQuery = (itemText: string, itemLocation: string) => {
-    const matchesQuery =
-      !query.trim() ||
-      itemText.toLowerCase().includes(query.toLowerCase()) ||
-      itemLocation.toLowerCase().includes(query.toLowerCase());
+  const primaryCityOrState = locationTokens[0] || "Jharkhand";
 
-    if (!matchesQuery) return false;
+  // 1. Enterprise Scale: Load directly from Firestore database
+  useEffect(() => {
+    let isMounted = true;
 
-    if (isNearMeOnly) {
-      return (
-        itemLocation.toLowerCase().includes(userCityKeyword) ||
-        itemLocation.toLowerCase().includes("jharkhand") ||
-        itemLocation.toLowerCase().includes("ranchi")
-      );
+    async function loadPureFirestoreData() {
+      setLoading(true);
+      const userMap = new Map<string, UserProfile>();
+      const leaderMap = new Map<string, Leader>();
+      const reportMap = new Map<string, ReportIssue>();
+
+      // Fetch users from Firestore
+      try {
+        const snap = await getDocs(collection(db, "users"));
+        snap.forEach((d) => {
+          const uData = d.data() as UserProfile;
+          if (uData) {
+            const uid = (uData.id || d.id).trim();
+            if (uid) {
+              userMap.set(uid.toLowerCase(), { ...uData, id: uid });
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore users query notice in search:", err);
+      }
+
+      // Fetch leaders from Firestore
+      try {
+        const snap = await getDocs(collection(db, "leaders"));
+        snap.forEach((d) => {
+          const lData = d.data() as Leader;
+          if (lData) {
+            const lid = (lData.id || d.id).trim();
+            if (lid) {
+              leaderMap.set(lid.toLowerCase(), { ...lData, id: lid });
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore leaders query notice in search:", err);
+      }
+
+      // Fetch reports from Firestore
+      try {
+        const snap = await getDocs(collection(db, "reports"));
+        snap.forEach((d) => {
+          const rData = d.data() as ReportIssue;
+          if (rData) {
+            const rid = (rData.id || d.id).trim();
+            if (rid) {
+              reportMap.set(rid.toLowerCase(), { ...rData, id: rid });
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore reports query notice in search:", err);
+      }
+
+      // Merge props reports if any
+      if (reports && reports.length > 0) {
+        reports.forEach((r) => {
+          if (r.id && !reportMap.has(r.id.toLowerCase())) {
+            reportMap.set(r.id.toLowerCase(), r);
+          }
+        });
+      }
+
+      // Merge props leaders if any
+      if (leaders && leaders.length > 0) {
+        leaders.forEach((l) => {
+          if (l.id && !leaderMap.has(l.id.toLowerCase())) {
+            leaderMap.set(l.id.toLowerCase(), l);
+          }
+        });
+      }
+
+      if (isMounted) {
+        // Exclude current user from suggestions
+        const cleanCurrentId = (userProfile.id || "").toLowerCase();
+        const cleanCurrentUsername = (userProfile.username || "").replace(/^@/, "").toLowerCase();
+
+        const finalUsers = Array.from(userMap.values()).filter((u) => {
+          const uId = (u.id || "").toLowerCase();
+          const uName = (u.username || "").replace(/^@/, "").toLowerCase();
+          return uId !== cleanCurrentId && uName !== cleanCurrentUsername;
+        });
+
+        const finalLeaders = Array.from(leaderMap.values()).filter((l) => {
+          const lId = (l.id || "").toLowerCase();
+          const lUserId = (l.userId || "").toLowerCase();
+          return lId !== cleanCurrentId && lUserId !== cleanCurrentId;
+        });
+
+        const finalReports = Array.from(reportMap.values()).sort((a, b) => {
+          const tA = new Date(a.createdAt || a.timestamp || 0).getTime();
+          const tB = new Date(b.createdAt || b.timestamp || 0).getTime();
+          return tB - tA;
+        });
+
+        setDbUsers(finalUsers);
+        setDbLeaders(finalLeaders);
+        setDbReports(finalReports);
+        setLoading(false);
+      }
     }
-    return true;
+
+    loadPureFirestoreData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userProfile.id, reports, leaders]);
+
+  // Proximity Scoring Algorithm: Higher score = more relevant to user's area
+  const calculateProximityScore = (targetLocation: string = "", targetJurisdiction: string = "") => {
+    const locText = `${targetLocation} ${targetJurisdiction}`.toLowerCase();
+    if (!locText.trim()) return 1;
+
+    let score = 1;
+    for (const token of locationTokens) {
+      if (locText.includes(token)) {
+        score += 10;
+      }
+    }
+    return score;
   };
 
-  const filteredReports = reports.filter((r) =>
-    filterByLocationAndQuery(
-      `${r.text} ${r.category} ${r.authorName} @${r.authorUsername}`,
-      `${r.location.city} ${r.location.address || ""}`
-    )
-  );
+  // 2. Department Profiles (Area-Prioritized & Categorized)
+  const departmentProfiles = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const list: Array<{
+      id: string;
+      fullName: string;
+      username: string;
+      avatarUrl: string;
+      category: UserCategory;
+      verified: boolean;
+      positionTitle: string;
+      departmentName: string;
+      jurisdiction: string;
+      slaSolvedCount?: number;
+      systemScore: number;
+      publicRating: number;
+      bio?: string;
+      proximityScore: number;
+      phone?: string;
+      email?: string;
+    }> = [];
 
-  const filteredLeaders = leaders.filter((l) =>
-    filterByLocationAndQuery(
-      `${l.name} ${l.party} ${l.title} @${l.username} ${l.bio}`,
-      `${l.location} ${l.constituency}`
-    )
-  );
+    const seenIds = new Set<string>();
 
-  const filteredProjects = projects.filter((p) =>
-    filterByLocationAndQuery(
-      `${p.name} ${p.category} ${p.contractor} ${p.supervisingDept}`,
-      p.region
-    )
-  );
+    dbUsers.forEach((u) => {
+      if (u.category === "department") {
+        const uId = u.id.toLowerCase();
+        if (!seenIds.has(uId)) {
+          seenIds.add(uId);
 
-  const trendingTopics = [
-    {
-      tag: "#RanchiRingRoad",
-      category: "Civic Infrastructure",
-      postsCount: "14.2K",
-      description: "Pothole resurfacing and flyover girder construction progress",
-    },
-    {
-      tag: "#StreetlightDarkness",
-      category: "Water & Utilities",
-      postsCount: "8.9K",
-      description: "Ward 12 LED replacement drive by Municipal Corp",
-    },
-    {
-      tag: "#SubarnarekhaWater",
-      category: "Sanitation & Water",
-      postsCount: "6.4K",
-      description: "Automated pipeline grid and water turbidity monitoring",
-    },
-    {
-      tag: "#MLALADFundAudit",
-      category: "Governance & Transparency",
-      postsCount: "12.8K",
-      description: "Open Desh 100-pt algorithm public audit verification",
-    },
-    {
-      tag: "#KankeChowkFlyover",
-      category: "Roads & Transit",
-      postsCount: "5.1K",
-      description: "Traffic diversion schedule and pier concrete curing",
-    },
-  ];
+          const deptDetails = u.departmentDetails;
+          const jurisdiction = deptDetails?.jurisdictionRegion || u.location || "Jurisdiction Area";
+          const deptName = deptDetails?.name || u.fullName;
+          const title = deptDetails?.officialBadge || deptDetails?.designation || "Govt Department";
+          const isVerified = Boolean(u.verified === true || u.verificationStatus === "approved");
+
+          if (verifiedOnly && !isVerified) return;
+
+          if (selectedDeptCategory !== "All") {
+            const matchesCategory =
+              deptName.toLowerCase().includes(selectedDeptCategory.toLowerCase()) ||
+              title.toLowerCase().includes(selectedDeptCategory.toLowerCase()) ||
+              (u.bio && u.bio.toLowerCase().includes(selectedDeptCategory.toLowerCase()));
+            if (!matchesCategory) return;
+          }
+
+          const proximityScore = calculateProximityScore(u.location, jurisdiction);
+
+          // Query matching
+          if (q) {
+            const matchesQuery =
+              u.fullName.toLowerCase().includes(q) ||
+              deptName.toLowerCase().includes(q) ||
+              title.toLowerCase().includes(q) ||
+              jurisdiction.toLowerCase().includes(q) ||
+              (u.bio && u.bio.toLowerCase().includes(q));
+            if (!matchesQuery) return;
+          }
+
+          if (isNearMeOnly && proximityScore <= 1 && !q) {
+            // In near-me mode with no query, prefer nearby items
+          }
+
+          list.push({
+            id: u.id,
+            fullName: u.fullName,
+            username: (u.username || "").replace(/^@/, ""),
+            avatarUrl:
+              u.avatarUrl ||
+              "https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?w=400&auto=format&fit=crop&q=80",
+            category: "department",
+            verified: isVerified,
+            positionTitle: title,
+            departmentName: deptName,
+            jurisdiction: jurisdiction,
+            slaSolvedCount: deptDetails?.resolvedTickets || 120,
+            systemScore: u.systemScore || 91,
+            publicRating: u.publicRating || 4.7,
+            bio: u.bio,
+            proximityScore: proximityScore,
+          });
+        }
+      }
+    });
+
+    // Sort by proximity score descending, then by SLA/rating
+    return list.sort((a, b) => b.proximityScore - a.proximityScore || b.systemScore - a.systemScore);
+  }, [dbUsers, query, isNearMeOnly, selectedDeptCategory, verifiedOnly, locationTokens]);
+
+  // 3. Leader Profiles (Elected Representatives & Officials)
+  const leaderProfiles = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const list: Array<{
+      id: string;
+      fullName: string;
+      username: string;
+      avatarUrl: string;
+      category: UserCategory;
+      verified: boolean;
+      positionTitle: string;
+      party: string;
+      constituency: string;
+      systemScore: number;
+      publicRating: number;
+      bio?: string;
+      proximityScore: number;
+      originalLeader?: Leader;
+    }> = [];
+
+    const seenIds = new Set<string>();
+
+    // From Leaders Collection
+    dbLeaders.forEach((l) => {
+      const lid = l.id.toLowerCase();
+      if (!seenIds.has(lid)) {
+        seenIds.add(lid);
+
+        const isVerified = Boolean(l.verified !== false);
+        if (verifiedOnly && !isVerified) return;
+
+        const proximityScore = calculateProximityScore(l.location, l.constituency);
+
+        if (q) {
+          const matchesQuery =
+            l.name.toLowerCase().includes(q) ||
+            (l.party && l.party.toLowerCase().includes(q)) ||
+            (l.title && l.title.toLowerCase().includes(q)) ||
+            (l.constituency && l.constituency.toLowerCase().includes(q)) ||
+            (l.location && l.location.toLowerCase().includes(q)) ||
+            (l.bio && l.bio.toLowerCase().includes(q));
+          if (!matchesQuery) return;
+        }
+
+        list.push({
+          id: l.id,
+          fullName: l.name,
+          username: (l.username || "").replace(/^@/, ""),
+          avatarUrl:
+            l.image ||
+            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+          category: "representative",
+          verified: isVerified,
+          positionTitle: l.title || "Elected Representative",
+          party: l.party || "Public Official",
+          constituency: l.constituency || l.location || "Constituency",
+          systemScore: l.systemScore || 85,
+          publicRating: l.publicRating || 4.5,
+          bio: l.bio,
+          proximityScore: proximityScore,
+          originalLeader: l,
+        });
+      }
+    });
+
+    // From Users with representative category
+    dbUsers.forEach((u) => {
+      if (u.category === "representative") {
+        const uid = u.id.toLowerCase();
+        if (!seenIds.has(uid)) {
+          seenIds.add(uid);
+
+          const repDetails = u.representativeDetails;
+          const isVerified = Boolean(u.verified === true || u.verificationStatus === "approved");
+          if (verifiedOnly && !isVerified) return;
+
+          const constituency = repDetails?.constituency || u.location || "Constituency";
+          const proximityScore = calculateProximityScore(u.location, constituency);
+
+          if (q) {
+            const matchesQuery =
+              u.fullName.toLowerCase().includes(q) ||
+              (repDetails?.party && repDetails.party.toLowerCase().includes(q)) ||
+              (repDetails?.position && repDetails.position.toLowerCase().includes(q)) ||
+              constituency.toLowerCase().includes(q) ||
+              (u.bio && u.bio.toLowerCase().includes(q));
+            if (!matchesQuery) return;
+          }
+
+          list.push({
+            id: u.id,
+            fullName: u.fullName,
+            username: (u.username || "").replace(/^@/, ""),
+            avatarUrl:
+              u.avatarUrl ||
+              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+            category: "representative",
+            verified: isVerified,
+            positionTitle: repDetails?.position || "Elected Representative",
+            party: repDetails?.party || "Official",
+            constituency: constituency,
+            systemScore: u.systemScore || 84,
+            publicRating: u.publicRating || 4.4,
+            bio: u.bio,
+            proximityScore: proximityScore,
+          });
+        }
+      }
+    });
+
+    return list.sort((a, b) => b.proximityScore - a.proximityScore || b.systemScore - a.systemScore);
+  }, [dbLeaders, dbUsers, query, verifiedOnly, locationTokens]);
+
+  // 4. Public Profiles (Citizens & Verified Businesses)
+  const publicProfiles = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    return dbUsers
+      .filter((u) => u.category === "citizen" || u.category === "business")
+      .filter((u) => {
+        const isVerified = Boolean(u.verified === true || u.verificationStatus === "approved");
+        if (verifiedOnly && !isVerified) return false;
+
+        if (!q) return true;
+        return (
+          u.fullName.toLowerCase().includes(q) ||
+          (u.location && u.location.toLowerCase().includes(q)) ||
+          (u.bio && u.bio.toLowerCase().includes(q)) ||
+          (u.businessDetails?.companyName && u.businessDetails.companyName.toLowerCase().includes(q)) ||
+          (u.businessDetails?.industry && u.businessDetails.industry.toLowerCase().includes(q))
+        );
+      })
+      .map((u) => ({
+        ...u,
+        proximityScore: calculateProximityScore(u.location),
+      }))
+      .sort((a, b) => b.proximityScore - a.proximityScore);
+  }, [dbUsers, query, verifiedOnly, locationTokens]);
+
+  // 5. Reports Grievances
+  const filteredReports = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    return dbReports.filter((r) => {
+      const locString = `${r.location?.city || ""} ${r.location?.address || ""}`.toLowerCase();
+      const textString = `${r.text || ""} ${r.category || ""} ${r.authorName || ""}`.toLowerCase();
+
+      if (q) {
+        if (!locString.includes(q) && !textString.includes(q)) return false;
+      }
+
+      if (isNearMeOnly && !q) {
+        // Match proximity
+        const isNear = locationTokens.some((t) => locString.includes(t));
+        return isNear || locString.includes("jharkhand") || locString.includes("ranchi");
+      }
+
+      return true;
+    });
+  }, [dbReports, query, isNearMeOnly, locationTokens]);
 
   const handleSendReply = async (reportId: string) => {
     const text = replyInputMap[reportId];
@@ -170,14 +491,17 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     }
     setReplyInputMap((prev) => ({ ...prev, [reportId]: "" }));
     setActiveReplyBoxReportId(null);
-    setExpandedRepliesReportId((prev) => ({ ...prev, [reportId]: true }));
+  };
+
+  const clearSearch = () => {
+    setQuery("");
   };
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* 1. X/Twitter-Style Transforming Search Header */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 py-2.5 border-b border-slate-200 flex items-center gap-2.5">
-        {/* Left: User Avatar (clickable) */}
+      {/* 1. Header: User Avatar + Search Input + Settings */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-3.5 py-2.5 border-b border-slate-200 flex items-center gap-2.5">
+        {/* Left: User Avatar (Profile trigger) */}
         <button
           onClick={() => {
             if (onOpenMobileSidebar) {
@@ -190,10 +514,16 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
           title="Open Profile"
         >
           <img
-            src={userProfile.avatarUrl}
+            src={
+              userProfile.avatarUrl ||
+              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80"
+            }
             alt={userProfile.fullName}
             className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80";
+            }}
           />
         </button>
 
@@ -205,13 +535,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search Open Desh, leaders, issues..."
-            className="w-full pl-9 pr-8 py-2 bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-full text-xs sm:text-sm font-medium text-slate-900 focus:outline-none transition-all placeholder:text-slate-500"
+            placeholder="Search departments, leaders, grievances..."
+            className="w-full pl-9 pr-8 py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-full text-xs sm:text-sm font-medium text-slate-900 focus:outline-none transition-all placeholder:text-slate-500"
             autoFocus
           />
           {query && (
             <button
-              onClick={() => setQuery("")}
+              onClick={clearSearch}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
               title="Clear Search"
             >
@@ -220,27 +550,31 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
           )}
         </div>
 
-        {/* Right: Settings Icon */}
+        {/* Right: Filter & Location Settings */}
         <button
           id="explore-settings-btn"
           onClick={() => setIsSettingsOpen(true)}
-          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shrink-0"
+          className={`p-2 rounded-full transition-colors cursor-pointer shrink-0 ${
+            isSettingsOpen || !isNearMeOnly || selectedDeptCategory !== "All"
+              ? "bg-blue-50 text-blue-600 border border-blue-200"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+          }`}
           title="Explore & Location Settings"
         >
           <Settings2 className="w-5 h-5" />
         </button>
-      </div>
+      </header>
 
-      {/* 2. Sub-Tabs below Search Header (like X Explore) */}
-      <div className="border-b border-slate-200 bg-white sticky top-[53px] z-20">
+      {/* 2. Sub-Tabs: Clean X-Style Navigation */}
+      <nav className="border-b border-slate-200 bg-white sticky top-[53px] z-20">
         <div className="flex justify-between overflow-x-auto no-scrollbar px-2 sm:px-4">
           {(
             [
-              { id: "foryou", label: "For You" },
-              { id: "trending", label: "Trending" },
-              { id: "reports", label: "Reports" },
-              { id: "leaders", label: "Leaders" },
-              { id: "projects", label: "Projects" },
+              { id: "all", label: "Top / All" },
+              { id: "departments", label: `Departments (${departmentProfiles.length})` },
+              { id: "leaders", label: `Leaders (${leaderProfiles.length})` },
+              { id: "reports", label: `Grievances (${filteredReports.length})` },
+              { id: "public", label: `Public (${publicProfiles.length})` },
             ] as const
           ).map((tab) => (
             <button
@@ -248,7 +582,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
               onClick={() => setActiveTab(tab.id)}
               className={`py-3 px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
-                  ? "border-blue-600 text-slate-900"
+                  ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -256,143 +590,273 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             </button>
           ))}
         </div>
-      </div>
+      </nav>
 
-      {/* 3. Location Filter Active Pill Banner */}
+      {/* 3. Location Priority Banner */}
       {isNearMeOnly && (
         <div className="px-4 py-2 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between text-xs text-blue-900 animate-fadeIn">
           <div className="flex items-center gap-1.5 font-semibold truncate">
             <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="truncate">Showing content near {userCity}</span>
+            <span className="truncate">Prioritizing departments & leaders near {rawUserLocation}</span>
           </div>
           <button
             onClick={() => setIsNearMeOnly(false)}
-            className="text-blue-700 font-extrabold hover:underline shrink-0 ml-2 text-[11px]"
+            className="text-blue-700 font-extrabold hover:underline shrink-0 ml-2 text-[11px] cursor-pointer"
           >
             Show Nationwide
           </button>
         </div>
       )}
 
-      {/* 4. Tab Content Feeds (X-Style) */}
+      {/* 4. Active Department Filter Chip (if selected in settings) */}
+      {selectedDeptCategory !== "All" && (
+        <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-100 flex items-center justify-between text-xs text-amber-900">
+          <span className="font-bold flex items-center gap-1">
+            <Filter className="w-3 h-3 text-amber-600" />
+            <span>Filtered by: {selectedDeptCategory}</span>
+          </span>
+          <button
+            onClick={() => setSelectedDeptCategory("All")}
+            className="text-amber-700 font-extrabold hover:underline text-[11px] cursor-pointer"
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
+
+      {/* 5. Main Search Results & Dynamic Feeds */}
       <div>
-        {/* TAB: FOR YOU (Personalized Mix) */}
-        {activeTab === "foryou" && (
+        {loading ? (
+          <div className="p-16 text-center space-y-3">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs text-slate-500 font-semibold">
+              Indexing verified database records...
+            </p>
+          </div>
+        ) : activeTab === "all" ? (
+          /* ================= TAB 1: ALL / TOP (AREA-PRIORITIZED DEPARTMENTS & LEADERS) ================= */
           <div className="divide-y divide-slate-100">
-            {/* Top Trending Snippet Box */}
-            <div className="p-4 bg-slate-50/50 space-y-2.5">
+            {/* A. Top Nearby Government Departments Strip (PRIMARY FOCUS) */}
+            <div className="p-4 bg-slate-50/50 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Trending in {isNearMeOnly ? userCity : "India"}</span>
+                <span className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <span>Area Government Departments</span>
                 </span>
                 <button
-                  onClick={() => setActiveTab("trending")}
-                  className="text-xs font-bold text-blue-600 hover:underline"
+                  onClick={() => setActiveTab("departments")}
+                  className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                 >
-                  Show more
+                  View All ({departmentProfiles.length})
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {trendingTopics.slice(0, 4).map((topic, i) => (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      setQuery(topic.tag);
-                      setActiveTab("reports");
-                    }}
-                    className="p-3 bg-white border border-slate-200/80 rounded-2xl cursor-pointer hover:border-blue-300 transition-colors space-y-0.5 shadow-2xs"
-                  >
-                    <span className="text-[10px] font-bold text-slate-400 block">
-                      {topic.category} • Trending
-                    </span>
-                    <h4 className="font-extrabold text-xs text-slate-900">{topic.tag}</h4>
-                    <span className="text-[11px] text-slate-500 font-medium block">
-                      {topic.postsCount} reports & discussions
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {departmentProfiles.length === 0 ? (
+                <div className="p-6 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-500">
+                  No verified departments registered in this area yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2.5">
+                  {departmentProfiles.slice(0, 3).map((dept) => (
+                    <article
+                      key={dept.id}
+                      onClick={() => onSelectUser && onSelectUser(dept.id)}
+                      className="p-3.5 bg-white border border-slate-200/90 rounded-2xl hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer space-y-2 group"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <img
+                            src={dept.avatarUrl}
+                            alt={dept.fullName}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                "https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?w=400&auto=format&fit=crop&q=80";
+                            }}
+                            className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0 group-hover:scale-105 transition-transform"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                                {dept.fullName}
+                              </h3>
+                              {dept.verified && (
+                                <CategoryVerifiedTick category="department" size="xs" />
+                              )}
+                            </div>
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200 inline-block mt-0.5">
+                              {dept.positionTitle}
+                            </span>
+                            <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-1 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{dept.jurisdiction}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full block mb-1">
+                            SLA {dept.systemScore}%
+                          </span>
+                          <span className="text-[11px] text-emerald-600 font-black block">
+                            {dept.slaSolvedCount}+ Solved
+                          </span>
+                        </div>
+                      </div>
+
+                      {dept.bio && (
+                        <p className="text-xs text-slate-600 line-clamp-1 pl-0.5">
+                          {dept.bio}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Featured Leaders Strip */}
-            {filteredLeaders.length > 0 && (
+            {/* B. Nearby Elected Representatives & Leaders */}
+            {leaderProfiles.length > 0 && (
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Who to follow & hold accountable</span>
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span>Elected Leaders & Representatives</span>
                   </span>
                   <button
                     onClick={() => setActiveTab("leaders")}
-                    className="text-xs font-bold text-blue-600 hover:underline"
+                    className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                   >
-                    View all
+                    View All ({leaderProfiles.length})
                   </button>
                 </div>
 
-                <div className="space-y-2.5">
-                  {filteredLeaders.slice(0, 3).map((leader) => (
-                    <div
+                <div className="space-y-2">
+                  {leaderProfiles.slice(0, 2).map((leader) => (
+                    <article
                       key={leader.id}
-                      className="p-3 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between gap-3 hover:border-blue-300 transition-colors shadow-2xs"
+                      onClick={() => {
+                        if (leader.originalLeader && onSelectLeaderProfile) {
+                          onSelectLeaderProfile(leader.originalLeader);
+                        } else if (onSelectUser) {
+                          onSelectUser(leader.id);
+                        }
+                      }}
+                      className="p-3 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between gap-3 hover:border-blue-400 transition-all shadow-2xs cursor-pointer group"
                     >
-                      <div
-                        onClick={() => {
-                          if (onSelectLeaderProfile) onSelectLeaderProfile(leader);
-                          else onNavigate("leader");
-                        }}
-                        className="flex items-center gap-3 cursor-pointer min-w-0 flex-1"
-                      >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <img
-                          src={leader.image}
-                          alt={leader.name}
-                          className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                          src={leader.avatarUrl}
+                          alt={leader.fullName}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80";
+                          }}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:scale-105 transition-transform"
                         />
                         <div className="min-w-0 flex-1">
-                          <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
-                            {leader.name}
-                          </h4>
+                          <div className="flex items-center gap-1">
+                            <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 group-hover:text-blue-600 truncate">
+                              {leader.fullName}
+                            </h4>
+                            {leader.verified && (
+                              <CategoryVerifiedTick category="representative" size="xs" />
+                            )}
+                          </div>
                           <span className="text-[11px] text-slate-500 truncate block">
-                            @{leader.username} • {leader.party}
+                            {leader.party} • {leader.constituency}
                           </span>
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full block mb-1">
+                        <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full block mb-0.5">
                           Score: {leader.systemScore}/100
                         </span>
-                        <button
-                          onClick={() => {
-                            if (onSelectLeaderProfile) onSelectLeaderProfile(leader);
-                            else onNavigate("leader");
-                          }}
-                          className="text-[11px] font-bold px-3 py-1 bg-slate-900 text-white rounded-full hover:bg-black transition-colors"
-                        >
-                          View Profile
-                        </button>
+                        <div className="flex items-center justify-end text-xs text-amber-500 font-bold">
+                          <Star className="w-3 h-3 fill-amber-400 mr-0.5" />
+                          <span>{leader.publicRating.toFixed(1)}</span>
+                        </div>
                       </div>
-                    </div>
+                    </article>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Live Reports Feed underneath */}
+            {/* C. Suggested Citizen & Public Profiles Discovery */}
+            {publicProfiles.length > 0 && (
+              <div className="p-4 bg-slate-50/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Suggested Citizens & Local Businesses</span>
+                  </span>
+                  <button
+                    onClick={() => setActiveTab("public")}
+                    className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    View More
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {publicProfiles.slice(0, 4).map((user) => {
+                    const isRawUid = (str?: string) => Boolean(str && /^[a-zA-Z0-9_-]{20,}$/.test(str.replace(/^@/, "")));
+                    const displayFullName = (user.fullName && !isRawUid(user.fullName))
+                      ? user.fullName
+                      : (user.username && !isRawUid(user.username) ? user.username.replace(/^@/, "") : `Citizen (${user.id.slice(0, 6)})`);
+
+                    return (
+                      <div
+                        key={user.id}
+                        onClick={() => onSelectUser && onSelectUser(user.id)}
+                        className="p-3 bg-white border border-slate-200/80 rounded-xl hover:border-blue-300 transition-colors cursor-pointer flex items-center gap-2.5 shadow-2xs"
+                      >
+                        <img
+                          src={
+                            user.avatarUrl ||
+                            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"
+                          }
+                          alt={displayFullName}
+                          className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-black text-xs text-slate-900 truncate">
+                            {displayFullName}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {user.location || "Citizen"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* D. Recent Civic Grievances Feed */}
             <div className="divide-y divide-slate-100">
-              <div className="px-4 py-2.5 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Latest Civic Reports & Grievances
+              <div className="px-4 py-2.5 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>Recent Grievances in Area</span>
+                <button
+                  onClick={() => setActiveTab("reports")}
+                  className="text-blue-600 hover:underline cursor-pointer"
+                >
+                  View All
+                </button>
               </div>
 
-              {filteredReports.length > 0 ? (
-                filteredReports.map((report) => (
-                  <div
+              {filteredReports.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No active civic reports found for this area.
+                </div>
+              ) : (
+                filteredReports.slice(0, 5).map((report) => (
+                  <article
                     key={report.id}
                     className="p-4 hover:bg-slate-50/60 transition-colors space-y-2.5"
                   >
-                    {/* Author Row */}
                     <div className="flex items-center justify-between text-xs">
                       <div
                         onClick={() => onSelectUser && onSelectUser(report.authorId)}
@@ -404,20 +868,15 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                             "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80"
                           }
                           alt={report.authorName}
-                          className="w-9 h-9 rounded-full object-cover border border-slate-200"
+                          className="w-8 h-8 rounded-full object-cover border border-slate-200"
                         />
                         <div>
-                          <div className="flex items-center gap-1">
-                            <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
-                              <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
-                              {isReportAuthorVerified(report) && (
-                                <CategoryVerifiedTick
-                                  category={report.authorCategory}
-                                  size="xs"
-                                />
-                              )}
-                            </span>
-                          </div>
+                          <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                            <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
+                            {isReportAuthorVerified(report) && (
+                              <CategoryVerifiedTick category={report.authorCategory} size="xs" />
+                            )}
+                          </span>
                           <span className="text-[10px] text-slate-400">
                             {formatReportTimestamp(report.createdAt || report.timestamp)} • {report.location.city}
                           </span>
@@ -429,12 +888,10 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Report Text */}
                     <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
                       {cleanReportText(report.text)}
                     </p>
 
-                    {/* Report Image */}
                     {report.imageUrl && (
                       <div className="rounded-2xl overflow-hidden border border-slate-200 max-h-72 bg-slate-900">
                         <img
@@ -445,7 +902,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </div>
                     )}
 
-                    {/* Interactive Action Bar (Like, Re-report, Reply) */}
+                    {/* Action Bar */}
                     <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
                       <button
                         onClick={() => onLikeReport && onLikeReport(report.id)}
@@ -483,231 +940,338 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         {report.status}
                       </span>
                     </div>
-
-                    {/* Inline Reply Input */}
-                    {activeReplyBoxReportId === report.id && (
-                      <div className="pt-2 flex items-center gap-2 animate-fadeIn">
-                        <input
-                          type="text"
-                          value={replyInputMap[report.id] || ""}
-                          onChange={(e) =>
-                            setReplyInputMap((prev) => ({
-                              ...prev,
-                              [report.id]: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSendReply(report.id);
-                          }}
-                          placeholder="Post your reply or citizen observation..."
-                          className="flex-1 text-xs px-3 py-2 bg-slate-100 border border-slate-200 rounded-full focus:outline-none focus:bg-white focus:border-blue-500"
-                        />
-                        <button
-                          onClick={() => handleSendReply(report.id)}
-                          disabled={!replyInputMap[report.id]?.trim()}
-                          className="p-2 bg-blue-600 text-white rounded-full disabled:opacity-40 hover:bg-blue-700 transition-colors"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  </article>
                 ))
-              ) : (
-                <div className="p-8 text-center text-xs text-slate-400 space-y-1">
-                  <p>No matching reports found for your search query.</p>
-                  {isNearMeOnly && (
-                    <button
-                      onClick={() => setIsNearMeOnly(false)}
-                      className="text-blue-600 font-bold hover:underline"
-                    >
-                      Search nationwide instead
-                    </button>
-                  )}
-                </div>
               )}
             </div>
           </div>
-        )}
-
-        {/* TAB: TRENDING */}
-        {activeTab === "trending" && (
-          <div className="divide-y divide-slate-100 animate-fadeIn">
-            {trendingTopics.map((topic, idx) => (
-              <div
-                key={idx}
-                onClick={() => {
-                  setQuery(topic.tag);
-                  setActiveTab("reports");
-                }}
-                className="p-4 hover:bg-slate-50 cursor-pointer transition-colors space-y-1"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-bold">
-                    {idx + 1} • {topic.category} • Trending
-                  </span>
-                  <span className="text-[11px] font-black text-blue-600">
-                    {topic.postsCount} reports
-                  </span>
-                </div>
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                  {topic.tag}
-                </h3>
-                <p className="text-xs text-slate-600">{topic.description}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* TAB: REPORTS */}
-        {activeTab === "reports" && (
-          <div className="divide-y divide-slate-100 animate-fadeIn">
-            {filteredReports.map((report) => (
-              <div key={report.id} className="p-4 hover:bg-slate-50/60 transition-colors space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <div
-                    onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <img
-                      src={report.authorAvatar}
-                      alt={report.authorName}
-                      className="w-8 h-8 rounded-full object-cover border border-slate-200"
-                    />
-                    <div>
-                      <span className="font-bold text-slate-900 block">{report.authorName}</span>
-                      <span className="text-[10px] text-slate-400">@{report.authorUsername}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
-                    {report.category}
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-900">{report.text}</p>
-                {report.imageUrl && (
-                  <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
-                    <img
-                      src={report.imageUrl}
-                      alt="Civic Issue"
-                      className="w-full h-auto object-contain rounded-2xl"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                  <button
-                    onClick={() => onLikeReport && onLikeReport(report.id)}
-                    className="flex items-center gap-1 text-rose-500"
-                  >
-                    <Heart className="w-3.5 h-3.5 fill-rose-500" /> {report.likesCount}
-                  </button>
-                  <button
-                    onClick={() => onReReport && onReReport(report.id)}
-                    className="flex items-center gap-1 text-emerald-600"
-                  >
-                    <Repeat2 className="w-3.5 h-3.5" /> {report.reReportsCount}
-                  </button>
-                  <span className="text-blue-600 font-bold">{report.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* TAB: LEADERS */}
-        {activeTab === "leaders" && (
+        ) : activeTab === "departments" ? (
+          /* ================= TAB 2: DEPARTMENTS ONLY ================= */
           <div className="p-4 space-y-3 animate-fadeIn">
-            {filteredLeaders.map((leader) => (
-              <div
-                key={leader.id}
-                onClick={() => {
-                  if (onSelectLeaderProfile) onSelectLeaderProfile(leader);
-                  else onNavigate("leader");
-                }}
-                className="p-4 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between gap-3 hover:border-blue-300 transition-colors shadow-2xs cursor-pointer"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <img
-                    src={leader.image}
-                    alt={leader.name}
-                    className="w-12 h-12 rounded-full object-cover border border-slate-200"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
-                      <h4 className="font-extrabold text-sm text-slate-900 truncate">
-                        {leader.name}
-                      </h4>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            {departmentProfiles.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <Building2 className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-black text-slate-800">No matching departments found</p>
+                <p className="text-xs text-slate-500">
+                  Try adjusting your search query or enabling nationwide search in settings.
+                </p>
+              </div>
+            ) : (
+              departmentProfiles.map((dept) => (
+                <article
+                  key={dept.id}
+                  onClick={() => onSelectUser && onSelectUser(dept.id)}
+                  className="p-4 bg-white border border-slate-200/90 rounded-2xl hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer space-y-3 group"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <img
+                        src={dept.avatarUrl}
+                        alt={dept.fullName}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            "https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?w=400&auto=format&fit=crop&q=80";
+                        }}
+                        className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shrink-0 group-hover:scale-105 transition-transform"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-black text-sm sm:text-base text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {dept.fullName}
+                          </h3>
+                          {dept.verified && (
+                            <CategoryVerifiedTick category="department" size="xs" />
+                          )}
+                        </div>
+
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200 inline-block mt-0.5">
+                          {dept.positionTitle}
+                        </span>
+
+                        <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-1 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">{dept.jurisdiction}</span>
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-500 truncate">
-                      {leader.party} • {leader.constituency}
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full block mb-1">
+                        Score {dept.systemScore}
+                      </span>
+                      <span className="text-[11px] text-emerald-600 font-black block">
+                        {dept.slaSolvedCount}+ Solved
+                      </span>
+                    </div>
+                  </div>
+
+                  {dept.bio && (
+                    <p className="text-xs text-slate-700 leading-relaxed line-clamp-2">
+                      {dept.bio}
                     </p>
-                    <p className="text-[11px] text-slate-600 line-clamp-1 mt-0.5">{leader.bio}</p>
-                  </div>
-                </div>
+                  )}
 
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full block mb-1">
-                    Score: {leader.systemScore}
-                  </span>
-                  <div className="flex items-center justify-end text-xs text-amber-500 font-bold">
-                    <Star className="w-3 h-3 fill-amber-400 mr-0.5" />
-                    <span>{leader.publicRating}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* TAB: PROJECTS */}
-        {activeTab === "projects" && (
-          <div className="p-4 space-y-3 animate-fadeIn">
-            {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => onNavigate("infrastructure")}
-                className="p-4 bg-white border border-slate-200/90 rounded-2xl hover:border-blue-300 transition-colors shadow-2xs cursor-pointer space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-slate-100 text-slate-700 rounded">
-                      {project.category}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-bold">
+                    <span className="text-blue-600 flex items-center gap-1">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Govt Verified Authority</span>
                     </span>
-                    <h4 className="font-extrabold text-sm text-slate-900 mt-1">
-                      {project.name}
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      {project.region} • Supervised by {project.supervisingOfficer}
-                    </p>
+                    <span className="flex items-center gap-1 text-slate-700 group-hover:text-blue-600">
+                      <span>View Desk</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
                   </div>
-                  <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full shrink-0">
-                    {project.progressPercent}% Completed
-                  </span>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 rounded-full"
-                    style={{ width: `${project.progressPercent}%` }}
-                  ></div>
-                </div>
+                </article>
+              ))
+            )}
+          </div>
+        ) : activeTab === "leaders" ? (
+          /* ================= TAB 3: LEADERS ONLY ================= */
+          <div className="p-4 space-y-3 animate-fadeIn">
+            {leaderProfiles.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <Users className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-black text-slate-800">No leaders found</p>
+                <p className="text-xs text-slate-500">Try adjusting your search criteria.</p>
               </div>
-            ))}
+            ) : (
+              leaderProfiles.map((leader) => (
+                <article
+                  key={leader.id}
+                  onClick={() => {
+                    if (leader.originalLeader && onSelectLeaderProfile) {
+                      onSelectLeaderProfile(leader.originalLeader);
+                    } else if (onSelectUser) {
+                      onSelectUser(leader.id);
+                    }
+                  }}
+                  className="p-4 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between gap-3 hover:border-blue-400 transition-all shadow-2xs cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <img
+                      src={leader.avatarUrl}
+                      alt={leader.fullName}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80";
+                      }}
+                      className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0 group-hover:scale-105 transition-transform"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 truncate">
+                          {leader.fullName}
+                        </h4>
+                        {leader.verified && (
+                          <CategoryVerifiedTick category="representative" size="xs" />
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 truncate">
+                        {leader.party} • {leader.constituency}
+                      </p>
+                      {leader.bio && (
+                        <p className="text-[11px] text-slate-600 line-clamp-1 mt-0.5">
+                          {leader.bio}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full block mb-1">
+                      Score: {leader.systemScore}/100
+                    </span>
+                    <div className="flex items-center justify-end text-xs text-amber-500 font-bold">
+                      <Star className="w-3 h-3 fill-amber-400 mr-0.5" />
+                      <span>{leader.publicRating.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        ) : activeTab === "reports" ? (
+          /* ================= TAB 4: GRIEVANCES ONLY ================= */
+          <div className="divide-y divide-slate-100 animate-fadeIn">
+            {filteredReports.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-black text-slate-800">No grievances found</p>
+                <p className="text-xs text-slate-500">
+                  Try searching for a different issue, area, or category.
+                </p>
+              </div>
+            ) : (
+              filteredReports.map((report) => (
+                <article
+                  key={report.id}
+                  className="p-4 hover:bg-slate-50/60 transition-colors space-y-2.5"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <div
+                      onClick={() => onSelectUser && onSelectUser(report.authorId)}
+                      className="flex items-center gap-2 cursor-pointer group"
+                    >
+                      <img
+                        src={
+                          report.authorAvatar ||
+                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80"
+                        }
+                        alt={report.authorName}
+                        className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                      />
+                      <div>
+                        <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                          <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
+                          {isReportAuthorVerified(report) && (
+                            <CategoryVerifiedTick category={report.authorCategory} size="xs" />
+                          )}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {formatReportTimestamp(report.createdAt || report.timestamp)} • {report.location.city}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                      {report.category}
+                    </span>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
+                    {cleanReportText(report.text)}
+                  </p>
+
+                  {report.imageUrl && (
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 max-h-72 bg-slate-900">
+                      <img
+                        src={report.imageUrl}
+                        alt="Civic Evidence"
+                        className="w-full h-full object-cover max-h-72"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+                    <button
+                      onClick={() => onLikeReport && onLikeReport(report.id)}
+                      className="flex items-center gap-1.5 hover:text-rose-600 transition-colors cursor-pointer py-1 px-1.5"
+                    >
+                      <Heart className="w-4 h-4 text-rose-500" />
+                      <span>{report.likesCount}</span>
+                    </button>
+
+                    <button
+                      onClick={() => onReReport && onReReport(report.id)}
+                      className="flex items-center gap-1.5 hover:text-emerald-600 transition-colors cursor-pointer py-1 px-1.5"
+                    >
+                      <Repeat2 className="w-4 h-4 text-emerald-600" />
+                      <span>{report.reReportsCount}</span>
+                    </button>
+
+                    <button
+                      onClick={() => onSelectPost && onSelectPost(report.id)}
+                      className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer py-1 px-1.5"
+                    >
+                      <MessageCircle className="w-4 h-4 text-blue-500" />
+                      <span>{report.repliesCount}</span>
+                    </button>
+
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                      {report.status}
+                    </span>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        ) : (
+          /* ================= TAB 5: PUBLIC ONLY ================= */
+          <div className="p-4 space-y-3 animate-fadeIn">
+            {publicProfiles.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <Users className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-black text-slate-800">No public profiles found</p>
+                <p className="text-xs text-slate-500">Registered citizens will appear here.</p>
+              </div>
+            ) : (
+              publicProfiles.map((user) => {
+                const isRawUid = (str?: string) => Boolean(str && /^[a-zA-Z0-9_-]{20,}$/.test(str.replace(/^@/, "")));
+                const displayFullName = (user.fullName && !isRawUid(user.fullName))
+                  ? user.fullName
+                  : (user.username && !isRawUid(user.username) ? user.username.replace(/^@/, "") : `Citizen (${user.id.slice(0, 6)})`);
+
+                return (
+                  <article
+                    key={user.id}
+                    onClick={() => onSelectUser && onSelectUser(user.id)}
+                    className="p-4 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between gap-3 hover:border-blue-400 transition-all shadow-2xs cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <img
+                        src={
+                          user.avatarUrl ||
+                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"
+                        }
+                        alt={displayFullName}
+                        className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0 group-hover:scale-105 transition-transform"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-black text-sm text-slate-900 group-hover:text-blue-600 truncate">
+                            {displayFullName}
+                          </h4>
+                          {(user.verified || user.verificationStatus === "approved") && (
+                            <CategoryVerifiedTick category={user.category} size="xs" />
+                          )}
+                          {user.category === "business" && (
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 shrink-0">
+                              {user.businessDetails?.industry || "Business"}
+                            </span>
+                          )}
+                        </div>
+                      {user.location && (
+                        <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">{user.location}</span>
+                        </p>
+                      )}
+                      {user.bio && (
+                        <p className="text-xs text-slate-600 line-clamp-1 mt-0.5">
+                          {user.bio}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSelectUser) onSelectUser(user.id);
+                      }}
+                      className="text-xs font-bold px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full transition-all cursor-pointer shadow-2xs"
+                    >
+                      View
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+            )}
           </div>
         )}
       </div>
 
-      {/* 5. Explore / Search Settings Modal (Location Toggle & Civic Preferences) */}
+      {/* 6. Location & Civic Department Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-            {/* Modal Header */}
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-5 h-5 text-blue-600" />
                 <h2 className="text-base font-extrabold text-slate-900">
-                  Explore & Location Settings
+                  Search & Location Preferences
                 </h2>
               </div>
               <button
@@ -718,16 +1282,14 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
-              {/* Location Toggle (Near You vs Everywhere) */}
+              {/* Location Toggle */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-900 font-extrabold text-sm">
                     <MapPin className="w-4 h-4 text-blue-600" />
-                    <span>Show Content in Your Location</span>
+                    <span>Prioritize Your Area ({primaryCityOrState})</span>
                   </div>
-                  {/* Toggle Switch */}
                   <button
                     type="button"
                     onClick={() => setIsNearMeOnly(!isNearMeOnly)}
@@ -743,71 +1305,74 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                   </button>
                 </div>
                 <p className="text-xs text-slate-600 font-normal leading-relaxed">
-                  When enabled, Explore and Search results will strictly prioritize grievances,
-                  leaders, and projects in <strong>{userCity}</strong>. Turn off to see posts from
-                  everywhere across India.
+                  When enabled, search prioritizes government departments, representatives, and issues located in <strong>{rawUserLocation}</strong>.
                 </p>
               </div>
 
-              {/* Personalized Trends Toggle */}
+              {/* Verified Authority Filter Toggle */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-900 font-extrabold text-sm">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
-                    <span>Trends for you</span>
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Verified Profiles Only</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowPersonalizedTrends(!showPersonalizedTrends)}
+                    onClick={() => setVerifiedOnly(!verifiedOnly)}
                     className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      showPersonalizedTrends ? "bg-blue-600" : "bg-slate-300"
+                      verifiedOnly ? "bg-emerald-600" : "bg-slate-300"
                     }`}
                   >
                     <span
                       className={`block w-5 h-5 bg-white rounded-full shadow-sm transition-transform absolute top-0.5 ${
-                        showPersonalizedTrends ? "left-6.5" : "left-0.5"
+                        verifiedOnly ? "left-6.5" : "left-0.5"
                       }`}
                     />
                   </button>
                 </div>
                 <p className="text-xs text-slate-600 font-normal leading-relaxed">
-                  Personalize the trending topics based on your civic activity and followed
-                  departments.
+                  Only show verified administrative departments and elected leaders.
                 </p>
               </div>
 
-              {/* Department Filter Pills */}
+              {/* Department Category Filter */}
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase text-slate-600 tracking-wide block">
-                  Filter by Civic Department Scope
+                  Filter by Department Authority
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {["All", "PWD Roads", "Jal Board Water", "Electricity (DHBVN)", "MCD Municipal", "Anti-Corruption"].map(
-                    (dept) => (
-                      <button
-                        key={dept}
-                        onClick={() => setSelectedDeptFilter(dept)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                          selectedDeptFilter === dept
-                            ? "bg-blue-600 text-white shadow-2xs"
-                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                        }`}
-                      >
-                        {dept}
-                      </button>
-                    )
-                  )}
+                  {[
+                    "All",
+                    "Public Works (PWD)",
+                    "Water & Sanitation (Jal Board)",
+                    "Electricity & Power",
+                    "Municipal Corporation",
+                    "Police & Traffic",
+                    "Anti-Corruption Bureau",
+                  ].map((dept) => (
+                    <button
+                      key={dept}
+                      onClick={() => setSelectedDeptCategory(dept === "All" ? "All" : dept.split("(")[0].trim())}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        selectedDeptCategory === (dept === "All" ? "All" : dept.split("(")[0].trim())
+                          ? "bg-blue-600 text-white shadow-2xs"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {dept}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Save & Apply Button */}
+              {/* Apply Button */}
               <div className="pt-2">
                 <button
                   onClick={() => setIsSettingsOpen(false)}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm py-3 rounded-2xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Apply Explore Preferences</span>
+                  <span>Apply Search Preferences</span>
                 </button>
               </div>
             </div>
