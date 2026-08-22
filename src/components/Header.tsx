@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Users, HelpCircle, Activity, Search, X, LogIn } from "lucide-react";
-import { UserProfile } from "../types.ts";
+import { UserProfile } from "../types.ts"; // Apne hisaab se path adjust kar lein
 
 interface HeaderProps {
   currentView: string;
@@ -34,22 +34,56 @@ export const Header: React.FC<HeaderProps> = ({
   userProfile,
   searchQuery = "",
   onSearchQueryChange,
-  bookmarkedCount = 0,
-  unreadNotificationsCount = 0,
   isLoggedIn = false,
   onOpenLogin,
-  visible = true,
   selectedCategory = "All",
   onSelectCategory,
 }) => {
   const isBookmarkView = currentView === "bookmark" || currentView === "bookmarks";
 
+  // --- NATIVE SCROLL SYNC LOGIC ---
+  const headerRef = useRef<HTMLElement>(null);
+  const lastScrollY = useRef(typeof window !== "undefined" ? window.scrollY : 0);
+  const [translateY, setTranslateY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const delta = currentScrollY - lastScrollY.current;
+      
+      // Header ki height dynamically calculate karna
+      const headerHeight = headerRef.current ? headerRef.current.offsetHeight : 120;
+
+      setTranslateY((prev) => {
+        // Agar user page ke bilkul top par hai, toh header pura dikhao
+        if (currentScrollY <= 0) return 0;
+        
+        let newY = prev - delta;
+        
+        // Header ko 0 (fully visible) aur -headerHeight (fully hidden) ke beech lock karein
+        if (newY > 0) newY = 0;
+        if (newY < -headerHeight) newY = -headerHeight;
+        
+        return newY;
+      });
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
     <header
+      ref={headerRef}
       id="main-header"
-      className={`sticky top-0 z-40 w-full bg-white flex flex-col transition-transform duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
-        visible ? "translate-y-0" : "-translate-y-full pointer-events-none"
-      }`}
+      // Dhyan dein: Yahan se CSS transition hata diya gaya hai.
+      className="sticky top-0 z-40 w-full bg-white flex flex-col will-change-transform border-b border-slate-100"
+      // Style inline apply ho raha hai jo aapke finger ke pixel-by-pixel move karega
+      style={{ 
+        transform: `translateY(${translateY}px)`,
+      }}
     >
       {/* Row 1: Logo, DP Avatar, and Quick Action Icons */}
       <div className="h-[56px] md:h-[62px] flex items-center justify-between px-3 md:px-6 w-full max-w-xl mx-auto">
@@ -191,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden md:inline">Help</span>
           </button>
 
-          {/* Connect & Discover People button matching DP size */}
+          {/* Connect & Discover People button */}
           <button
             id="header-connect-btn"
             onClick={() => onNavigate("connect")}
@@ -207,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Row 2: Category Filter Pills inside the SAME unified Header container */}
+      {/* Row 2: Category Filter Pills */}
       {currentView === "dashboard" && (
         <div className="w-full bg-white pb-2.5 pt-0.5 max-w-xl mx-auto">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-3.5 sm:px-4 scroll-smooth overscroll-x-contain">
