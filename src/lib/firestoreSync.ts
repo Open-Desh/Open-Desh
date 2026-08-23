@@ -9,11 +9,10 @@ import {
   arrayUnion,
   arrayRemove,
   increment,
-  onSnapshot,
   query,
   where,
 } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import { db } from "../firebase";
 import {
   ReportIssue,
   Leader,
@@ -32,7 +31,7 @@ function sanitizeData<T>(data: T): any {
   return JSON.parse(JSON.stringify(data));
 }
 
-// 1. Fetch Reports directly from Firestore (No Dummy / No Auto-Seed)
+// 1. Fetch Reports directly from Firestore
 export async function getReportsDirect(): Promise<ReportIssue[]> {
   try {
     const repRef = collection(db, "reports");
@@ -43,7 +42,6 @@ export async function getReportsDirect(): Promise<ReportIssue[]> {
       snapshot.forEach((docSnap) => {
         reports.push(docSnap.data() as ReportIssue);
       });
-      // Sort newest first
       return reports.sort((a, b) => {
         const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || a.timestamp).getTime() || 0;
         const timeB = typeof b.createdAt === "number" ? b.createdAt : new Date(b.createdAt || b.timestamp).getTime() || 0;
@@ -57,7 +55,7 @@ export async function getReportsDirect(): Promise<ReportIssue[]> {
   }
 }
 
-// 2. Fetch Leaders directly from Firestore (No Dummy / No Auto-Seed)
+// 2. Fetch Leaders directly from Firestore
 export async function getLeadersDirect(): Promise<Leader[]> {
   try {
     const leadRef = collection(db, "leaders");
@@ -77,7 +75,7 @@ export async function getLeadersDirect(): Promise<Leader[]> {
   }
 }
 
-// 3. Fetch Infrastructure Projects directly from Firestore (No Dummy / No Auto-Seed)
+// 3. Fetch Infrastructure Projects directly from Firestore
 export async function getInfrastructureDirect(): Promise<InfrastructureProject[]> {
   try {
     const infraRef = collection(db, "infrastructure");
@@ -97,13 +95,27 @@ export async function getInfrastructureDirect(): Promise<InfrastructureProject[]
   }
 }
 
-// 4. Save New Grievance Report to Firestore
+// 4. Save New Grievance Report safely to Firestore ({ merge: true } added)
 export async function saveReportToFirestore(report: ReportIssue): Promise<void> {
   try {
     const repDoc = doc(db, "reports", report.id);
-    await setDoc(repDoc, sanitizeData(report));
+    await setDoc(repDoc, sanitizeData(report), { merge: true });
   } catch (err) {
     console.warn("Error saving report directly to Firestore:", err);
+  }
+}
+
+// 4b. Save / Update User Profile safely to Firestore ({ merge: true } added)
+export async function saveUserProfileToFirestore(userProfile: UserProfile): Promise<void> {
+  try {
+    const userDocRef = doc(db, "users", userProfile.id);
+    const sanitized = sanitizeData({
+      ...userProfile,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(userDocRef, sanitized, { merge: true });
+  } catch (err) {
+    console.warn("Error saving user profile to Firestore:", err);
   }
 }
 
@@ -146,7 +158,7 @@ export async function addReplyInFirestore(reportId: string, reply: ThreadedReply
   }
 }
 
-// 7b. Update Entire Replies Tree in Firestore (for reply likes, reply rereports, nested replies)
+// 7b. Update Entire Replies Tree in Firestore
 export async function updateReportRepliesInFirestore(reportId: string, replies: ThreadedReply[]): Promise<void> {
   try {
     const repDoc = doc(db, "reports", reportId);
@@ -223,7 +235,6 @@ export async function updateReportStatusInFirestore(
 
 // 10. Seeder disabled - Data is strictly preserved as-is in Firestore
 export async function seedAllCollectionsToFirestore(): Promise<void> {
-  // Auto-seeding disabled to ensure real database integrity
   return;
 }
 
@@ -248,7 +259,6 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   const authoritiesMap = new Map<string, RegisteredAuthority>();
   const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
 
-  // 0. Seed baseline verified departments and official handles from INITIAL_USERS
   Object.values(INITIAL_USERS).forEach((u) => {
     if (u && (u.category === "department" || u.category === "representative" || u.verified)) {
       const uname = u.username?.toLowerCase().replace(/^@/, "");
@@ -273,7 +283,6 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   });
 
   try {
-    // 1. Fetch live users from Firestore `users` collection (overrides/augments baseline)
     const usersRef = collection(db, "users");
     const userSnaps = await getDocs(usersRef);
     userSnaps.forEach((docSnap) => {
@@ -306,7 +315,6 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
       }
     });
 
-    // 2. Fetch live leaders from Firestore `leaders` collection
     const leadersRef = collection(db, "leaders");
     const leaderSnaps = await getDocs(leadersRef);
     leaderSnaps.forEach((docSnap) => {
@@ -335,7 +343,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   return Array.from(authoritiesMap.values());
 }
 
-// 11b. Helper to batch write all police & official department profiles to Firestore users collection
+// 11b. Seed police profiles safely to Firestore
 export async function seedPoliceProfilesToFirestore(): Promise<void> {
   try {
     const departmentProfiles = Object.values(INITIAL_USERS).filter(
@@ -355,12 +363,11 @@ export async function seedPoliceProfilesToFirestore(): Promise<void> {
   }
 }
 
-// 11c. Purge all legacy dummy/mock leaders, fake contractor profiles, unauthorized depts, and fake infra from Firestore
+// 11c. Purge old mock data from Firestore
 export async function purgeOldMockDataFromFirestore(): Promise<void> {
   try {
     const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
 
-    // 1. Purge legacy mock leaders (e.g., lead_1, lead_2, fake leaders)
     const leadersRef = collection(db, "leaders");
     const leaderSnaps = await getDocs(leadersRef);
     leaderSnaps.forEach(async (d) => {
@@ -371,7 +378,6 @@ export async function purgeOldMockDataFromFirestore(): Promise<void> {
       }
     });
 
-    // 2. Purge legacy mock/unauthorized users (Gurugram, Jharkhand Bijli, NHAI, Afcons, Wabag, fake contractors, fake depts)
     const usersRef = collection(db, "users");
     const userSnaps = await getDocs(usersRef);
     userSnaps.forEach(async (d) => {
@@ -382,7 +388,6 @@ export async function purgeOldMockDataFromFirestore(): Promise<void> {
       const category = (data.category || "").toLowerCase();
       const isPolice = validPoliceIds.has(id);
 
-      // Identify dummy / mock / unwanted profiles in Firestore
       const isUnapprovedDept = category === "department" && !isPolice;
       const isLegacyMock =
         id.startsWith("lead_") ||
@@ -417,7 +422,6 @@ export async function purgeOldMockDataFromFirestore(): Promise<void> {
       }
     });
 
-    // 3. Purge legacy mock infrastructure projects
     const infraRef = collection(db, "infrastructure");
     const infraSnaps = await getDocs(infraRef);
     infraSnaps.forEach(async (d) => {
@@ -432,7 +436,7 @@ export async function purgeOldMockDataFromFirestore(): Promise<void> {
   }
 }
 
-// 12. Check Real-Time Username Uniqueness against Firestore users, leaders & backend
+// 12. Check Real-Time Username Uniqueness
 export async function checkUsernameAvailability(
   username: string,
   currentUserId: string,
@@ -444,84 +448,58 @@ export async function checkUsernameAvailability(
     return { available: false, reason: "Username cannot be empty." };
   }
 
-  // Format validation: 3 to 30 characters, alphanumeric and underscore only
   const usernameRegex = /^[a-z0-9_]{3,30}$/;
   if (!usernameRegex.test(clean)) {
     if (clean.length < 3) {
-      return {
-        available: false,
-        reason: "Username must be at least 3 characters long.",
-      };
+      return { available: false, reason: "Username must be at least 3 characters long." };
     }
     if (clean.length > 30) {
-      return {
-        available: false,
-        reason: "Username cannot exceed 30 characters.",
-      };
+      return { available: false, reason: "Username cannot exceed 30 characters." };
     }
     return {
       available: false,
-      reason:
-        "Username can only contain lowercase letters, numbers, and underscores (_). No spaces or special symbols.",
+      reason: "Username can only contain lowercase letters, numbers, and underscores (_). No spaces or special symbols.",
     };
   }
 
-  // If user is keeping their current username, it's always valid
-  if (
-    currentUsername &&
-    clean === currentUsername.trim().toLowerCase().replace(/^@/, "")
-  ) {
+  if (currentUsername && clean === currentUsername.trim().toLowerCase().replace(/^@/, "")) {
     return { available: true };
   }
 
-  // 1. Check Firestore `users` collection
   try {
     const usersRef = collection(db, "users");
     const q = query(usersRef, where("username", "==", clean));
     const snap = await getDocs(q);
     for (const docSnap of snap.docs) {
       if (docSnap.id !== currentUserId) {
-        return {
-          available: false,
-          reason: `@${clean} is already taken by another registered citizen/official.`,
-        };
+        return { available: false, reason: `@${clean} is already taken by another registered citizen/official.` };
       }
     }
   } catch (err) {
     console.warn("Firestore username query warning:", err);
   }
 
-  // 2. Check Firestore `leaders` collection
   try {
     const leadersRef = collection(db, "leaders");
     const qLeaders = query(leadersRef, where("username", "==", clean));
     const snapLeaders = await getDocs(qLeaders);
     for (const docSnap of snapLeaders.docs) {
       if (docSnap.id !== currentUserId) {
-        return {
-          available: false,
-          reason: `@${clean} is already taken by an official leader profile.`,
-        };
+        return { available: false, reason: `@${clean} is already taken by an official leader profile.` };
       }
     }
   } catch (err) {
     console.warn("Firestore leader query warning:", err);
   }
 
-  // 3. Query Express API backend validation if available
   try {
     const res = await fetch(
-      `/api/users/check-username/${encodeURIComponent(clean)}?currentUserId=${encodeURIComponent(
-        currentUserId
-      )}`
+      `/api/users/check-username/${encodeURIComponent(clean)}?currentUserId=${encodeURIComponent(currentUserId)}`
     );
     if (res.ok) {
       const data = await res.json();
       if (!data.available) {
-        return {
-          available: false,
-          reason: data.reason || `@${clean} is already taken.`,
-        };
+        return { available: false, reason: data.reason || `@${clean} is already taken.` };
       }
     }
   } catch {
@@ -551,7 +529,7 @@ export async function togglePinReportInFirestore(reportId: string, isPinned: boo
   }
 }
 
-// 15. Toggle Follow / Unfollow in Firestore Database for Users & Leaders
+// 15. Toggle Follow / Unfollow in Firestore Database
 export async function toggleFollowInFirestore(
   currentUserId: string,
   targetUserIdOrUsername: string,
@@ -561,12 +539,10 @@ export async function toggleFollowInFirestore(
     const cleanTarget = targetUserIdOrUsername.replace(/^@/, "").trim();
     const userRef = doc(db, "users", currentUserId);
 
-    // Find actual target document
     let targetRef = doc(db, "users", cleanTarget);
     let targetSnap = await getDoc(targetRef).catch(() => null);
 
     if (!targetSnap || !targetSnap.exists()) {
-      // Query by username in users collection
       const q = query(
         collection(db, "users"),
         where("username", "==", cleanTarget.toLowerCase())
@@ -579,19 +555,11 @@ export async function toggleFollowInFirestore(
     }
 
     if (isFollowing) {
-      // User is currently following -> UNFOLLOW
       await updateDoc(userRef, {
         following: arrayRemove(cleanTarget, targetRef.id),
         followingCount: increment(-1),
       }).catch(async () => {
-        await setDoc(
-          userRef,
-          {
-            following: [],
-            followingCount: 0,
-          },
-          { merge: true }
-        );
+        await setDoc(userRef, { following: [], followingCount: 0 }, { merge: true });
       });
 
       if (targetSnap && targetSnap.exists()) {
@@ -599,37 +567,21 @@ export async function toggleFollowInFirestore(
           followers: arrayRemove(currentUserId),
           followersCount: increment(-1),
         }).catch(async () => {
-          await setDoc(
-            targetRef,
-            {
-              followers: [],
-              followersCount: 0,
-            },
-            { merge: true }
-          );
+          await setDoc(targetRef, { followers: [], followersCount: 0 }, { merge: true });
         });
       }
 
-      // If target is in leaders collection
       const leaderRef = doc(db, "leaders", cleanTarget);
       await updateDoc(leaderRef, {
         followers: arrayRemove(currentUserId),
         followersCount: increment(-1),
       }).catch(() => {});
     } else {
-      // User is not following -> FOLLOW
       await updateDoc(userRef, {
         following: arrayUnion(cleanTarget, targetRef.id),
         followingCount: increment(1),
       }).catch(async () => {
-        await setDoc(
-          userRef,
-          {
-            following: [cleanTarget, targetRef.id],
-            followingCount: 1,
-          },
-          { merge: true }
-        );
+        await setDoc(userRef, { following: [cleanTarget, targetRef.id], followingCount: 1 }, { merge: true });
       });
 
       if (targetSnap && targetSnap.exists()) {
@@ -637,18 +589,10 @@ export async function toggleFollowInFirestore(
           followers: arrayUnion(currentUserId),
           followersCount: increment(1),
         }).catch(async () => {
-          await setDoc(
-            targetRef,
-            {
-              followers: [currentUserId],
-              followersCount: 1,
-            },
-            { merge: true }
-          );
+          await setDoc(targetRef, { followers: [currentUserId], followersCount: 1 }, { merge: true });
         });
       }
 
-      // If target is in leaders collection
       const leaderRef = doc(db, "leaders", cleanTarget);
       await updateDoc(leaderRef, {
         followers: arrayUnion(currentUserId),
@@ -660,7 +604,7 @@ export async function toggleFollowInFirestore(
   }
 }
 
-// 8. Fetch Budgets from Firestore (with automatic background sync of Real Indian Budget Data)
+// 16. Fetch Budgets from Firestore
 export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
   try {
     const budgetRef = collection(db, "budgets");
@@ -674,7 +618,6 @@ export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
       return budgets;
     }
 
-    // If Firestore collection is empty or missing newly added States/UTs, seed and sync all real data
     return await seedRealBudgetsToFirestore();
   } catch (err) {
     console.warn("Firestore budgets fetch notice, using verified real dataset:", err);
@@ -682,7 +625,7 @@ export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
   }
 }
 
-// 9. Save / Update Budget Node in Firestore
+// 17. Save / Update Budget Node in Firestore
 export async function saveBudgetToFirestore(budget: BudgetHierarchyNode): Promise<void> {
   try {
     const budgetDoc = doc(db, "budgets", budget.id);
@@ -696,7 +639,7 @@ export async function saveBudgetToFirestore(budget: BudgetHierarchyNode): Promis
   }
 }
 
-// 10. Seed & Sync Complete Real Indian Budget Dataset across all 28 States, 8 UTs, 802 Districts to Firestore
+// 18. Seed & Sync Complete Real Indian Budget Dataset
 export async function seedRealBudgetsToFirestore(): Promise<BudgetHierarchyNode[]> {
   try {
     const writePromises = REAL_INDIAN_BUDGET_DATA.map(async (budgetNode) => {
@@ -714,7 +657,7 @@ export async function seedRealBudgetsToFirestore(): Promise<BudgetHierarchyNode[
   return REAL_INDIAN_BUDGET_DATA;
 }
 
-// 16. Claim Official Department / Police Profile in Firestore
+// 19. Claim Official Department / Police Profile in Firestore
 export async function claimOfficialProfileInFirestore(
   profileId: string,
   credentials: {
@@ -771,6 +714,3 @@ export async function claimOfficialProfileInFirestore(
     throw err;
   }
 }
-
-
-
