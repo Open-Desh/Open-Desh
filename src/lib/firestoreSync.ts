@@ -22,7 +22,9 @@ import {
   UserCategory,
   UserReview,
   ThreadedReply,
+  BudgetHierarchyNode,
 } from "../types";
+import { REAL_INDIAN_BUDGET_DATA } from "../data/realBudgetData";
 
 // Helper to sanitize Firestore documents
 function sanitizeData<T>(data: T): any {
@@ -528,4 +530,59 @@ export async function toggleFollowInFirestore(
     console.warn("Follow Firestore notice:", err);
   }
 }
+
+// 8. Fetch Budgets from Firestore (with automatic background sync of Real Indian Budget Data)
+export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
+  try {
+    const budgetRef = collection(db, "budgets");
+    const snapshot = await getDocs(budgetRef);
+
+    if (!snapshot.empty && snapshot.docs.length >= REAL_INDIAN_BUDGET_DATA.length) {
+      const budgets: BudgetHierarchyNode[] = [];
+      snapshot.forEach((docSnap) => {
+        budgets.push(docSnap.data() as BudgetHierarchyNode);
+      });
+      return budgets;
+    }
+
+    // If Firestore collection is empty or missing newly added States/UTs, seed and sync all real data
+    return await seedRealBudgetsToFirestore();
+  } catch (err) {
+    console.warn("Firestore budgets fetch notice, using verified real dataset:", err);
+    return REAL_INDIAN_BUDGET_DATA;
+  }
+}
+
+// 9. Save / Update Budget Node in Firestore
+export async function saveBudgetToFirestore(budget: BudgetHierarchyNode): Promise<void> {
+  try {
+    const budgetDoc = doc(db, "budgets", budget.id);
+    const sanitized = sanitizeData({
+      ...budget,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(budgetDoc, sanitized, { merge: true });
+  } catch (err) {
+    console.warn("Firestore save budget notice:", err);
+  }
+}
+
+// 10. Seed & Sync Complete Real Indian Budget Dataset across all 28 States, 8 UTs, 802 Districts to Firestore
+export async function seedRealBudgetsToFirestore(): Promise<BudgetHierarchyNode[]> {
+  try {
+    const writePromises = REAL_INDIAN_BUDGET_DATA.map(async (budgetNode) => {
+      const budgetDoc = doc(db, "budgets", budgetNode.id);
+      const sanitized = sanitizeData({
+        ...budgetNode,
+        updatedAt: new Date().toISOString(),
+      });
+      return setDoc(budgetDoc, sanitized, { merge: true });
+    });
+    await Promise.all(writePromises);
+  } catch (err) {
+    console.warn("Firestore budget batch sync notice:", err);
+  }
+  return REAL_INDIAN_BUDGET_DATA;
+}
+
 

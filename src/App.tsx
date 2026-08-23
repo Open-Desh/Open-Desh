@@ -1901,7 +1901,13 @@ export default function App() {
           )}
 
           {currentView === "budget" && (
-            <BudgetView onBack={() => navigateTo("dashboard")} />
+            <BudgetView
+              onBack={() => navigateTo("dashboard")}
+              onOpenCompose={(mention, defaultText) => {
+                setComposeInitialMention(mention || null);
+                navigateTo("compose");
+              }}
+            />
           )}
 
           {currentView === "help" && <HelpView />}

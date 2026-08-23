@@ -69,6 +69,9 @@
     },
     "/infrastructure/{projectId}": {
       "description": "Public infrastructure monitoring database."
+    },
+    "/budgets/{budgetId}": {
+      "description": "Real public budget allocations across National, State, District, and Village Gram Panchayat levels."
     }
   }
 }

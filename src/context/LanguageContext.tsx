@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
 
 export interface LanguageInfo {
   code: string;
@@ -30,7 +30,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   en: {
     // Nav Items
     "nav.profile": "Profile",
-    "nav.budget": "National Budget",
+    "nav.budget": "Budget",
     "nav.leader": "Leader",
     "nav.infrastructure": "Infrastructure",
     "nav.bookmark": "Bookmark",
@@ -79,7 +79,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.submitted": "Submitted",
 
     // Budget
-    "budget.title": "Union Budget",
+    "budget.title": "Budget Ledger",
     "budget.inflowTab": "Revenue (Inflow)",
     "budget.outflowTab": "Expenditure (Outflow)",
     "budget.receipts": "Total Receipts (Revenue)",
@@ -96,7 +96,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   hi: {
     // Nav Items
     "nav.profile": "प्रोफ़ाइल",
-    "nav.budget": "राष्ट्रीय बजट",
+    "nav.budget": "बजट",
     "nav.leader": "नेता ट्रैकर",
     "nav.infrastructure": "इन्फ्रास्ट्रक्चर",
     "nav.bookmark": "बुकमार्क",
@@ -117,7 +117,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.signInBtn": "खाते में साइन इन करें",
 
     // Header
-    "header.title": "ओपन नेशन",
+    "header.title": "ओपन देश",
     "header.subtitle": "नागरिक शासन एवं जननेता जवाबदेही",
     "header.searchPlaceholder": "शिकायतें, नेता, विभाग खोजें...",
     "header.postGrievance": "शिकायत दर्ज करें",
@@ -145,7 +145,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.submitted": "दर्ज किया गया",
 
     // Budget
-    "budget.title": "केंद्रीय बजट",
+    "budget.title": "बजट लेजर",
     "budget.inflowTab": "राजस्व (इनफ्लो)",
     "budget.outflowTab": "व्यय (आउटफ्लो)",
     "budget.receipts": "कुल प्राप्तियां (राजस्व)",
@@ -154,14 +154,14 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
 
     // Language Modal
     "lang.selectTitle": "ऐप की भाषा चुनें",
-    "lang.selectSubtitle": "ओपन नेशन चलाने के लिए अपनी पसंदीदा भारतीय भाषा चुनें।",
+    "lang.selectSubtitle": "ओपन देश चलाने के लिए अपनी पसंदीदा भारतीय भाषा चुनें।",
     "lang.searchPlaceholder": "भारतीय भाषा खोजें (हिन्दी, বাংলা, தமிழ்...)",
     "lang.active": "सक्रिय",
     "lang.apply": "भाषा लागू करें",
   },
   bn: {
     "nav.profile": "প্রোফাইল",
-    "nav.budget": "জাতীয় বাজেট",
+    "nav.budget": "বাজেট",
     "nav.leader": "জননেতা ট্র্যাকার",
     "nav.infrastructure": "পরিকাঠামো",
     "nav.bookmark": "বুকমার্ক",
@@ -180,7 +180,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "অতিথি নাগরিক",
     "nav.signInPrompt": "আপনার অভিযোগ ট্র্যাক করতে লগ ইন করুন।",
     "nav.signInBtn": "অ্যাকাউন্টে লগ ইন করুন",
-    "header.title": "ওপেন নেশন",
+    "header.title": "ওপেন দেশ",
     "header.subtitle": "নাগরিক শাসন ও নেতৃত্ব দায়বদ্ধতা",
     "header.searchPlaceholder": "অভিযোগ, নেতা, বিভাগ খুঁজুন...",
     "header.postGrievance": "অভিযোগ পোস্ট করুন",
@@ -202,7 +202,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "ব্যবস্থা নেওয়া হচ্ছে",
     "feed.resolved": "সমাধান হয়েছে",
     "feed.submitted": "জমা দেওয়া হয়েছে",
-    "budget.title": "কেন্দ্রীয় বাজেট",
+    "budget.title": "বাজেট লেজার",
     "budget.inflowTab": "রাজস্ব (আয়)",
     "budget.outflowTab": "ব্যয় (খরচ)",
     "budget.receipts": "মোট আয়",
@@ -216,7 +216,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   mr: {
     "nav.profile": "प्रोफाइल",
-    "nav.budget": "राष्ट्रीय अर्थसंकल्प",
+    "nav.budget": "अर्थसंकल्प",
     "nav.leader": "लोकप्रतिनिधी",
     "nav.infrastructure": "पायाभूत सुविधा",
     "nav.bookmark": "बुकमार्क",
@@ -235,7 +235,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "अतिथी नागरिक",
     "nav.signInPrompt": "आपल्या तक्रारींचा मागोवा घेण्यासाठी साइन इन करा.",
     "nav.signInBtn": "खात्यात साइन इन करा",
-    "header.title": "ओपन नेशन",
+    "header.title": "ओपन देश",
     "header.subtitle": "नागरी सुशासन आणि उत्तरदायित्व",
     "header.searchPlaceholder": "तक्रारी, नेते, विभाग शोधा...",
     "header.postGrievance": "तक्रार नोंदवा",
@@ -257,7 +257,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "कारवाई चालू",
     "feed.resolved": "निवारण झाले",
     "feed.submitted": "नोंदवले गेले",
-    "budget.title": "केंद्रीय अर्थसंकल्प",
+    "budget.title": "अर्थसंकल्प लेजर",
     "budget.inflowTab": "महसूल (आवक)",
     "budget.outflowTab": "खर्च (जावक)",
     "budget.receipts": "एकूण महसूल",
@@ -271,7 +271,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   te: {
     "nav.profile": "ప్రొఫైల్",
-    "nav.budget": "జాతీయ బడ్జెట్",
+    "nav.budget": "బడ్జెట్",
     "nav.leader": "నాయకుల ట్రాకర్",
     "nav.infrastructure": "మౌలిక సదుపాయాలు",
     "nav.bookmark": "బుక్‌మార్క్‌లు",
@@ -290,7 +290,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "అతిథి పౌరుడు",
     "nav.signInPrompt": "మీ ఫిర్యాదులను ట్రాక్ చేయడానికి సైన్ ఇన్ చేయండి.",
     "nav.signInBtn": "ఖాతాలోకి సైన్ ఇన్ చేయండి",
-    "header.title": "ఓపెన్ నేషన్",
+    "header.title": "ఓపెన్ దేశ్",
     "header.subtitle": "పౌర పాలన & నాయకుల జవాబుదారీతనం",
     "header.searchPlaceholder": "ఫిర్యాదులు, నాయకులు, శాఖలను శోధించండి...",
     "header.postGrievance": "ఫిర్యాదు చేయండి",
@@ -312,7 +312,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "చర్య ప్రారంభమైంది",
     "feed.resolved": "పరిష్కరించబడింది",
     "feed.submitted": "సమర్పించబడింది",
-    "budget.title": "కేంద్ర బడ్జెట్",
+    "budget.title": "బడ్జెట్ లెడ్జర్",
     "budget.inflowTab": "ఆదాయం (Inflow)",
     "budget.outflowTab": "వ్యయం (Outflow)",
     "budget.receipts": "మొత్తం రాబడి",
@@ -326,7 +326,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   ta: {
     "nav.profile": "சுயவிவரம்",
-    "nav.budget": "தேசிய பட்ஜெட்",
+    "nav.budget": "பட்ஜெட்",
     "nav.leader": "மக்கள் தலைவர்",
     "nav.infrastructure": "உள்கட்டமைப்பு",
     "nav.bookmark": "புக்மார்க்",
@@ -345,7 +345,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "விருந்தினர் குடிமகன்",
     "nav.signInPrompt": "உங்கள் புகார்களைக் கண்காணிக்க உள்நுழையவும்.",
     "nav.signInBtn": "கணக்கில் உள்நுழைக",
-    "header.title": "ஓபன் நேஷன்",
+    "header.title": "ஓபன் தேஷ்",
     "header.subtitle": "குடிமக்கள் நிர்வாகம் மற்றும் பொறுப்புடைமை",
     "header.searchPlaceholder": "புகார்கள், தலைவர்கள், துறைகளைத் தேடுங்கள்...",
     "header.postGrievance": "புகார் இடுக",
@@ -367,7 +367,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "நடவடிக்கை எடுக்கப்படுகிறது",
     "feed.resolved": "தீர்க்கப்பட்டது",
     "feed.submitted": "சமர்ப்பிக்கப்பட்டது",
-    "budget.title": "மத்திய பட்ஜெட்",
+    "budget.title": "பட்ஜெட் லெட்ஜர்",
     "budget.inflowTab": "வருவாய் (Inflow)",
     "budget.outflowTab": "செலவினம் (Outflow)",
     "budget.receipts": "மொத்த வருவாய்",
@@ -381,7 +381,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   gu: {
     "nav.profile": "પ્રોફાઇલ",
-    "nav.budget": "રાષ્ટ્રીય બજેટ",
+    "nav.budget": "બજેટ",
     "nav.leader": "નેતા ટ્રેકર",
     "nav.infrastructure": "ઇન્ફ્રાસ્ટ્રક્ચર",
     "nav.bookmark": "બુકમાર્ક",
@@ -400,7 +400,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "મહેમાન નાગરિક",
     "nav.signInPrompt": "તમારી ફરિયાદો ટ્રેક કરવા સાઇન ઇન કરો.",
     "nav.signInBtn": "ખાતામાં સાઇન ઇન કરો",
-    "header.title": "ઓપન નેશન",
+    "header.title": "ઓપન દેશ",
     "header.subtitle": "નાગરિક શાસન અને નેતા ઉત્તરદાયિત્વ",
     "header.searchPlaceholder": "ફરિયાદો, નેતાઓ, વિભાગો શોધો...",
     "header.postGrievance": "ફરિયાદ પોસ્ટ કરો",
@@ -422,7 +422,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "કાર્યવાહી શરૂ",
     "feed.resolved": "ઉકેલાઈ ગયું",
     "feed.submitted": "દાખલ કરવામાં આવ્યું",
-    "budget.title": "કેન્દ્રીય બજેટ",
+    "budget.title": "બજેટ લેજર",
     "budget.inflowTab": "આવક (Inflow)",
     "budget.outflowTab": "ખર્ચ (Outflow)",
     "budget.receipts": "કુલ આવક",
@@ -436,7 +436,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   kn: {
     "nav.profile": "ಪ್ರೊಫೈಲ್",
-    "nav.budget": "ರಾಷ್ಟ್ರೀಯ ಬಜೆಟ್",
+    "nav.budget": "ಬಜೆಟ್",
     "nav.leader": "ನಾಯಕ ಟ್ರ್ಯಾಕರ್",
     "nav.infrastructure": "ಮೂಲಸೌಕರ್ಯ",
     "nav.bookmark": "ಬುಕ್‌ಮಾರ್ಕ್",
@@ -455,7 +455,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "ಅತಿಥಿ ನಾಗರಿಕ",
     "nav.signInPrompt": "ನಿಮ್ಮ ದೂರುಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಲು ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "nav.signInBtn": "ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಮಾಡಿ",
-    "header.title": "ಓಪನ್ ನೇಷನ್",
+    "header.title": "ಓಪನ್ ದೇಶ್",
     "header.subtitle": "ನಾಗರಿಕ ಆಡಳಿತ ಮತ್ತು ನಾಯಕರ ಹೊಣೆಗಾರಿಕೆ",
     "header.searchPlaceholder": "ದೂರುಗಳು, ನಾಯಕರು, ಇಲಾಖೆಗಳನ್ನು ಹುಡುಕಿ...",
     "header.postGrievance": "ದೂರು ದಾಖಲಿಸಿ",
@@ -477,7 +477,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "ಕ್ರಮ ಕೈಗೊಳ್ಳಲಾಗಿದೆ",
     "feed.resolved": "ಪರಿಹರಿಸಲಾಗಿದೆ",
     "feed.submitted": "ಸಲ್ಲಿಸಲಾಗಿದೆ",
-    "budget.title": "ಕೇಂದ್ರ ಬಜೆಟ್",
+    "budget.title": "ಬಜೆಟ್ ಲೆಡ್ಜರ್",
     "budget.inflowTab": "ಆದಾಯ (Inflow)",
     "budget.outflowTab": "ವೆಚ್ಚ (Outflow)",
     "budget.receipts": "ಒಟ್ಟು ಆದಾಯ",
@@ -491,7 +491,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   pa: {
     "nav.profile": "ਪ੍ਰੋਫਾਈਲ",
-    "nav.budget": "ਰਾਸ਼ਟਰੀ ਬਜਟ",
+    "nav.budget": "ਬਜਟ",
     "nav.leader": "ਨੇਤਾ ਟਰੈਕਰ",
     "nav.infrastructure": "ਬੁਨਿਆਦੀ ਢਾਂਚਾ",
     "nav.bookmark": "ਬੁੱਕਮਾਰਕ",
@@ -510,7 +510,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "ਮਹਿਮਾਨ ਨਾਗਰਿਕ",
     "nav.signInPrompt": "ਆਪਣੀਆਂ ਸ਼ਿਕਾਇਤਾਂ ਨੂੰ ਟਰੈਕ ਕਰਨ ਲਈ ਸਾਈਨ ਇਨ ਕਰੋ।",
     "nav.signInBtn": "ਖਾਤੇ ਵਿੱਚ ਸਾਈਨ ਇਨ ਕਰੋ",
-    "header.title": "ਓਪਨ ਨੇਸ਼ਨ",
+    "header.title": "ਓਪਨ ਦੇਸ਼",
     "header.subtitle": "ਨਾਗਰਿਕ ਪ੍ਰਸ਼ਾਸਨ ਅਤੇ ਨੇਤਾ ਜਵਾਬਦੇਹੀ",
     "header.searchPlaceholder": "ਸ਼ਿਕਾਇਤਾਂ, ਨੇਤਾ, ਵਿਭਾਗ ਲੱਭੋ...",
     "header.postGrievance": "ਸ਼ਿਕਾਇਤ ਪੋਸਟ ਕਰੋ",
@@ -532,7 +532,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "ਕਾਰਵਾਈ ਜਾਰੀ",
     "feed.resolved": "ਹੱਲ ਕੀਤਾ ਗਿਆ",
     "feed.submitted": "ਦਰਜ ਕੀਤੀ ਗਈ",
-    "budget.title": "ਕੇਂਦਰੀ ਬਜਟ",
+    "budget.title": "ਬਜਟ ਲੇਜ਼ਰ",
     "budget.inflowTab": "ਆਮਦਨ (Inflow)",
     "budget.outflowTab": "ਖਰਚਾ (Outflow)",
     "budget.receipts": "ਕੁੱਲ ਆਮਦਨ",
@@ -546,7 +546,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   or: {
     "nav.profile": "ପ୍ରୋଫାଇଲ୍",
-    "nav.budget": "ଜାତୀୟ ବଜେଟ୍",
+    "nav.budget": "ବଜେଟ୍",
     "nav.leader": "ନେତା ଟ୍ରାକର୍",
     "nav.infrastructure": "ଭିତ୍ତିଭୂମି",
     "nav.bookmark": "ବୁକମାର୍କ",
@@ -565,7 +565,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "ଅତିଥି ନାଗରିକ",
     "nav.signInPrompt": "ଆପଣଙ୍କ ଅଭିଯୋଗ ଟ୍ରାକ୍ କରିବାକୁ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ।",
     "nav.signInBtn": "ଖାତାରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ",
-    "header.title": "ଓପନ ନେସନ",
+    "header.title": "ଓପନ ଦେଶ",
     "header.subtitle": "ନାଗରିକ ପ୍ରଶାସନ ଓ ନେତୃତ୍ୱ ଉତ୍ତରଦାୟିତ୍ୱ",
     "header.searchPlaceholder": "ଅଭିଯୋଗ, ନେତା, ବିଭାଗ ଖୋଜନ୍ତୁ...",
     "header.postGrievance": "ଅଭିଯୋଗ ପୋଷ୍ଟ କରନ୍ତୁ",
@@ -587,7 +587,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "ପଦକ୍ଷେପ ନିଆଯାଉଛି",
     "feed.resolved": "ସମାଧାନ ହୋଇଛି",
     "feed.submitted": "ଦାଖଲ ହୋଇଛି",
-    "budget.title": "କେନ୍ଦ୍ରୀୟ ବଜେଟ୍",
+    "budget.title": "ବଜେଟ୍ ଲେଜର",
     "budget.inflowTab": "ରାଜସ୍ୱ (Inflow)",
     "budget.outflowTab": "ଖର୍ଚ୍ଚ (Outflow)",
     "budget.receipts": "ମୋଟ ଆୟ",
@@ -601,7 +601,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   ml: {
     "nav.profile": "പ്രൊഫൈൽ",
-    "nav.budget": "ദേശീയ ബജറ്റ്",
+    "nav.budget": "ബജറ്റ്",
     "nav.leader": "നേതാവ് ട്രാക്കർ",
     "nav.infrastructure": "അടിസ്ഥാന സൗകര്യം",
     "nav.bookmark": "ബുക്ക്മാർക്ക്",
@@ -620,7 +620,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "അതിഥി പൗരൻ",
     "nav.signInPrompt": "പരാതികൾ ട്രാക്ക് ചെയ്യാൻ സൈൻ ഇൻ ചെയ്യുക.",
     "nav.signInBtn": "അക്കൗണ്ടിൽ സൈൻ ഇൻ ചെയ്യുക",
-    "header.title": "ഓപ്പൺ നേഷൻ",
+    "header.title": "ഓപ്പൺ ദേശ്",
     "header.subtitle": "പൗര ഭരണവും ഉത്തരവാദിത്തവും",
     "header.searchPlaceholder": "പരാതികൾ, നേതാക്കൾ, വകുപ്പുകൾ...",
     "header.postGrievance": "പരാതി പോസ്റ്റ് ചെയ്യുക",
@@ -642,7 +642,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "നടപടി ആരംഭിച്ചു",
     "feed.resolved": "പരിഹരിച്ചു",
     "feed.submitted": "സമർപ്പിച്ചു",
-    "budget.title": "കേന്ദ്ര ബജറ്റ്",
+    "budget.title": "ബജറ്റ് ലെഡ്ജർ",
     "budget.inflowTab": "വരുമാനം (Inflow)",
     "budget.outflowTab": "ചെലവ് (Outflow)",
     "budget.receipts": "ആകെ വരുമാനം",
@@ -656,9 +656,9 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   ur: {
     "nav.profile": "پروفائل",
-    "nav.budget": "قومی بجٹ",
+    "nav.budget": "بجٹ",
     "nav.leader": "لیڈر ٹریکر",
-    "nav.infrastructure": "بنیادی ڈھانچہ",
+    "nav.infrastructure": "defect",
     "nav.bookmark": "بک مارک",
     "nav.settings": "ترتیبات اور رازداری",
     "nav.language": "زبان (Language)",
@@ -675,13 +675,13 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "مہمان شہری",
     "nav.signInPrompt": "اپنی شکایات کو ٹریک کرنے کے لیے سائن ان کریں۔",
     "nav.signInBtn": "اکاؤنٹ میں سائن ان کریں",
-    "header.title": "اوپن نیشن",
+    "header.title": "اوپن دیش",
     "header.subtitle": "شہری طرز حکمرانی اور جوابدہی",
     "header.searchPlaceholder": "شکایات، رہنما، محکمے تلاش کریں...",
     "header.postGrievance": "شکایت درج کریں",
     "bottom.home": "ہوم",
     "bottom.search": "تلاش",
-    "bottom.post": "پوسٹ",
+    "bottom.post": "پوسਟ",
     "bottom.leader": "رہنما",
     "bottom.infra": "انفرا",
     "feed.kyaProblem": "کیا مسئلہ ہے؟",
@@ -697,7 +697,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "کارروائی جاری",
     "feed.resolved": "حل ہو گیا",
     "feed.submitted": "جمع کر دیا گیا",
-    "budget.title": "مرکزی بجٹ",
+    "budget.title": "بجٹ لیجر",
     "budget.inflowTab": "آمدنی (Inflow)",
     "budget.outflowTab": "اخراجات (Outflow)",
     "budget.receipts": "کل آمدنی",
@@ -711,7 +711,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   as: {
     "nav.profile": "প্ৰফাইল",
-    "nav.budget": "ৰাষ্ট্ৰীয় বাজেট",
+    "nav.budget": "বাজেট",
     "nav.leader": "নেতা ট্ৰেকাৰ",
     "nav.infrastructure": "আন্তঃগাঁথনি",
     "nav.bookmark": "বুকমাৰ্ক",
@@ -730,7 +730,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "nav.guest": "অতিথি নাগৰিক",
     "nav.signInPrompt": "আপোনাৰ অভিযোগসমূহ ট্ৰেক কৰিবলৈ ছাইন ইন কৰক।",
     "nav.signInBtn": "একাউণ্টত ছাইন ইন কৰক",
-    "header.title": "অ'পেন নেচন",
+    "header.title": "অ'পেন দেশ",
     "header.subtitle": "নাগৰিক প্ৰশাসন আৰু নেতাৰ দায়বদ্ধতা",
     "header.searchPlaceholder": "অভিযোগ, নেতা, বিভাগ সন্ধান কৰক...",
     "header.postGrievance": "অভিযোগ পোষ্ট কৰক",
@@ -739,7 +739,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "bottom.post": "পোষ্ট",
     "bottom.leader": "নেতা",
     "bottom.infra": "ইনফ্ৰা",
-    "feed.kyaProblem": "কি সমস্যা হৈছে?",
+    "feed.kyaProblem": "কি समस्या হৈছে?",
     "feed.reportIssue": "ৰাজহুৱা অভিযোগ দাখিল কৰক",
     "feed.forYou": "আপোনাৰ বাবে",
     "feed.following": "অনুসৰণ",
@@ -752,7 +752,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "feed.actionTaken": "ব্যৱস্থা গ্ৰহণ কৰা হৈছে",
     "feed.resolved": "সমাধান কৰা হৈছে",
     "feed.submitted": "দাখিল কৰা হৈছে",
-    "budget.title": "কেন্দ্ৰীয় বাজেট",
+    "budget.title": "বাজেট লেজাৰ",
     "budget.inflowTab": "ৰাজহ (Inflow)",
     "budget.outflowTab": "ব্যয় (Outflow)",
     "budget.receipts": "মুঠ ৰাজহ",
@@ -781,7 +781,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<string>(() => {
     try {
-      return localStorage.getItem("opennation_language") || "en";
+      return localStorage.getItem("open_desh_language") || localStorage.getItem("opennation_language") || "en";
     } catch {
       return "en";
     }
@@ -792,7 +792,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const setLanguage = (langCode: string) => {
     setLanguageState(langCode);
     try {
-      localStorage.setItem("opennation_language", langCode);
+      localStorage.setItem("open_desh_language", langCode);
     } catch {
       // ignore
     }
@@ -806,7 +806,6 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (langDict && langDict[key]) {
       return langDict[key];
     }
-    // Fallback to English
     if (TRANSLATIONS.en && TRANSLATIONS.en[key]) {
       return TRANSLATIONS.en[key];
     }

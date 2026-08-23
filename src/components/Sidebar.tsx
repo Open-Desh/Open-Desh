@@ -82,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Navigation links with Budget below Profile and Language below Setting & Privacy
   const navItems = [
     { id: "profile", label: t("nav.profile", "Profile"), icon: User },
-    { id: "budget", label: t("nav.budget", "National Budget"), icon: IndianRupee },
+    { id: "budget", label: t("nav.budget", "Budget"), icon: IndianRupee },
     { id: "infrastructure", label: t("nav.infrastructure", "Infrastructure"), icon: Building2 },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },

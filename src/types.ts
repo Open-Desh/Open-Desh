@@ -303,5 +303,83 @@ export interface EnterpriseScaleMetrics {
   }[];
 }
 
+export type BudgetLevel = "national" | "state" | "district" | "village";
+
+export interface BudgetLineItem {
+  id: string;
+  name: string;
+  shortName: string;
+  category: string;
+  allocatedAmountCr: number; // in Crores INR
+  utilizedAmountCr?: number; // in Crores INR
+  percentage: number;
+  color?: string;
+  growthYoY?: string;
+  description?: string;
+  nodalMinistryOrDept?: string;
+  keySchemes?: string[];
+  perCapitaShareInr?: number;
+  status?: "Allocated" | "Disbursed" | "Under Audit" | "Utilized";
+  utilizationRate?: number; // 0 to 100%
+  beneficiariesCount?: string;
+  fiscalYear?: string;
+}
+
+export interface BudgetHierarchyNode {
+  id: string;
+  level: BudgetLevel;
+  name: string;
+  hindiName?: string;
+  code: string;
+  parentState?: string;
+  parentDistrict?: string;
+  parentBlock?: string;
+  totalBudgetCr: number; // in Crores INR
+  totalRevenueCr: number;
+  totalExpenditureCr: number;
+  capexCr: number;
+  revenueExpCr: number;
+  fiscalYear: string;
+  population?: number;
+  areaSqKm?: string | number;
+  perCapitaBudgetInr?: number;
+  releasedCr?: number;
+  spentCr?: number;
+  workValueCr?: number;
+  completedWorks?: number;
+  inProgressWorks?: number;
+  delayedWorks?: number;
+  totalWorks?: number;
+  ruralBeneficiaries?: string;
+  citizenBeneficiaries?: string;
+  inflows: BudgetLineItem[];
+  outflows: BudgetLineItem[];
+  keySchemes?: {
+    name: string;
+    allocatedCr: number;
+    utilizedCr: number;
+    description: string;
+    beneficiaryTarget: string;
+    icon?: string;
+    approvedDisplay?: string;
+    spentDisplay?: string;
+  }[];
+  historicalTrends?: {
+    year: string;
+    totalBudgetCr: number;
+    capexCr: number;
+  }[];
+  auditNotes: string;
+  image?: string;
+  emblemIcon?: string;
+  capitalOrHQ?: string;
+  tagline?: string;
+  districtCount?: number;
+  panchayatCount?: number;
+  officialSource: string;
+  officialGazetteRef?: string;
+  lastUpdated: string;
+}
+
 export * from "./types/notification.ts";
 
