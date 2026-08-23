@@ -125,6 +125,11 @@ export interface UserProfile {
   birthDate?: string;
   birthDayFormatted?: string;
   joiningDate?: string;
+  isClaimable?: boolean;
+  isClaimed?: boolean;
+  claimedByEmail?: string;
+  claimedAt?: string;
+  claimedByOfficerName?: string;
 }
 
 export interface ThreadedReply {

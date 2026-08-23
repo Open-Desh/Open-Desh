@@ -25,6 +25,7 @@ import {
   BudgetHierarchyNode,
 } from "../types";
 import { REAL_INDIAN_BUDGET_DATA } from "../data/realBudgetData";
+import { INITIAL_USERS } from "../data/seedData";
 
 // Helper to sanitize Firestore documents
 function sanitizeData<T>(data: T): any {
@@ -245,31 +246,62 @@ export interface RegisteredAuthority {
 
 export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthority[]> {
   const authoritiesMap = new Map<string, RegisteredAuthority>();
+  const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
+
+  // 0. Seed baseline verified departments and official handles from INITIAL_USERS
+  Object.values(INITIAL_USERS).forEach((u) => {
+    if (u && (u.category === "department" || u.category === "representative" || u.verified)) {
+      const uname = u.username?.toLowerCase().replace(/^@/, "");
+      if (uname) {
+        authoritiesMap.set(uname, {
+          id: u.id,
+          username: u.username.replace(/^@/, ""),
+          fullName: u.fullName,
+          avatarUrl: u.avatarUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=120&auto=format&fit=crop&q=80",
+          category: u.category || "department",
+          role: u.departmentDetails?.designation || u.representativeDetails?.position || (u.category === "department" ? "Police / Govt Dept" : "Citizen"),
+          badge: u.departmentDetails?.officialBadge || u.representativeDetails?.party || "Official HQ",
+          departmentCode: u.departmentDetails?.departmentCode,
+          party: u.representativeDetails?.party,
+          verified: u.verified ?? true,
+          location: u.location,
+          jurisdictionRegion: u.departmentDetails?.jurisdictionRegion,
+          constituency: u.representativeDetails?.constituency,
+        });
+      }
+    }
+  });
 
   try {
-    // 1. Fetch live users from Firestore `users` collection
+    // 1. Fetch live users from Firestore `users` collection (overrides/augments baseline)
     const usersRef = collection(db, "users");
     const userSnaps = await getDocs(usersRef);
     userSnaps.forEach((docSnap) => {
       const data = docSnap.data() as UserProfile;
-      if (data && (data.category === "department" || data.category === "representative" || data.verified)) {
-        const uname = data.username?.toLowerCase();
-        if (uname) {
-          authoritiesMap.set(uname, {
-            id: data.id || docSnap.id,
-            username: data.username,
-            fullName: data.fullName,
-            avatarUrl: data.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
-            category: data.category || "citizen",
-            role: data.departmentDetails?.designation || data.representativeDetails?.position || (data.category === "department" ? "Govt Dept" : "Citizen"),
-            badge: data.departmentDetails?.officialBadge || data.representativeDetails?.party || (data.verified ? "Verified" : "Citizen"),
-            departmentCode: data.departmentDetails?.departmentCode,
-            party: data.representativeDetails?.party,
-            verified: data.verified ?? true,
-            location: data.location,
-            jurisdictionRegion: data.departmentDetails?.jurisdictionRegion,
-            constituency: data.representativeDetails?.constituency,
-          });
+      if (data) {
+        const uid = data.id || docSnap.id;
+        const isPolice = validPoliceIds.has(uid);
+        const isOfficial = (data.category === "department" && isPolice) || (data.category === "representative" && !uid.startsWith("lead_")) || data.verified;
+        
+        if (isOfficial) {
+          const uname = data.username?.toLowerCase().replace(/^@/, "");
+          if (uname) {
+            authoritiesMap.set(uname, {
+              id: uid,
+              username: data.username.replace(/^@/, ""),
+              fullName: data.fullName,
+              avatarUrl: data.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+              category: data.category || "citizen",
+              role: data.departmentDetails?.designation || data.representativeDetails?.position || (data.category === "department" ? "Govt Dept" : "Citizen"),
+              badge: data.departmentDetails?.officialBadge || data.representativeDetails?.party || (data.verified ? "Verified" : "Citizen"),
+              departmentCode: data.departmentDetails?.departmentCode,
+              party: data.representativeDetails?.party,
+              verified: data.verified ?? true,
+              location: data.location,
+              jurisdictionRegion: data.departmentDetails?.jurisdictionRegion,
+              constituency: data.representativeDetails?.constituency,
+            });
+          }
         }
       }
     });
@@ -279,11 +311,11 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
     const leaderSnaps = await getDocs(leadersRef);
     leaderSnaps.forEach((docSnap) => {
       const l = docSnap.data() as Leader;
-      if (l && l.username) {
-        const uname = l.username.toLowerCase();
+      if (l && l.username && !l.id.startsWith("lead_")) {
+        const uname = l.username.toLowerCase().replace(/^@/, "");
         authoritiesMap.set(uname, {
           id: l.id || docSnap.id,
-          username: l.username,
+          username: l.username.replace(/^@/, ""),
           fullName: l.name,
           avatarUrl: l.image,
           category: "representative",
@@ -301,6 +333,103 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   }
 
   return Array.from(authoritiesMap.values());
+}
+
+// 11b. Helper to batch write all police & official department profiles to Firestore users collection
+export async function seedPoliceProfilesToFirestore(): Promise<void> {
+  try {
+    const departmentProfiles = Object.values(INITIAL_USERS).filter(
+      (u) => u.category === "department" && u.id.startsWith("user_")
+    );
+    const writePromises = departmentProfiles.map(async (profile) => {
+      const userRef = doc(db, "users", profile.id);
+      const sanitized = sanitizeData({
+        ...profile,
+        updatedAt: new Date().toISOString(),
+      });
+      return setDoc(userRef, sanitized, { merge: true });
+    });
+    await Promise.all(writePromises);
+  } catch (err) {
+    console.warn("Firestore police profiles seed notice:", err);
+  }
+}
+
+// 11c. Purge all legacy dummy/mock leaders, fake contractor profiles, unauthorized depts, and fake infra from Firestore
+export async function purgeOldMockDataFromFirestore(): Promise<void> {
+  try {
+    const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
+
+    // 1. Purge legacy mock leaders (e.g., lead_1, lead_2, fake leaders)
+    const leadersRef = collection(db, "leaders");
+    const leaderSnaps = await getDocs(leadersRef);
+    leaderSnaps.forEach(async (d) => {
+      try {
+        await deleteDoc(doc(db, "leaders", d.id));
+      } catch (e) {
+        console.warn("Error deleting legacy leader:", d.id, e);
+      }
+    });
+
+    // 2. Purge legacy mock/unauthorized users (Gurugram, Jharkhand Bijli, NHAI, Afcons, Wabag, fake contractors, fake depts)
+    const usersRef = collection(db, "users");
+    const userSnaps = await getDocs(usersRef);
+    userSnaps.forEach(async (d) => {
+      const id = d.id;
+      const data = d.data() as any;
+      const name = (data.fullName || data.name || "").toLowerCase();
+      const username = (data.username || "").toLowerCase();
+      const category = (data.category || "").toLowerCase();
+      const isPolice = validPoliceIds.has(id);
+
+      // Identify dummy / mock / unwanted profiles in Firestore
+      const isUnapprovedDept = category === "department" && !isPolice;
+      const isLegacyMock =
+        id.startsWith("lead_") ||
+        id.startsWith("dept_") ||
+        id === "guest_citizen" ||
+        category === "contractor" ||
+        name.includes("gurugram") ||
+        name.includes("bijli") ||
+        name.includes("jharkhand bijli") ||
+        name.includes("jbvnl") ||
+        name.includes("gmda") ||
+        name.includes("rajesh") ||
+        name.includes("afcons") ||
+        name.includes("wabag") ||
+        name.includes("contractor") ||
+        name.includes("rahul tiwari") ||
+        name.includes("national highway") ||
+        name.includes("nhai") ||
+        username.includes("gmda") ||
+        username.includes("jbvnl") ||
+        username.includes("rahul") ||
+        username.includes("rajesh") ||
+        (id.startsWith("user_") && !isPolice);
+
+      if (!isPolice && (isUnapprovedDept || isLegacyMock)) {
+        try {
+          await deleteDoc(doc(db, "users", id));
+          console.log("Purged unauthorized dummy document from Firestore users:", id, name);
+        } catch (e) {
+          console.warn("Error deleting legacy mock user:", id, e);
+        }
+      }
+    });
+
+    // 3. Purge legacy mock infrastructure projects
+    const infraRef = collection(db, "infrastructure");
+    const infraSnaps = await getDocs(infraRef);
+    infraSnaps.forEach(async (d) => {
+      try {
+        await deleteDoc(doc(db, "infrastructure", d.id));
+      } catch (e) {
+        console.warn("Error deleting legacy mock infra:", d.id, e);
+      }
+    });
+  } catch (err) {
+    console.warn("Purge old mock data notice:", err);
+  }
 }
 
 // 12. Check Real-Time Username Uniqueness against Firestore users, leaders & backend
@@ -584,5 +713,64 @@ export async function seedRealBudgetsToFirestore(): Promise<BudgetHierarchyNode[
   }
   return REAL_INDIAN_BUDGET_DATA;
 }
+
+// 16. Claim Official Department / Police Profile in Firestore
+export async function claimOfficialProfileInFirestore(
+  profileId: string,
+  credentials: {
+    email: string;
+    authUid?: string;
+    officerName: string;
+    designation: string;
+    departmentCode?: string;
+  }
+): Promise<Partial<UserProfile>> {
+  try {
+    const userDocRef = doc(db, "users", profileId);
+    const nowIso = new Date().toISOString();
+    
+    const updatePayload: Record<string, any> = {
+      isClaimed: true,
+      isClaimable: false,
+      claimedByEmail: credentials.email,
+      claimedAt: nowIso,
+      claimedByOfficerName: credentials.officerName,
+      email: credentials.email,
+      verified: true,
+      verificationStatus: "approved",
+      updatedAt: nowIso,
+    };
+
+    if (credentials.authUid) {
+      updatePayload.userId = credentials.authUid;
+      updatePayload.claimedByUid = credentials.authUid;
+    }
+
+    if (credentials.designation || credentials.departmentCode) {
+      updatePayload["departmentDetails.designation"] = credentials.designation;
+      if (credentials.departmentCode) {
+        updatePayload["departmentDetails.departmentCode"] = credentials.departmentCode;
+      }
+      updatePayload["departmentDetails.officialBadge"] = "Official Verified Department";
+    }
+
+    await setDoc(userDocRef, sanitizeData(updatePayload), { merge: true });
+
+    return {
+      isClaimed: true,
+      isClaimable: false,
+      claimedByEmail: credentials.email,
+      claimedAt: nowIso,
+      claimedByOfficerName: credentials.officerName,
+      email: credentials.email,
+      verified: true,
+      verificationStatus: "approved",
+    };
+  } catch (err) {
+    console.error("Error claiming official profile in Firestore:", err);
+    throw err;
+  }
+}
+
 
 

@@ -46,6 +46,9 @@ import {
   toggleFollowInFirestore,
   deleteReportInFirestore,
   togglePinReportInFirestore,
+  seedPoliceProfilesToFirestore,
+  purgeOldMockDataFromFirestore,
+  claimOfficialProfileInFirestore,
 } from "./lib/firestoreSync.ts";
 import {
   UserProfile,
@@ -57,6 +60,7 @@ import {
   ThreadedReply,
   AppNotification,
 } from "./types.ts";
+import { INITIAL_USERS } from "./data/seedData.ts";
 
 const defaultGuestProfile: UserProfile = {
   id: "guest_citizen",
@@ -509,6 +513,10 @@ export default function App() {
       // 3. Fetch Infrastructure directly from Firestore
       const infraList = await getInfrastructureDirect();
       setInfrastructure(infraList);
+
+      // 4. Background Sync Police Department profiles & Purge any legacy dummy/mock data from Firestore
+      seedPoliceProfilesToFirestore().catch(() => {});
+      purgeOldMockDataFromFirestore().catch(() => {});
     } catch (err) {
       console.warn("Firestore fetch error:", err);
     } finally {
@@ -1254,6 +1262,64 @@ export default function App() {
     navigateTo("compose");
   };
 
+  const handleClaimProfile = async (
+    profileId: string,
+    credentials: {
+      email: string;
+      password?: string;
+      officerName: string;
+      designation: string;
+      departmentCode?: string;
+    }
+  ) => {
+    try {
+      await claimOfficialProfileInFirestore(profileId, credentials);
+      // Update viewing profile
+      setSelectedViewingProfile((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isClaimed: true,
+          isClaimable: false,
+          verified: true,
+          email: credentials.email,
+          claimedByOfficerName: credentials.officerName,
+          departmentDetails: {
+            ...prev.departmentDetails,
+            name: prev.departmentDetails?.name || prev.name,
+            designation: credentials.designation,
+            departmentCode: credentials.departmentCode || prev.departmentDetails?.departmentCode || "",
+            jurisdiction: prev.departmentDetails?.jurisdiction || "Jharkhand",
+          },
+        };
+      });
+      // Update active user profile
+      setUserProfile((prev) => ({
+        ...prev,
+        isClaimed: true,
+        isClaimable: false,
+        verified: true,
+        email: credentials.email,
+        claimedByOfficerName: credentials.officerName,
+      }));
+      setIsLoggedIn(true);
+      triggerNotification({
+        recipientId: credentials.email || profileId,
+        type: "official_action",
+        actorId: profileId,
+        actorName: credentials.officerName || "Open Desh Governance",
+        actorUsername: "system_admin",
+        actorAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80",
+        title: "Official Profile Claimed",
+        message: `Official administrative ownership has been claimed and verified for ${credentials.officerName}.`,
+        timestamp: "Just now",
+      });
+    } catch (err: any) {
+      console.error("Error claiming profile:", err);
+      throw err;
+    }
+  };
+
   // Inspect any user's profile dynamically
   const handleSelectUserProfile = async (userId: string) => {
     const cleanId = (userId || "").trim();
@@ -1451,6 +1517,29 @@ export default function App() {
       }
     } catch (err) {
       console.warn("API user fetch notice:", err);
+    }
+
+    // 4.5 Try Seed & Verified Registered Profile Lookup (e.g. Police departments, Civic Authorities)
+    const matchedSeedProfile = Object.values(INITIAL_USERS).find(
+      (u) =>
+        u.id.toLowerCase() === cleanId.toLowerCase() ||
+        (u.username && u.username.replace(/^@/, "").toLowerCase() === cleanUsername)
+    );
+    if (matchedSeedProfile) {
+      const isFollowed =
+        followingNormalizedSet.has(matchedSeedProfile.id.toLowerCase()) ||
+        (matchedSeedProfile.username &&
+          followingNormalizedSet.has(
+            matchedSeedProfile.username.replace(/^@/, "").toLowerCase()
+          )) ||
+        matchedSeedProfile.isFollowing ||
+        false;
+      setSelectedViewingProfile({
+        ...matchedSeedProfile,
+        isFollowing: isFollowed,
+      });
+      navigateTo("profile", false);
+      return;
     }
 
     // 5. Fallback from existing reports author data
@@ -1853,6 +1942,7 @@ export default function App() {
               onDeleteReport={handleDeleteReport}
               onTogglePinReport={handleTogglePinReport}
               onSelectUser={handleSelectUserProfile}
+              onClaimProfile={handleClaimProfile}
             />
           )}
 

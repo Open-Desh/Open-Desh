@@ -10,15 +10,20 @@ import {
   AlertCircle,
   MessageSquare,
   Send,
-  UserCheck,
-  FileCheck2,
-  Building,
-  TrendingUp,
   Scale,
-  Calendar,
-  Lock,
+  Pencil,
+  FileText,
+  Users,
+  Megaphone,
+  MapPin,
+  TrendingUp,
+  ChevronRight,
+  Shield,
+  Loader2,
 } from "lucide-react";
-import { UserProfile, UserReview, ScoreCriterion, SystemScoreBreakdown } from "../types.ts";
+import { UserProfile, ScoreCriterion } from "../types.ts";
+import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { useLanguage } from "../context/LanguageContext.tsx";
 
 interface EvaluationDetailViewProps {
   targetProfile: UserProfile;
@@ -32,24 +37,64 @@ interface EvaluationDetailViewProps {
 export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   targetProfile,
   currentUser,
-  initialTab = "score",
+  initialTab = "writereview",
   onBack,
   onSubmitReview,
   onReplyToReview,
 }) => {
-  const [activeTab, setActiveTab] = useState<"score" | "reviews" | "writereview">(initialTab);
-  const [rating, setRating] = useState(5);
+  const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState<"score" | "reviews" | "writereview">(
+    initialTab || "writereview"
+  );
+  const [rating, setRating] = useState<number>(5);
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeReplyBoxReviewId, setActiveReplyBoxReviewId] = useState<string | null>(null);
   const [adminReplyText, setAdminReplyText] = useState<Record<string, string>>({});
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const isOwnProfile = currentUser.id === targetProfile.id;
 
-  // Check if current user has already submitted a review for this profile (Limit: 1 review per user)
+  // Check if current user has already submitted a review for this profile
   const existingUserReview = targetProfile.reviews?.find(
     (r) => r.authorId === currentUser.id
   );
+
+  // Dynamic Rating Title based on Profile Category
+  const rateCardTitle =
+    targetProfile.category === "department"
+      ? t("eval.rateDepartment", "Rate Department")
+      : targetProfile.category === "representative"
+      ? t("eval.rateLeader", "Rate Leader")
+      : t("eval.rateProfile", "Rate Profile");
+
+  // Dynamic Rating text label
+  const effectiveRating = hoverRating !== null ? hoverRating : rating;
+  const getRatingLabel = (score: number) => {
+    if (score >= 5) return { label: t("eval.excellent", "Excellent"), color: "text-emerald-600" };
+    if (score >= 4) return { label: t("eval.good", "Good"), color: "text-emerald-600" };
+    if (score >= 3) return { label: t("eval.average", "Average"), color: "text-amber-500" };
+    if (score >= 2) return { label: t("eval.fair", "Fair"), color: "text-amber-600" };
+    return { label: t("eval.poor", "Poor"), color: "text-rose-600" };
+  };
+
+  // Location display
+  const profileLocation =
+    targetProfile.departmentDetails?.jurisdiction ||
+    targetProfile.representativeDetails?.constituency ||
+    targetProfile.location ||
+    "Lucknow, Uttar Pradesh";
+
+  // Subtitle / designation display
+  const profileSubtitle =
+    targetProfile.departmentDetails?.name ||
+    targetProfile.representativeDetails?.position ||
+    (targetProfile.category === "department"
+      ? "Directorate General of Police HQ"
+      : targetProfile.category === "representative"
+      ? "Elected Member of Legislative Assembly"
+      : targetProfile.bio || "Civic Governance Profile");
 
   // Default transparent 100-point algorithm calculation
   const defaultCriteria: ScoreCriterion[] = [
@@ -115,15 +160,33 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     criteriaList.reduce((acc, c) => acc + c.scoreAwarded, 0)
   );
 
+  const displaySystemScore =
+    typeof targetProfile.systemScore === "number"
+      ? targetProfile.systemScore
+      : totalCalculatedScore;
+
+  const getSystemScorePill = (score: number) => {
+    if (score >= 80) return { label: t("eval.excellent", "Excellent"), color: "bg-emerald-600 text-white" };
+    if (score >= 60) return { label: t("eval.good", "Good"), color: "bg-blue-600 text-white" };
+    if (score >= 40) return { label: t("eval.average", "Average"), color: "bg-amber-600 text-white" };
+    return { label: t("eval.needsAudit", "Needs Audit"), color: "bg-rose-600 text-white" };
+  };
+
+  const scorePill = getSystemScorePill(displaySystemScore);
+  const reviewsCount = targetProfile.reviews?.length || targetProfile.reviewsCount || 0;
+
   const handleReviewFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!comment.trim()) return;
+    if (!comment.trim() && rating === 0) return;
 
     setIsSubmitting(true);
     try {
       await onSubmitReview(rating, comment.trim());
-      setComment("");
-      setActiveTab("reviews");
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        setSubmitSuccess(false);
+        setActiveTab("reviews");
+      }, 1200);
     } catch (err) {
       console.error("Submit review error:", err);
     } finally {
@@ -145,150 +208,225 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   };
 
   return (
-    <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* Sticky Header with Back button */}
+    <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-[#f8fafc] border-x border-slate-200 min-h-screen">
+      {/* 1. Header with Back button, Title & Subtitle */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            id="evaluation-back-btn"
             onClick={onBack}
-            className="p-1.5 -ml-1 text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center text-slate-700 hover:text-slate-950 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             title="Back to Profile"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-base font-black text-slate-900 leading-tight flex items-center gap-1.5">
-              <span>Performance Index</span>
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-            </h1>
-            <span className="text-xs text-slate-500 font-medium">
-              {targetProfile.fullName} (@{targetProfile.username})
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                {t("eval.headerTitle", "Performance Index")}
+              </h1>
+              {targetProfile.verified === true && (
+                <CategoryVerifiedTick category={targetProfile.category} size="xs" />
+              )}
+            </div>
+            <p className="text-xs text-slate-500 font-medium leading-none mt-0.5">
+              {t("eval.headerSubtitle", "Transparent. Verified. For You.")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Edge-to-Edge Blue Gradient Hero Card Touching Header with Rounded Bottom Corners */}
+      <div
+        id="performance-hero-card"
+        className="w-full bg-gradient-to-r from-blue-700 via-blue-800 to-blue-900 px-4 sm:px-5 pt-5 pb-10 text-white shadow-md relative overflow-hidden rounded-b-2xl"
+      >
+        <div className="flex items-center justify-between gap-3">
+          {/* Left Avatar & Identity */}
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="relative shrink-0">
+              {targetProfile.avatarUrl ? (
+                <img
+                  src={targetProfile.avatarUrl}
+                  alt={targetProfile.fullName}
+                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-white/90 shadow-md bg-white"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-blue-900 text-white font-black text-lg flex items-center justify-center ring-2 ring-white/90 shadow-md">
+                  {targetProfile.fullName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              {/* Green shield badge on bottom right of avatar */}
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-white shadow-xs">
+                <ShieldCheck className="w-3 h-3" />
+              </div>
+            </div>
+
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-extrabold text-base sm:text-lg text-white truncate leading-tight">
+                  {targetProfile.fullName}
+                </h2>
+                {targetProfile.verified === true && (
+                  <CategoryVerifiedTick category={targetProfile.category} size="xs" />
+                )}
+              </div>
+              <p className="text-xs text-blue-100 font-medium truncate">
+                {profileSubtitle}
+              </p>
+              <div className="flex items-center gap-1 text-[11px] text-blue-200 font-medium">
+                <MapPin className="w-3 h-3 shrink-0" />
+                <span className="truncate">{profileLocation}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right System Index */}
+          <div className="text-right shrink-0 pl-2">
+            <span className="text-[11px] font-bold text-blue-100 uppercase tracking-wide block">
+              {t("eval.systemIndex", "SYSTEM INDEX")}
             </span>
+            <div className="flex items-baseline justify-end gap-1 my-0.5">
+              <span className="text-2xl sm:text-3xl font-black text-white leading-none">
+                {displaySystemScore}
+              </span>
+              <span className="text-xs text-blue-200 font-bold">/100</span>
+            </div>
+            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white shadow-xs">
+              <span>{scorePill.label}</span>
+              <TrendingUp className="w-3 h-3" />
+            </div>
           </div>
-        </div>
-
-        <div className="px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 font-extrabold text-xs rounded-full flex items-center gap-1">
-          <Award className="w-3.5 h-3.5" />
-          <span>Score: {targetProfile.systemScore || totalCalculatedScore}/100</span>
         </div>
       </div>
 
-      {/* Top Profile Summary Bar */}
-      <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-3.5">
-        <img
-          src={targetProfile.avatarUrl}
-          alt={targetProfile.fullName}
-          className="w-12 h-12 rounded-full object-cover border border-slate-200 shadow-xs"
-          referrerPolicy="no-referrer"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h2 className="font-extrabold text-sm text-slate-900 truncate">
-              {targetProfile.fullName}
-            </h2>
-            {targetProfile.verified && (
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            )}
-          </div>
-          <p className="text-xs text-slate-600 truncate">
-            {targetProfile.departmentDetails?.name ||
-              targetProfile.representativeDetails?.position ||
-              "Civic Representative"}
-          </p>
-        </div>
-
-        {/* Big Score Callout */}
-        <div className="text-right">
-          <span className="text-2xl font-black text-blue-600 block leading-none">
-            {targetProfile.systemScore || totalCalculatedScore}
-          </span>
-          <span className="text-[10px] uppercase font-extrabold text-slate-400">
-            System Index
-          </span>
-        </div>
-      </div>
-
-      {/* Sub-Navigation Tabs: 1. System Score (0-100) | 2. Public Reviews | 3. Write / Edit Review */}
-      <div className="border-b border-slate-200 bg-white sticky top-[57px] z-20">
-        <div className="flex justify-between px-2 sm:px-4">
+      {/* 3. Content Body Overlapping the Blue Hero Card */}
+      <div className="px-4 sm:px-5 -mt-5 relative z-10 space-y-4">
+        {/* 3 Navigation Cards Grid (Overlaps the blue hero card) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {/* Card 1: 100-Pt Algorithm */}
           <button
+            id="nav-card-100pt-algorithm"
             onClick={() => setActiveTab("score")}
-            className={`py-3.5 px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`p-3 sm:p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer bg-white shadow-md ${
               activeTab === "score"
-                ? "border-blue-600 text-slate-900"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-blue-600 ring-2 ring-blue-600/20"
+                : "border-slate-200/90 hover:border-slate-300"
             }`}
           >
-            <Scale className="w-4 h-4 text-blue-600" />
-            <span>100-Pt Algorithm</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                <Scale className="w-4 h-4" />
+              </div>
+              <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                <ChevronRight className="w-3 h-3" />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 leading-tight">
+                {t("eval.algorithmTitle", "100-Pt Algorithm")}
+              </h4>
+              <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                {t("eval.algorithmSubtitle", "Scientifically Weighted")}
+              </p>
+            </div>
           </button>
 
+          {/* Card 2: Public Reviews */}
           <button
+            id="nav-card-public-reviews"
             onClick={() => setActiveTab("reviews")}
-            className={`py-3.5 px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`p-3 sm:p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer bg-white shadow-md ${
               activeTab === "reviews"
-                ? "border-blue-600 text-slate-900"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-blue-600 ring-2 ring-blue-600/20"
+                : "border-slate-200/90 hover:border-slate-300"
             }`}
           >
-            <MessageSquare className="w-4 h-4 text-amber-500" />
-            <span>Public Reviews ({targetProfile.reviews?.length || 0})</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                <ChevronRight className="w-3 h-3" />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 leading-tight">
+                {t("eval.publicReviews", "Public Reviews")}
+              </h4>
+              <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                ({reviewsCount}) {t("eval.reviewsCount", "Reviews")}
+              </p>
+            </div>
           </button>
 
-          {!isOwnProfile && (
-            <button
-              onClick={() => setActiveTab("writereview")}
-              className={`py-3.5 px-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 flex items-center gap-1.5 ${
-                activeTab === "writereview"
-                  ? "border-blue-600 text-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>{existingUserReview ? "My Review" : "Rate Leader"}</span>
-            </button>
-          )}
+          {/* Card 3: Rate Leader / Rate Department */}
+          <button
+            id="nav-card-rate-profile"
+            onClick={() => setActiveTab("writereview")}
+            className={`p-3 sm:p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer bg-white shadow-md ${
+              activeTab === "writereview"
+                ? "border-blue-600 ring-2 ring-blue-600/20"
+                : "border-slate-200/90 hover:border-slate-300"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <Star className="w-4 h-4" />
+              </div>
+              <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                <ChevronRight className="w-3 h-3" />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 leading-tight truncate">
+                {rateCardTitle}
+              </h4>
+              <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                {t("eval.youRate", "You Rate")}
+              </p>
+            </div>
+          </button>
         </div>
-      </div>
 
-      {/* Tab Contents */}
-      <div className="p-4 sm:p-5 space-y-5">
-        {/* TAB 1: SYSTEM SCORE 100-POINT ALGORITHM & PUBLIC SOURCES */}
+        {/* TAB 1: 100-PT ALGORITHM VIEW */}
         {activeTab === "score" && (
-          <div className="space-y-5 animate-fadeIn">
+          <div className="space-y-4 animate-fadeIn">
             {/* Algorithm Notice */}
-            <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200/80 rounded-3xl space-y-2">
-              <div className="flex items-center gap-2 text-blue-900">
+            <div className="p-4 bg-white border border-slate-200 rounded-3xl space-y-2 shadow-xs">
+              <div className="flex items-center gap-2 text-slate-900">
                 <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
                 <h3 className="font-extrabold text-sm">
-                  Deterministic 100-Point Civic Audit Engine
+                  {t("eval.auditEngineTitle", "Deterministic 100-Point Civic Audit Engine")}
                 </h3>
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed font-normal">
-                System Score kisi user ya admin dwara manually change nahi kiya ja sakta. Yeh
-                purely <strong>Public Domain Govt Gazettes</strong>, <strong>CAG Audits</strong>, aur{" "}
-                <strong>Geo-tagged SLA Logs</strong> ke statistical verification par compute hota hai.
+              <p className="text-xs text-slate-600 leading-relaxed font-normal">
+                {t(
+                  "eval.auditEngineDesc",
+                  "The System Score cannot be manually modified by any user or administrator. It is computed purely from statistical verification of Public Domain Government Gazettes, CAG Audits, and Geo-tagged SLA Logs."
+                )}
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <span className="text-[10px] font-black px-2 py-0.5 bg-white border border-blue-200 text-blue-800 rounded-md">
+                <span className="text-[10px] font-black px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-md">
                   Algorithm v3.2 Verified
                 </span>
-                <span className="text-[10px] font-black px-2 py-0.5 bg-white border border-slate-200 text-slate-700 rounded-md">
+                <span className="text-[10px] font-black px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-md">
                   Quarterly Audit Cycle Q1-2026
                 </span>
               </div>
             </div>
 
             {/* Criteria Breakdown List */}
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-600">
-                Performance Evaluation Dimensions (Total: 100 Pts)
+                {t("eval.dimensionsTitle", "Performance Evaluation Dimensions (Total: 100 Pts)")}
               </h4>
 
               {criteriaList.map((crit, idx) => (
                 <div
                   key={idx}
-                  className="bg-white border border-slate-200/90 rounded-2xl p-4 space-y-2.5 shadow-2xs hover:border-blue-300 transition-colors"
+                  className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5 shadow-2xs hover:border-blue-300 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -338,13 +476,16 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
             </div>
 
             {/* Official Public Domain Disclosures */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-3xl space-y-3">
+            <div className="p-4 bg-white border border-slate-200 rounded-3xl space-y-3 shadow-xs">
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                 <BookOpen className="w-4 h-4 text-blue-600" />
-                <span>Public Domain Knowledge & Statutory Disclosures</span>
+                <span>{t("eval.disclosuresTitle", "Public Domain Knowledge & Statutory Disclosures")}</span>
               </h4>
               <p className="text-xs text-slate-600">
-                All data points conform to open records under the Right to Information Act (RTI Section 4) and State Gazette publications.
+                {t(
+                  "eval.disclosuresDesc",
+                  "All data points conform to open records under the Right to Information Act (RTI Section 4) and State Gazette publications."
+                )}
               </p>
               <div className="space-y-1.5 text-xs text-slate-700">
                 <div className="flex items-center justify-between py-1 border-b border-slate-200/60">
@@ -364,25 +505,27 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
           </div>
         )}
 
-        {/* TAB 2: PUBLIC REVIEWS & RATINGS WITH ADMIN/REPRESENTATIVE REPLIES */}
+        {/* TAB 2: PUBLIC REVIEWS LIST */}
         {activeTab === "reviews" && (
           <div className="space-y-4 animate-fadeIn">
             {/* Reviews Top Metric Header */}
-            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 sm:p-5 flex items-center justify-between">
+            <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 flex items-center justify-between shadow-xs">
               <div>
                 <span className="text-xs font-bold text-slate-500 uppercase block mb-1">
-                  Public Rating Average
+                  {t("eval.publicRatingAverage", "Public Rating Average")}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-3xl font-black text-slate-900">
-                    {targetProfile.publicRating || 4.4}
+                    {typeof targetProfile.publicRating === "number"
+                      ? targetProfile.publicRating.toFixed(1)
+                      : "0.0"}
                   </span>
                   <div className="flex text-amber-400">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
                         className={`w-4 h-4 ${
-                          star <= Math.round(targetProfile.publicRating || 4)
+                          star <= Math.round(targetProfile.publicRating || 0)
                             ? "fill-amber-400"
                             : "text-slate-300"
                         }`}
@@ -391,22 +534,27 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                   </div>
                 </div>
                 <span className="text-xs text-slate-500 font-medium">
-                  Based on {targetProfile.reviews?.length || 1} verified citizen evaluation(s)
+                  {t("eval.basedOnReviews", "Based on {count} verified citizen evaluation(s)").replace(
+                    "{count}",
+                    String(reviewsCount)
+                  )}
                 </span>
               </div>
 
-              {!isOwnProfile && !existingUserReview && (
+              {!isOwnProfile && (
                 <button
                   onClick={() => setActiveTab("writereview")}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-full shadow-2xs transition-all"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-full shadow-2xs transition-all cursor-pointer"
                 >
-                  Write Review
+                  {existingUserReview
+                    ? t("eval.editReview", "Edit Review")
+                    : t("eval.writeReview", "Write Review")}
                 </button>
               )}
             </div>
 
             {/* List of Reviews */}
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {targetProfile.reviews && targetProfile.reviews.length > 0 ? (
                 targetProfile.reviews.map((rev) => {
                   const isReplying = activeReplyBoxReviewId === rev.id;
@@ -425,6 +573,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                             }
                             alt={rev.authorName}
                             className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                            referrerPolicy="no-referrer"
                           />
                           <div>
                             <div className="flex items-center gap-1.5">
@@ -433,7 +582,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                               </span>
                               {rev.verifiedVoter && (
                                 <span className="text-[9px] font-black uppercase px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
-                                  Verified Voter
+                                  {t("eval.verifiedVoter", "Verified Voter")}
                                 </span>
                               )}
                             </div>
@@ -483,10 +632,10 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                           {!isReplying ? (
                             <button
                               onClick={() => setActiveReplyBoxReviewId(rev.id)}
-                              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
                             >
                               <MessageSquare className="w-3.5 h-3.5" />
-                              <span>Reply to this Citizen Review as Official Leader</span>
+                              <span>{t("eval.replyAsOfficial", "Reply to this Citizen Review as Official Authority")}</span>
                             </button>
                           ) : (
                             <div className="space-y-2 pt-1 animate-fadeIn">
@@ -499,22 +648,22 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                                     [rev.id]: e.target.value,
                                   }))
                                 }
-                                placeholder="Type official response / acknowledgment to this citizen..."
+                                placeholder={t("eval.typeOfficialResponse", "Type official response / acknowledgment to this citizen...")}
                                 className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-blue-500 text-slate-900"
                               />
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => setActiveReplyBoxReviewId(null)}
-                                  className="text-xs font-bold text-slate-500 hover:text-slate-700 px-3 py-1.5"
+                                  className="text-xs font-bold text-slate-500 hover:text-slate-700 px-3 py-1.5 cursor-pointer"
                                 >
-                                  Cancel
+                                  {t("eval.cancel", "Cancel")}
                                 </button>
                                 <button
                                   onClick={() => handleSendAdminReply(rev.id)}
                                   disabled={!adminReplyText[rev.id]?.trim()}
-                                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xs"
+                                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xs cursor-pointer"
                                 >
-                                  Publish Official Reply
+                                  {t("eval.publishReply", "Publish Official Reply")}
                                 </button>
                               </div>
                             </div>
@@ -525,106 +674,218 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                   );
                 })
               ) : (
-                <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                  No citizen reviews submitted for this leader yet.
+                <div className="py-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+                  {t("eval.noReviewsYet", "No citizen reviews submitted for this profile yet.")}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* TAB 3: SUBMIT / EDIT REVIEW (STRICT 1 REVIEW PER CITIZEN RULE) */}
-        {activeTab === "writereview" && !isOwnProfile && (
+        {/* TAB 3 / DEFAULT: RATE FORM */}
+        {activeTab === "writereview" && (
           <div className="space-y-4 animate-fadeIn">
-            {/* If user already reviewed, display status info */}
-            {existingUserReview ? (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-3xl space-y-2">
-                <div className="flex items-center gap-2 text-emerald-900">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <h4 className="font-extrabold text-sm">Review Already Submitted</h4>
-                </div>
-                <p className="text-xs text-emerald-800 leading-relaxed">
-                  Aapne is leader ko pehle hi review submit kar diya hai ({existingUserReview.date}).
-                  Har citizen ko fairness aur security ke liye <strong>kewal 1 rating</strong> ki permission
-                  hai. Aap niche apna review update kar sakte hain.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-3xl space-y-1 text-xs text-blue-900">
-                <span className="font-black uppercase text-[10px] text-blue-700 block">
-                  Civic Integrity Guarantee
-                </span>
-                <p>
-                  Aapka review directly verified public registry par record hoga. Kripya factual aur
-                  constructive feedback dein.
-                </p>
-              </div>
-            )}
-
-            {/* Review Form */}
-            <form
-              onSubmit={handleReviewFormSubmit}
-              className="bg-white border border-slate-200 rounded-3xl p-5 space-y-4 shadow-sm"
+            {/* 4. Civic Integrity Guarantee Banner */}
+            <div
+              id="civic-integrity-guarantee-banner"
+              className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-2xs relative overflow-hidden"
             >
-              <div>
-                <label className="text-xs font-black uppercase text-slate-600 block mb-2">
-                  Select Rating Score (1 to 5 Stars)
-                </label>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setRating(star)}
-                      className="p-1 hover:scale-110 transition-transform cursor-pointer"
-                    >
-                      <Star
-                        className={`w-7 h-7 ${
-                          star <= rating
-                            ? "fill-amber-400 text-amber-400"
-                            : "text-slate-300 hover:text-amber-200"
-                        }`}
-                      />
-                    </button>
-                  ))}
-                  <span className="ml-2 font-black text-sm text-slate-800">{rating} / 5 Stars</span>
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-300/60">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-emerald-800 uppercase tracking-wider">
+                    {t("eval.civicIntegrityGuarantee", "CIVIC INTEGRITY GUARANTEE")}
+                  </h4>
+                  <p className="text-xs text-slate-700 font-medium leading-relaxed mt-0.5">
+                    {t(
+                      "eval.civicIntegrityDesc",
+                      "Your review will be directly recorded on the verified public registry. Please provide factual and constructive feedback."
+                    )}
+                  </p>
+                </div>
+              </div>
+              <Shield className="w-12 h-12 text-emerald-200/50 shrink-0 hidden sm:block pointer-events-none" />
+            </div>
+
+            {/* 5. Your Rating Card */}
+            <div
+              id="your-rating-card"
+              className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm sm:text-base font-black text-slate-900">
+                  {t("eval.yourRating", "Your Rating")}
+                </h3>
+                <span className="text-xs text-slate-400 font-medium">
+                  {t("eval.tapStarToRate", "Tap a star to rate")}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {/* 5 Interactive Large Stars */}
+                <div className="flex items-center gap-1 sm:gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const isFilled = star <= effectiveRating;
+                    return (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        onMouseEnter={() => setHoverRating(star)}
+                        onMouseLeave={() => setHoverRating(null)}
+                        className="p-1 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                        title={`Rate ${star} Stars`}
+                      >
+                        <Star
+                          className={`w-7 h-7 sm:w-8 sm:h-8 transition-colors ${
+                            isFilled
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-slate-300 hover:text-amber-200"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Rating Number & Text Label */}
+                <div className="text-right shrink-0">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
+                    {effectiveRating.toFixed(1)}{" "}
+                    <span className="text-xs text-slate-400 font-bold">/ 5</span>
+                  </div>
+                  <span
+                    className={`text-xs font-black block mt-1 ${
+                      getRatingLabel(effectiveRating).color
+                    }`}
+                  >
+                    {getRatingLabel(effectiveRating).label}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 6. Detailed Citizen Performance Review Box */}
+            <div
+              id="detailed-review-card"
+              className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3"
+            >
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-black text-slate-900">
+                  {t("eval.detailedReviewTitle", "Detailed Citizen Performance Review")}
+                </h3>
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>{t("eval.detailedReviewSubtitle", "Share your experience. The more detail, the greater the impact.")}</span>
+                  <span className="font-bold text-slate-400 shrink-0 pl-2">
+                    {comment.length} / 500
+                  </span>
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">
-                  Detailed Citizen Performance Review
-                </label>
+              {/* Input Box with Pencil Icon */}
+              <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                <Pencil className="w-4 h-4 text-slate-400 mt-1 shrink-0" />
                 <textarea
                   rows={4}
+                  maxLength={500}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Constituency road maintenance, flood control, MLA accessibility ya statutory fund utilization par apna anubhav likhein..."
-                  className="w-full text-xs sm:text-sm p-3 bg-slate-50 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white text-slate-900 font-normal leading-relaxed"
-                  required
+                  placeholder={t(
+                    "eval.reviewPlaceholder",
+                    "Write your experience regarding constituency road maintenance, flood control, MLA accessibility, or statutory fund utilization..."
+                  )}
+                  className="w-full bg-transparent border-0 focus:outline-none text-xs sm:text-sm text-slate-900 font-normal leading-relaxed resize-none placeholder:text-slate-400"
                 />
               </div>
+            </div>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-                <span className="text-slate-600 font-medium">Reviewing as Verified Voter:</span>
-                <span className="font-bold text-slate-900">{currentUser.fullName}</span>
+            {/* 7. 4 Trust Pillars */}
+            <div className="grid grid-cols-4 gap-2 pt-2">
+              {/* Pillar 1: Fact Based */}
+              <div className="p-2.5 sm:p-3 bg-white border border-slate-200/80 rounded-2xl text-center space-y-1 shadow-2xs">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <h5 className="text-[11px] font-black text-slate-900 leading-tight">
+                  {t("eval.pillarFactBased", "Fact Based")}
+                </h5>
+                <p className="text-[9px] text-slate-500 leading-tight font-medium">
+                  {t("eval.pillarFactBasedDesc", "Share real experiences")}
+                </p>
               </div>
 
+              {/* Pillar 2: Impactful */}
+              <div className="p-2.5 sm:p-3 bg-white border border-slate-200/80 rounded-2xl text-center space-y-1 shadow-2xs">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Users className="w-4 h-4" />
+                </div>
+                <h5 className="text-[11px] font-black text-slate-900 leading-tight">
+                  {t("eval.pillarImpactful", "Impactful")}
+                </h5>
+                <p className="text-[9px] text-slate-500 leading-tight font-medium">
+                  {t("eval.pillarImpactfulDesc", "Your review drives change")}
+                </p>
+              </div>
+
+              {/* Pillar 3: Verified */}
+              <div className="p-2.5 sm:p-3 bg-white border border-slate-200/80 rounded-2xl text-center space-y-1 shadow-2xs">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <h5 className="text-[11px] font-black text-slate-900 leading-tight">
+                  {t("eval.pillarVerified", "Verified")}
+                </h5>
+                <p className="text-[9px] text-slate-500 leading-tight font-medium">
+                  {t("eval.pillarVerifiedDesc", "100% authentic & transparent")}
+                </p>
+              </div>
+
+              {/* Pillar 4: Constructive */}
+              <div className="p-2.5 sm:p-3 bg-white border border-slate-200/80 rounded-2xl text-center space-y-1 shadow-2xs">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Megaphone className="w-4 h-4" />
+                </div>
+                <h5 className="text-[11px] font-black text-slate-900 leading-tight">
+                  {t("eval.pillarConstructive", "Constructive")}
+                </h5>
+                <p className="text-[9px] text-slate-500 leading-tight font-medium">
+                  {t("eval.pillarConstructiveDesc", "Feedback for better governance")}
+                </p>
+              </div>
+            </div>
+
+            {/* 8. Full-Width Submit Button */}
+            <div className="pt-2">
               <button
-                type="submit"
-                disabled={isSubmitting || !comment.trim()}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                id="submit-review-btn"
+                onClick={handleReviewFormSubmit}
+                disabled={isSubmitting || rating === 0}
+                className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 active:scale-[0.99] disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isSubmitting ? (
-                  <span>Recording Review on Registry...</span>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{t("eval.submitting", "Recording on Public Registry...")}</span>
+                  </>
+                ) : submitSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>{t("eval.published", "Review Published!")}</span>
+                  </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    <span>{existingUserReview ? "Update My Review" : "Submit Official Citizen Review"}</span>
+                    <span>
+                      {existingUserReview
+                        ? t("eval.updateReview", "Update Review")
+                        : t("eval.submitReview", "Submit Review")}
+                    </span>
                   </>
                 )}
               </button>
-            </form>
+            </div>
           </div>
         )}
       </div>

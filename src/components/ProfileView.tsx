@@ -33,6 +33,13 @@ import {
   AtSign,
   Bookmark,
   AlertTriangle,
+  Lock,
+  Mail,
+  Key,
+  ShieldAlert,
+  UserCheck,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
@@ -48,6 +55,7 @@ import {
   CategoryVerifiedTick,
   CategoryGetVerifiedButton,
 } from "./CategoryBadge.tsx";
+import { claimOfficialProfileInFirestore } from "../lib/firestoreSync.ts";
 
 interface ProfileViewProps {
   userProfile: UserProfile;
@@ -71,6 +79,16 @@ interface ProfileViewProps {
   onDeleteReport?: (reportId: string) => Promise<void>;
   onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
   onSelectUser?: (userId: string) => void;
+  onClaimProfile?: (
+    profileId: string,
+    credentials: {
+      email: string;
+      password?: string;
+      officerName: string;
+      designation: string;
+      departmentCode?: string;
+    }
+  ) => Promise<void>;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -95,6 +113,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onDeleteReport,
   onTogglePinReport,
   onSelectUser,
+  onClaimProfile,
 }) => {
   const [activeTab, setActiveTab] = useState<
     "Report" | "Services" | "Performance" | "Replies" | "Rereport"
@@ -301,6 +320,80 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     userProfile.category === "department" ||
     userProfile.category === "business";
 
+  // Claim official profile states
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimEmail, setClaimEmail] = useState(userProfile.email || "");
+  const [claimPassword, setClaimPassword] = useState("");
+  const [claimOfficerName, setClaimOfficerName] = useState(userProfile.claimedByOfficerName || "");
+  const [claimDesignation, setClaimDesignation] = useState(
+    userProfile.departmentDetails?.designation || "Nodal Police Officer"
+  );
+  const [claimDeptCode, setClaimDeptCode] = useState(
+    userProfile.departmentDetails?.departmentCode || ""
+  );
+  const [isClaimSubmitting, setIsClaimSubmitting] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+
+  // Check if this profile is an official system profile eligible for claim
+  const isClaimableProfile = Boolean(
+    !isOwnProfile &&
+    !userProfile.isClaimed &&
+    (userProfile.isClaimable === true ||
+      (userProfile.category === "department" &&
+        (userProfile.id?.startsWith("user_") || userProfile.id?.startsWith("dept_"))))
+  );
+
+  const handleClaimSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!claimEmail.trim()) {
+      setClaimError("Please enter your official government/department email.");
+      return;
+    }
+    if (!claimPassword || claimPassword.length < 6) {
+      setClaimError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (!claimOfficerName.trim()) {
+      setClaimError("Please enter the authorized officer / nodal person name.");
+      return;
+    }
+
+    setIsClaimSubmitting(true);
+    setClaimError(null);
+
+    try {
+      if (onClaimProfile) {
+        await onClaimProfile(userProfile.id, {
+          email: claimEmail.trim(),
+          password: claimPassword,
+          officerName: claimOfficerName.trim(),
+          designation: claimDesignation.trim() || "Nodal Officer / Police Administrator",
+          departmentCode: claimDeptCode.trim() || userProfile.departmentDetails?.departmentCode || "",
+        });
+      } else {
+        await claimOfficialProfileInFirestore(userProfile.id, {
+          email: claimEmail.trim(),
+          officerName: claimOfficerName.trim(),
+          designation: claimDesignation.trim() || "Nodal Officer / Police Administrator",
+          departmentCode: claimDeptCode.trim() || userProfile.departmentDetails?.departmentCode || "",
+        });
+      }
+
+      setClaimSuccess(true);
+      showToast("Profile successfully claimed! You are now the official administrator.");
+      setTimeout(() => {
+        setShowClaimModal(false);
+        setClaimSuccess(false);
+      }, 2000);
+    } catch (err: any) {
+      console.error("Claim error:", err);
+      setClaimError(err.message || "Failed to claim profile. Please try again.");
+    } finally {
+      setIsClaimSubmitting(false);
+    }
+  };
+
   const availableTabs = isLeadershipOrDept
     ? ([
         { id: "Report", label: "Reports" },
@@ -504,54 +597,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* 3-Dots Action Dropdown Menu */}
-        <div className="relative">
+        {/* 3-Dots Action Button (Opens Modern Bottom Action Sheet) */}
+        <div>
           <button
-            onClick={() => setIsMenuOpen((prev) => !prev)}
+            id="profile-action-sheet-trigger"
+            onClick={() => setIsMenuOpen(true)}
             className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
             title="Profile Options"
           >
             <MoreVertical className="w-5 h-5" />
           </button>
-
-          {isMenuOpen && (
-            <div className="absolute right-0 top-11 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-fadeIn text-xs text-slate-800">
-              <button
-                onClick={handleCopyProfileLink}
-                className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2 font-semibold"
-              >
-                {copyFeedback ? (
-                  <Check className="w-4 h-4 text-emerald-600" />
-                ) : (
-                  <Copy className="w-4 h-4 text-slate-500" />
-                )}
-                <span>{copyFeedback ? "Copied Link!" : "Copy Profile Link"}</span>
-              </button>
-
-              <button
-                onClick={() => setEvaluationViewTab("score")}
-                className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2 font-semibold"
-              >
-                <Scale className="w-4 h-4 text-blue-600" />
-                <span>100-Pt Algorithm Breakdown</span>
-              </button>
-
-              <button
-                onClick={handleResetCache}
-                className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2 font-semibold"
-              >
-                <RefreshCw className="w-4 h-4 text-slate-500" />
-                <span>Clear Profile Cache</span>
-              </button>
-
-              <div className="border-t border-slate-100 my-1"></div>
-
-              <div className="px-4 py-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                <span>Open Desh Governance v3</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -722,7 +777,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 SYSTEM SCORE
               </span>
               <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
-                {userProfile.systemScore || 84}
+                {typeof userProfile.systemScore === "number" ? userProfile.systemScore : (userProfile.systemScore || 0)}
               </span>
             </div>
 
@@ -736,7 +791,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 PUBLIC RATING
               </span>
               <span className="text-xl sm:text-2xl font-black text-slate-900 flex items-center justify-center gap-1 leading-tight">
-                {userProfile.publicRating || 4.4}
+                {typeof userProfile.publicRating === "number" ? userProfile.publicRating.toFixed(1) : "0.0"}
                 <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
               </span>
             </div>
@@ -752,8 +807,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </span>
               <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
                 {userProfile.reviewsCount
-                  ? `${(userProfile.reviewsCount / 1000).toFixed(1)}K`
-                  : "142.8K"}
+                  ? userProfile.reviewsCount >= 1000
+                    ? `${(userProfile.reviewsCount / 1000).toFixed(1)}K`
+                    : userProfile.reviewsCount
+                  : 0}
               </span>
             </div>
           </div>
@@ -1332,7 +1389,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider text-blue-100">
                   Civic Performance Score
                 </span>
-                <span className="text-2xl font-black">{userProfile.systemScore || 84}/100</span>
+                <span className="text-2xl font-black">{typeof userProfile.systemScore === "number" ? userProfile.systemScore : (userProfile.systemScore || 0)}/100</span>
               </div>
               <p className="text-xs text-blue-100 font-normal">
                 Click here to view transparent 100-point algorithm, CAG audits, and legislative floor attendance.
@@ -1733,6 +1790,368 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 >
                   Cancel
                 </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 3-DOTS MODERN ACTION SHEET (BOTTOM SLIDE-UP SHEET)                        */}
+        {/* ========================================================================= */}
+        {isMenuOpen && (
+          <div
+            id="profile-action-sheet-backdrop"
+            onClick={() => setIsMenuOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex flex-col justify-end animate-fadeIn"
+          >
+            <div
+              id="profile-action-sheet-content"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white border-t border-slate-200 rounded-t-3xl p-5 pb-8 shadow-2xl max-w-lg mx-auto w-full space-y-4 animate-slideUp"
+            >
+              {/* Drag indicator */}
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto" />
+
+              {/* Profile summary header */}
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                {userProfile.avatarUrl ? (
+                  <img
+                    src={userProfile.avatarUrl}
+                    alt={profileFullName}
+                    className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-900 font-black text-sm flex items-center justify-center border border-blue-200 shrink-0">
+                    DP
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-extrabold text-slate-900 truncate">
+                      {profileFullName}
+                    </h3>
+                    {userProfile.verified && (
+                      <CategoryVerifiedTick category={userProfile.category} size="xs" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium truncate">
+                    {headerUsername}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Action List */}
+              <div className="space-y-2">
+                {/* 1. Copy Profile Link */}
+                <button
+                  id="action-sheet-copy-link"
+                  onClick={() => {
+                    handleCopyProfileLink();
+                    setTimeout(() => setIsMenuOpen(false), 900);
+                  }}
+                  className="w-full p-3.5 bg-slate-50 hover:bg-blue-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-blue-200"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    {copyFeedback ? (
+                      <Check className="w-5 h-5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors flex items-center gap-2">
+                      <span>{copyFeedback ? "Profile Link Copied!" : "Copy Profile Link"}</span>
+                      {copyFeedback && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                          Copied
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium truncate">
+                      {window.location.origin}/?user={cleanProfileUsername || cleanProfileId}
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. Claim Official Profile (If eligible system profile) */}
+                {isClaimableProfile && (
+                  <button
+                    id="action-sheet-claim-profile"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setShowClaimModal(true);
+                    }}
+                    className="w-full p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100/70 hover:to-orange-100/70 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-amber-200/80"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <Key className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-amber-950">
+                          Claim Official Profile
+                        </h4>
+                        <span className="text-[9px] bg-amber-600 text-white font-black px-1.5 py-0.5 rounded-full uppercase">
+                          Official
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-800/80 font-medium">
+                        Are you an authorized representative? Set email & password to manage.
+                      </p>
+                    </div>
+                  </button>
+                )}
+
+                {/* 3. 100-Pt Algorithm Breakdown */}
+                {isLeadershipOrDept && (
+                  <button
+                    id="action-sheet-score-breakdown"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setEvaluationViewTab("score");
+                    }}
+                    className="w-full p-3.5 bg-slate-50 hover:bg-slate-100 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Scale className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-700 transition-colors">
+                        100-Pt Algorithm Breakdown
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        View grievance resolution, SLA delivery & transparency metrics
+                      </p>
+                    </div>
+                  </button>
+                )}
+
+                {/* 4. Clear Profile Cache */}
+                <button
+                  id="action-sheet-clear-cache"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    handleResetCache();
+                  }}
+                  className="w-full p-3.5 bg-slate-50 hover:bg-slate-100 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      Refresh & Clear Profile Cache
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Reload latest official data, reviews, and sync records
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={() => setIsMenuOpen(false)}
+                className="w-full py-3 text-center text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors cursor-pointer"
+              >
+                Close Menu
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* CLAIM OFFICIAL PROFILE MODAL (OFFICIAL EMAIL & PASSWORD SETUP)            */}
+        {/* ========================================================================= */}
+        {showClaimModal && (
+          <div
+            id="claim-profile-modal-backdrop"
+            onClick={() => !isClaimSubmitting && setShowClaimModal(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn"
+          >
+            <div
+              id="claim-profile-modal-content"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-2xl max-w-md w-full space-y-4 animate-scaleUp max-h-[90vh] overflow-y-auto"
+            >
+              {/* Modal Header */}
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 leading-tight">
+                      Claim Official Profile
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Official Department: {headerUsername}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => !isClaimSubmitting && setShowClaimModal(false)}
+                  disabled={isClaimSubmitting}
+                  className="p-1.5 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Explanatory Banner */}
+              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-1">
+                <p className="font-extrabold flex items-center gap-1.5 text-blue-800">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <span>State Department Governance Handle</span>
+                </p>
+                <p className="text-blue-700 leading-relaxed font-normal">
+                  This profile was created by the Open Desh governance system. Provide your official email and establish your master login password to claim administrative control.
+                </p>
+              </div>
+
+              {/* Error Alert */}
+              {claimError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2.5 text-xs text-rose-800 font-bold animate-shake">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{claimError}</span>
+                </div>
+              )}
+
+              {/* Success Notification */}
+              {claimSuccess ? (
+                <div className="py-6 text-center space-y-2">
+                  <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-base font-black text-slate-900">
+                    Official Profile Claimed!
+                  </h4>
+                  <p className="text-xs text-slate-600 max-w-xs mx-auto">
+                    You have successfully established administrative ownership of {headerUsername}.
+                  </p>
+                </div>
+              ) : (
+                /* Claim Form */
+                <form onSubmit={handleClaimSubmit} className="space-y-3.5 text-xs">
+                  {/* Field 1: Official Department Email */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Official Email Address *</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. nodal.police@jharkhand.gov.in"
+                      value={claimEmail}
+                      onChange={(e) => setClaimEmail(e.target.value)}
+                      disabled={isClaimSubmitting}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Field 2: Password */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Set Account Password (min 6 characters) *</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Enter secure password"
+                      value={claimPassword}
+                      onChange={(e) => setClaimPassword(e.target.value)}
+                      disabled={isClaimSubmitting}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Field 3: Authorized Officer / Nodal Person Name */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Authorized Officer / Nodal Person Name *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Er. Rajesh K. Varma / SP Cyber"
+                      value={claimOfficerName}
+                      onChange={(e) => setClaimOfficerName(e.target.value)}
+                      disabled={isClaimSubmitting}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Field 4: Official Designation */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Official Designation</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Superintendent of Police / Executive Engineer"
+                      value={claimDesignation}
+                      onChange={(e) => setClaimDesignation(e.target.value)}
+                      disabled={isClaimSubmitting}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Field 5: Department Code */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Department Authority Code (Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. JHP-RNC-01"
+                      value={claimDeptCode}
+                      onChange={(e) => setClaimDeptCode(e.target.value)}
+                      disabled={isClaimSubmitting}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowClaimModal(false)}
+                      disabled={isClaimSubmitting}
+                      className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isClaimSubmitting}
+                      className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                    >
+                      {isClaimSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Claiming...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Key className="w-4 h-4" />
+                          <span>Claim & Verify</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
           </div>

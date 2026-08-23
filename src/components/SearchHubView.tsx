@@ -36,6 +36,7 @@ import {
 import { db } from "../firebase.ts";
 import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { INITIAL_USERS } from "../data/seedData.ts";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -116,6 +117,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       const userMap = new Map<string, UserProfile>();
       const leaderMap = new Map<string, Leader>();
       const reportMap = new Map<string, ReportIssue>();
+
+      // 0. Seed baseline verified departments and profiles from INITIAL_USERS
+      Object.values(INITIAL_USERS).forEach((u) => {
+        if (u && u.id) {
+          userMap.set(u.id.toLowerCase(), u);
+        }
+      });
 
       // Fetch users from Firestore
       try {
@@ -234,7 +242,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     return score;
   };
 
-  // 2. Department Profiles (Area-Prioritized & Categorized)
+  // 2. Department Profiles (Area-Prioritized & Categorized Police Departments)
   const departmentProfiles = useMemo(() => {
     const q = query.toLowerCase().trim();
     const list: Array<{
@@ -257,9 +265,10 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     }> = [];
 
     const seenIds = new Set<string>();
+    const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
 
     dbUsers.forEach((u) => {
-      if (u.category === "department") {
+      if (u.category === "department" && validPoliceIds.has(u.id)) {
         const uId = u.id.toLowerCase();
         if (!seenIds.has(uId)) {
           seenIds.add(uId);
@@ -293,17 +302,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             if (!matchesQuery) return;
           }
 
-          if (isNearMeOnly && proximityScore <= 1 && !q) {
-            // In near-me mode with no query, prefer nearby items
-          }
-
           list.push({
             id: u.id,
             fullName: u.fullName,
             username: (u.username || "").replace(/^@/, ""),
             avatarUrl:
               u.avatarUrl ||
-              "https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?w=400&auto=format&fit=crop&q=80",
+              "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=400&auto=format&fit=crop&q=80",
             category: "department",
             verified: isVerified,
             positionTitle: title,
@@ -323,7 +328,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     return list.sort((a, b) => b.proximityScore - a.proximityScore || b.systemScore - a.systemScore);
   }, [dbUsers, query, isNearMeOnly, selectedDeptCategory, verifiedOnly, locationTokens]);
 
-  // 3. Leader Profiles (Elected Representatives & Officials)
+  // 3. Leader Profiles (Elected Representatives & Real Officials)
   const leaderProfiles = useMemo(() => {
     const q = query.toLowerCase().trim();
     const list: Array<{
@@ -345,10 +350,10 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
     const seenIds = new Set<string>();
 
-    // From Leaders Collection
+    // From Leaders Collection (excluding dummy seed records)
     dbLeaders.forEach((l) => {
       const lid = l.id.toLowerCase();
-      if (!seenIds.has(lid)) {
+      if (!lid.startsWith("lead_") && !seenIds.has(lid)) {
         seenIds.add(lid);
 
         const isVerified = Boolean(l.verified !== false);
@@ -388,9 +393,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       }
     });
 
-    // From Users with representative category
+    // From Users with representative category (excluding dummy seed records)
     dbUsers.forEach((u) => {
-      if (u.category === "representative") {
+      if (u.category === "representative" && !u.id.startsWith("lead_")) {
         const uid = u.id.toLowerCase();
         if (!seenIds.has(uid)) {
           seenIds.add(uid);
@@ -425,7 +430,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             party: repDetails?.party || "Official",
             constituency: constituency,
             systemScore: u.systemScore || 84,
-            publicRating: u.publicRating || 4.4,
+            publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
             bio: u.bio,
             proximityScore: proximityScore,
           });
@@ -436,11 +441,34 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     return list.sort((a, b) => b.proximityScore - a.proximityScore || b.systemScore - a.systemScore);
   }, [dbLeaders, dbUsers, query, verifiedOnly, locationTokens]);
 
-  // 4. Public Profiles (Citizens & Verified Businesses)
+  // 4. Public Profiles (Real Citizens & Verified Businesses)
   const publicProfiles = useMemo(() => {
     const q = query.toLowerCase().trim();
     return dbUsers
-      .filter((u) => u.category === "citizen" || u.category === "business")
+      .filter((u) => {
+        const cat = u.category || "citizen";
+        const name = (u.fullName || "").toLowerCase();
+        const username = (u.username || "").toLowerCase();
+        const isDummy =
+          u.id === "guest_citizen" ||
+          u.id.startsWith("lead_") ||
+          u.id.startsWith("dept_") ||
+          cat === "contractor" ||
+          name.includes("rahul tiwari") ||
+          name.includes("rajesh") ||
+          name.includes("contractor") ||
+          name.includes("afcons") ||
+          name.includes("wabag") ||
+          name.includes("gurugram") ||
+          name.includes("bijli") ||
+          name.includes("jbvnl") ||
+          name.includes("gmda") ||
+          username.includes("rahul") ||
+          username.includes("rajesh") ||
+          username.includes("gmda") ||
+          username.includes("jbvnl");
+        return (cat === "citizen" || cat === "business") && !isDummy;
+      })
       .filter((u) => {
         const isVerified = Boolean(u.verified === true || u.verificationStatus === "approved");
         if (verifiedOnly && !isVerified) return false;
