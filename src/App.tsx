@@ -46,8 +46,6 @@ import {
   toggleFollowInFirestore,
   deleteReportInFirestore,
   togglePinReportInFirestore,
-  seedPoliceProfilesToFirestore,
-  purgeOldMockDataFromFirestore,
   claimOfficialProfileInFirestore,
 } from "./lib/firestoreSync.ts";
 import {
@@ -60,7 +58,6 @@ import {
   ThreadedReply,
   AppNotification,
 } from "./types.ts";
-import { INITIAL_USERS } from "./data/seedData.ts";
 
 const defaultGuestProfile: UserProfile = {
   id: "guest_citizen",
@@ -73,8 +70,8 @@ const defaultGuestProfile: UserProfile = {
   followersCount: 0,
   followingCount: 0,
   postsCount: 0,
-  systemScore: 80,
-  publicRating: 5.0,
+  systemScore: 0,
+  publicRating: 0,
   reviewsCount: 0,
   verified: false,
   savedReports: [],
@@ -342,8 +339,8 @@ export default function App() {
               followersCount: 0,
               followingCount: 0,
               postsCount: 0,
-              systemScore: 80,
-              publicRating: 5.0,
+              systemScore: 0,
+              publicRating: 0,
               reviewsCount: 0,
               verified: false, // Default to false for all new accounts
               verificationStatus: "none",
@@ -513,10 +510,6 @@ export default function App() {
       // 3. Fetch Infrastructure directly from Firestore
       const infraList = await getInfrastructureDirect();
       setInfrastructure(infraList);
-
-      // 4. Background Sync Police Department profiles & Purge any legacy dummy/mock data from Firestore
-      seedPoliceProfilesToFirestore().catch(() => {});
-      purgeOldMockDataFromFirestore().catch(() => {});
     } catch (err) {
       console.warn("Firestore fetch error:", err);
     } finally {
@@ -1519,29 +1512,6 @@ export default function App() {
       console.warn("API user fetch notice:", err);
     }
 
-    // 4.5 Try Seed & Verified Registered Profile Lookup (e.g. Police departments, Civic Authorities)
-    const matchedSeedProfile = Object.values(INITIAL_USERS).find(
-      (u) =>
-        u.id.toLowerCase() === cleanId.toLowerCase() ||
-        (u.username && u.username.replace(/^@/, "").toLowerCase() === cleanUsername)
-    );
-    if (matchedSeedProfile) {
-      const isFollowed =
-        followingNormalizedSet.has(matchedSeedProfile.id.toLowerCase()) ||
-        (matchedSeedProfile.username &&
-          followingNormalizedSet.has(
-            matchedSeedProfile.username.replace(/^@/, "").toLowerCase()
-          )) ||
-        matchedSeedProfile.isFollowing ||
-        false;
-      setSelectedViewingProfile({
-        ...matchedSeedProfile,
-        isFollowing: isFollowed,
-      });
-      navigateTo("profile", false);
-      return;
-    }
-
     // 5. Fallback from existing reports author data
     const matchedReport = reports.find(
       (r) =>
@@ -1577,8 +1547,8 @@ export default function App() {
         followersCount: isFollowed ? 1 : 0,
         followingCount: 0,
         postsCount: matchingReports.length,
-        systemScore: 80,
-        publicRating: 5.0,
+        systemScore: 0,
+        publicRating: 0,
         reviewsCount: 0,
         verified:
           matchedReport.authorCategory === "department" ||

@@ -96,24 +96,31 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
       ? "Elected Member of Legislative Assembly"
       : targetProfile.bio || "Civic Governance Profile");
 
-  // Default transparent 100-point algorithm calculation
+  // Real database score and breakdown
+  const hasDbScore = typeof targetProfile.systemScore === "number" && targetProfile.systemScore > 0;
+  const hasDbBreakdown =
+    targetProfile.systemScoreBreakdown?.criteria &&
+    Array.isArray(targetProfile.systemScoreBreakdown.criteria) &&
+    targetProfile.systemScoreBreakdown.criteria.length > 0;
+
+  // Standard 5 Dimensions (All set to 0 pts when no data in DB)
   const defaultCriteria: ScoreCriterion[] = [
     {
       label: "Grievance SLA Redressal Velocity & Rate",
       weight: 25,
-      scoreAwarded: 22.5,
+      scoreAwarded: 0,
       description:
-        "Ratio of citizen reports acknowledged within statutory 24-hr SLA and verified closed on ground within stipulated timeframe.",
-      publicSource: "State Grievance Redressal Portal & Central CPGRAMS Dashboard (FY 25-26)",
+        "Ratio of citizen reports acknowledged within statutory 24-hr SLA and verified closed on ground.",
+      publicSource: "State Grievance Redressal Portal & Central CPGRAMS Dashboard",
       sourceUrl: "https://cpgrams.nic.in",
       sourceType: "Govt SLA Redressal Log",
     },
     {
       label: "Public Fund & MLALAD Utilization Efficiency",
       weight: 25,
-      scoreAwarded: 21.0,
+      scoreAwarded: 0,
       description:
-        "Audit of sanctioned constituency development funds allocated versus actual utilization certificates published without fiscal lapses.",
+        "Audit of sanctioned development funds allocated versus actual utilization certificates published.",
       publicSource: "Comptroller & Auditor General (CAG) State Audit Gazette & Finance Dept Ledger",
       sourceUrl: "https://cag.gov.in",
       sourceType: "CAG Gazette",
@@ -121,7 +128,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     {
       label: "Legislative Assembly Attendance & Question Hours",
       weight: 20,
-      scoreAwarded: 18.5,
+      scoreAwarded: 0,
       description:
         "Official floor participation in Vidhan Sabha sessions, public interest bills raised, and standing committee attendance.",
       publicSource: "Vidhan Sabha Official Hansard Debates & Legislative Records",
@@ -131,7 +138,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     {
       label: "Ground Verification & Independent Civic Audits",
       weight: 15,
-      scoreAwarded: 12.5,
+      scoreAwarded: 0,
       description:
         "Geo-tagged photographic confirmations uploaded by registered local resident verifiers and third-party civil engineering monitors.",
       publicSource: "Open Desh Verified Geo-Audit Protocol & Ward Inspection Reports",
@@ -141,35 +148,31 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     {
       label: "Verified Citizen Trust & Satisfaction Index",
       weight: 15,
-      scoreAwarded: 13.5,
+      scoreAwarded: 0,
       description:
-        "Aggregated satisfaction scores from Aadhaar-verified constituency voters and verified resident reviews.",
+        "Aggregated satisfaction scores from verified constituency voters and verified resident reviews.",
       publicSource: "Open Desh Public Voter Sentiment Registry",
       sourceUrl: "https://opendesh.in/ratings",
       sourceType: "Verified Voter Index",
     },
   ];
 
-  const criteriaList =
-    targetProfile.systemScoreBreakdown?.criteria &&
-    targetProfile.systemScoreBreakdown.criteria.length > 0
-      ? targetProfile.systemScoreBreakdown.criteria
-      : defaultCriteria;
+  const criteriaList: ScoreCriterion[] = hasDbBreakdown
+    ? targetProfile.systemScoreBreakdown!.criteria
+    : defaultCriteria;
 
-  const totalCalculatedScore = Math.round(
-    criteriaList.reduce((acc, c) => acc + c.scoreAwarded, 0)
-  );
-
-  const displaySystemScore =
-    typeof targetProfile.systemScore === "number"
-      ? targetProfile.systemScore
-      : totalCalculatedScore;
+  const displaySystemScore: number = hasDbScore
+    ? targetProfile.systemScore!
+    : hasDbBreakdown
+    ? Math.round(criteriaList.reduce((acc, c) => acc + (c.scoreAwarded || 0), 0))
+    : 0;
 
   const getSystemScorePill = (score: number) => {
     if (score >= 80) return { label: t("eval.excellent", "Excellent"), color: "bg-emerald-600 text-white" };
     if (score >= 60) return { label: t("eval.good", "Good"), color: "bg-blue-600 text-white" };
     if (score >= 40) return { label: t("eval.average", "Average"), color: "bg-amber-600 text-white" };
-    return { label: t("eval.needsAudit", "Needs Audit"), color: "bg-rose-600 text-white" };
+    if (score > 0) return { label: t("eval.needsAudit", "Needs Audit"), color: "bg-rose-600 text-white" };
+    return { label: "Awaiting Audit (0)", color: "bg-slate-500 text-white" };
   };
 
   const scorePill = getSystemScorePill(displaySystemScore);
@@ -293,7 +296,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
               </span>
               <span className="text-xs text-blue-200 font-bold">/100</span>
             </div>
-            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white shadow-xs">
+            <div className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black ${scorePill.color} shadow-xs`}>
               <span>{scorePill.label}</span>
               <TrendingUp className="w-3 h-3" />
             </div>

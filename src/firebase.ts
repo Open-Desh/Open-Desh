@@ -28,7 +28,7 @@ import firebaseConfig from "../firebase-applet-config.json";
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore Database (Connects to the newly created default Asia database)
+// Initialize Firestore Database (Connects to the default Firestore database of the project)
 export const db = getFirestore(app);
 
 // Initialize Firebase Auth

@@ -3,10 +3,6 @@
   "appId": "1:152766748144:web:9dde088aa05c78ef9bb935",
   "apiKey": "AIzaSyB8USffEJAKEwW2xoDsSrxbumejRDhtidk",
   "authDomain": "gen-lang-client-0513654546.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-opendesh-b9c2f9a7-ce0f-4767-b144-4219a6b13de6",
   "storageBucket": "gen-lang-client-0513654546.firebasestorage.app",
-  "messagingSenderId": "152766748144",
-  "measurementId": "",
-  "oAuthClientId": "152766748144-0jjajlvkiqafifvvnt7401t4s3jd978f.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "messagingSenderId": "152766748144"
 }

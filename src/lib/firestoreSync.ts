@@ -24,7 +24,6 @@ import {
   BudgetHierarchyNode,
 } from "../types";
 import { REAL_INDIAN_BUDGET_DATA } from "../data/realBudgetData";
-import { INITIAL_USERS } from "../data/seedData";
 
 // Helper to sanitize Firestore documents
 function sanitizeData<T>(data: T): any {
@@ -173,6 +172,17 @@ export async function updateReportRepliesInFirestore(reportId: string, replies: 
 // 8. Submit Voter Review for a Leader in Firestore
 export async function submitLeaderReviewInFirestore(leaderId: string, review: UserReview): Promise<void> {
   try {
+    // 1. Save to dedicated 'reviews' collection
+    const reviewDocRef = doc(db, "reviews", review.id || `rev_${Date.now()}`);
+    await setDoc(reviewDocRef, {
+      ...sanitizeData(review),
+      targetId: leaderId,
+      targetType: "representative",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }, { merge: true });
+
+    // 2. Also update leader document with review & increment count
     const leadDoc = doc(db, "leaders", leaderId);
     await updateDoc(leadDoc, {
       reviewsCount: increment(1),
@@ -183,9 +193,20 @@ export async function submitLeaderReviewInFirestore(leaderId: string, review: Us
   }
 }
 
-// 8b. Submit User / Business Review to Firestore users collection
-export async function submitUserReviewInFirestore(userId: string, review: UserReview): Promise<void> {
+// 8b. Submit User / Business / Department Review to Firestore
+export async function submitUserReviewInFirestore(userId: string, review: UserReview, targetType: string = "profile"): Promise<void> {
   try {
+    // 1. Save to dedicated 'reviews' collection
+    const reviewDocRef = doc(db, "reviews", review.id || `rev_${Date.now()}`);
+    await setDoc(reviewDocRef, {
+      ...sanitizeData(review),
+      targetId: userId,
+      targetType,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }, { merge: true });
+
+    // 2. Also update user document with review & increment count
     const userDocRef = doc(db, "users", userId);
     await updateDoc(userDocRef, {
       reviewsCount: increment(1),
@@ -194,6 +215,74 @@ export async function submitUserReviewInFirestore(userId: string, review: UserRe
   } catch (err) {
     console.warn("Firestore user review notice:", err);
   }
+}
+
+// 8c. Save 100-Point Performance Score & 5 Pillars to dedicated 'performance_scores' collection
+export async function savePerformanceScoreInFirestore(
+  targetId: string,
+  systemScore: number,
+  criteria: Array<{
+    label: string;
+    weight: number;
+    scoreAwarded: number;
+    description: string;
+    publicSource: string;
+    sourceUrl?: string;
+    sourceType?: string;
+  }>,
+  metadata?: {
+    category?: string;
+    constituency?: string;
+    department?: string;
+    title?: string;
+  }
+): Promise<void> {
+  try {
+    const scoreDocRef = doc(db, "performance_scores", targetId);
+    const payload = {
+      targetId,
+      systemScore,
+      pillars: {
+        slaRedressal: criteria[0] || null,
+        fundUtilization: criteria[1] || null,
+        legislativeParticipation: criteria[2] || null,
+        groundAudit: criteria[3] || null,
+        citizenTrust: criteria[4] || null,
+      },
+      criteria: sanitizeData(criteria),
+      metadata: metadata ? sanitizeData(metadata) : {},
+      algorithmVersion: "100-Point Civic SLA Index v2.5",
+      updatedAt: Date.now(),
+    };
+    await setDoc(scoreDocRef, payload, { merge: true });
+
+    // Also update parent profile summary
+    const userDocRef = doc(db, "users", targetId);
+    await setDoc(userDocRef, {
+      systemScore,
+      systemScoreBreakdown: {
+        algorithmVersion: "100-Point Civic SLA Index v2.5",
+        lastCalculated: new Date().toISOString(),
+        criteria: sanitizeData(criteria),
+      },
+    }, { merge: true });
+  } catch (err) {
+    console.warn("Firestore performance score save notice:", err);
+  }
+}
+
+// 8d. Fetch 100-Point Performance Score from 'performance_scores' collection
+export async function fetchPerformanceScoreFromFirestore(targetId: string): Promise<any | null> {
+  try {
+    const scoreDocRef = doc(db, "performance_scores", targetId);
+    const docSnap = await getDoc(scoreDocRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (err) {
+    console.warn("Firestore fetch score notice:", err);
+  }
+  return null;
 }
 
 // 9. Update Report Official Action Status in Firestore
@@ -257,30 +346,6 @@ export interface RegisteredAuthority {
 
 export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthority[]> {
   const authoritiesMap = new Map<string, RegisteredAuthority>();
-  const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
-
-  Object.values(INITIAL_USERS).forEach((u) => {
-    if (u && (u.category === "department" || u.category === "representative" || u.verified)) {
-      const uname = u.username?.toLowerCase().replace(/^@/, "");
-      if (uname) {
-        authoritiesMap.set(uname, {
-          id: u.id,
-          username: u.username.replace(/^@/, ""),
-          fullName: u.fullName,
-          avatarUrl: u.avatarUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=120&auto=format&fit=crop&q=80",
-          category: u.category || "department",
-          role: u.departmentDetails?.designation || u.representativeDetails?.position || (u.category === "department" ? "Police / Govt Dept" : "Citizen"),
-          badge: u.departmentDetails?.officialBadge || u.representativeDetails?.party || "Official HQ",
-          departmentCode: u.departmentDetails?.departmentCode,
-          party: u.representativeDetails?.party,
-          verified: u.verified ?? true,
-          location: u.location,
-          jurisdictionRegion: u.departmentDetails?.jurisdictionRegion,
-          constituency: u.representativeDetails?.constituency,
-        });
-      }
-    }
-  });
 
   try {
     const usersRef = collection(db, "users");
@@ -289,8 +354,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
       const data = docSnap.data() as UserProfile;
       if (data) {
         const uid = data.id || docSnap.id;
-        const isPolice = validPoliceIds.has(uid);
-        const isOfficial = (data.category === "department" && isPolice) || (data.category === "representative" && !uid.startsWith("lead_")) || data.verified;
+        const isOfficial = data.category === "department" || data.category === "representative" || data.verified;
         
         if (isOfficial) {
           const uname = data.username?.toLowerCase().replace(/^@/, "");
@@ -298,7 +362,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
             authoritiesMap.set(uname, {
               id: uid,
               username: data.username.replace(/^@/, ""),
-              fullName: data.fullName,
+              fullName: data.fullName || data.username,
               avatarUrl: data.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
               category: data.category || "citizen",
               role: data.departmentDetails?.designation || data.representativeDetails?.position || (data.category === "department" ? "Govt Dept" : "Citizen"),
@@ -319,7 +383,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
     const leaderSnaps = await getDocs(leadersRef);
     leaderSnaps.forEach((docSnap) => {
       const l = docSnap.data() as Leader;
-      if (l && l.username && !l.id.startsWith("lead_")) {
+      if (l && l.username) {
         const uname = l.username.toLowerCase().replace(/^@/, "");
         authoritiesMap.set(uname, {
           id: l.id || docSnap.id,
@@ -330,7 +394,7 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
           role: l.title,
           badge: l.party,
           party: l.party,
-          verified: true,
+          verified: Boolean(l.verified !== false),
           location: l.location,
           constituency: l.constituency,
         });
@@ -343,97 +407,14 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
   return Array.from(authoritiesMap.values());
 }
 
-// 11b. Seed police profiles safely to Firestore
+// 11b. Seeder disabled - Data is strictly preserved as-is in Firestore
 export async function seedPoliceProfilesToFirestore(): Promise<void> {
-  try {
-    const departmentProfiles = Object.values(INITIAL_USERS).filter(
-      (u) => u.category === "department" && u.id.startsWith("user_")
-    );
-    const writePromises = departmentProfiles.map(async (profile) => {
-      const userRef = doc(db, "users", profile.id);
-      const sanitized = sanitizeData({
-        ...profile,
-        updatedAt: new Date().toISOString(),
-      });
-      return setDoc(userRef, sanitized, { merge: true });
-    });
-    await Promise.all(writePromises);
-  } catch (err) {
-    console.warn("Firestore police profiles seed notice:", err);
-  }
+  return;
 }
 
-// 11c. Purge old mock data from Firestore
+// 11c. Purge disabled - User/Admin Firestore data is never deleted or rewritten
 export async function purgeOldMockDataFromFirestore(): Promise<void> {
-  try {
-    const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
-
-    const leadersRef = collection(db, "leaders");
-    const leaderSnaps = await getDocs(leadersRef);
-    leaderSnaps.forEach(async (d) => {
-      try {
-        await deleteDoc(doc(db, "leaders", d.id));
-      } catch (e) {
-        console.warn("Error deleting legacy leader:", d.id, e);
-      }
-    });
-
-    const usersRef = collection(db, "users");
-    const userSnaps = await getDocs(usersRef);
-    userSnaps.forEach(async (d) => {
-      const id = d.id;
-      const data = d.data() as any;
-      const name = (data.fullName || data.name || "").toLowerCase();
-      const username = (data.username || "").toLowerCase();
-      const category = (data.category || "").toLowerCase();
-      const isPolice = validPoliceIds.has(id);
-
-      const isUnapprovedDept = category === "department" && !isPolice;
-      const isLegacyMock =
-        id.startsWith("lead_") ||
-        id.startsWith("dept_") ||
-        id === "guest_citizen" ||
-        category === "contractor" ||
-        name.includes("gurugram") ||
-        name.includes("bijli") ||
-        name.includes("jharkhand bijli") ||
-        name.includes("jbvnl") ||
-        name.includes("gmda") ||
-        name.includes("rajesh") ||
-        name.includes("afcons") ||
-        name.includes("wabag") ||
-        name.includes("contractor") ||
-        name.includes("rahul tiwari") ||
-        name.includes("national highway") ||
-        name.includes("nhai") ||
-        username.includes("gmda") ||
-        username.includes("jbvnl") ||
-        username.includes("rahul") ||
-        username.includes("rajesh") ||
-        (id.startsWith("user_") && !isPolice);
-
-      if (!isPolice && (isUnapprovedDept || isLegacyMock)) {
-        try {
-          await deleteDoc(doc(db, "users", id));
-          console.log("Purged unauthorized dummy document from Firestore users:", id, name);
-        } catch (e) {
-          console.warn("Error deleting legacy mock user:", id, e);
-        }
-      }
-    });
-
-    const infraRef = collection(db, "infrastructure");
-    const infraSnaps = await getDocs(infraRef);
-    infraSnaps.forEach(async (d) => {
-      try {
-        await deleteDoc(doc(db, "infrastructure", d.id));
-      } catch (e) {
-        console.warn("Error deleting legacy mock infra:", d.id, e);
-      }
-    });
-  } catch (err) {
-    console.warn("Purge old mock data notice:", err);
-  }
+  return;
 }
 
 // 12. Check Real-Time Username Uniqueness
@@ -610,7 +591,7 @@ export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
     const budgetRef = collection(db, "budgets");
     const snapshot = await getDocs(budgetRef);
 
-    if (!snapshot.empty && snapshot.docs.length >= REAL_INDIAN_BUDGET_DATA.length) {
+    if (!snapshot.empty) {
       const budgets: BudgetHierarchyNode[] = [];
       snapshot.forEach((docSnap) => {
         budgets.push(docSnap.data() as BudgetHierarchyNode);
@@ -618,7 +599,7 @@ export async function getBudgetsDirect(): Promise<BudgetHierarchyNode[]> {
       return budgets;
     }
 
-    return await seedRealBudgetsToFirestore();
+    return REAL_INDIAN_BUDGET_DATA;
   } catch (err) {
     console.warn("Firestore budgets fetch notice, using verified real dataset:", err);
     return REAL_INDIAN_BUDGET_DATA;

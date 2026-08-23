@@ -256,6 +256,7 @@ export interface Leader {
   keyFocus: string[];
   recentPromises: PromiseItem[];
   reviews: UserReview[];
+  verified?: boolean;
   isFollowing?: boolean;
   followersCount?: number;
   followers?: string[];

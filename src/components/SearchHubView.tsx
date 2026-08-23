@@ -36,7 +36,6 @@ import {
 import { db } from "../firebase.ts";
 import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
-import { INITIAL_USERS } from "../data/seedData.ts";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -117,13 +116,6 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       const userMap = new Map<string, UserProfile>();
       const leaderMap = new Map<string, Leader>();
       const reportMap = new Map<string, ReportIssue>();
-
-      // 0. Seed baseline verified departments and profiles from INITIAL_USERS
-      Object.values(INITIAL_USERS).forEach((u) => {
-        if (u && u.id) {
-          userMap.set(u.id.toLowerCase(), u);
-        }
-      });
 
       // Fetch users from Firestore
       try {
@@ -265,10 +257,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     }> = [];
 
     const seenIds = new Set<string>();
-    const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
 
     dbUsers.forEach((u) => {
-      if (u.category === "department" && validPoliceIds.has(u.id)) {
+      if (u.category === "department") {
         const uId = u.id.toLowerCase();
         if (!seenIds.has(uId)) {
           seenIds.add(uId);
@@ -314,9 +305,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             positionTitle: title,
             departmentName: deptName,
             jurisdiction: jurisdiction,
-            slaSolvedCount: deptDetails?.resolvedTickets || 120,
-            systemScore: u.systemScore || 91,
-            publicRating: u.publicRating || 4.7,
+            slaSolvedCount: deptDetails?.resolvedTickets || 0,
+            systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
+            publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
             bio: u.bio,
             proximityScore: proximityScore,
           });
@@ -350,10 +341,10 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
     const seenIds = new Set<string>();
 
-    // From Leaders Collection (excluding dummy seed records)
+    // From Leaders Collection
     dbLeaders.forEach((l) => {
       const lid = l.id.toLowerCase();
-      if (!lid.startsWith("lead_") && !seenIds.has(lid)) {
+      if (!seenIds.has(lid)) {
         seenIds.add(lid);
 
         const isVerified = Boolean(l.verified !== false);
@@ -384,8 +375,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
           positionTitle: l.title || "Elected Representative",
           party: l.party || "Public Official",
           constituency: l.constituency || l.location || "Constituency",
-          systemScore: l.systemScore || 85,
-          publicRating: l.publicRating || 4.5,
+          systemScore: typeof l.systemScore === "number" ? l.systemScore : 0,
+          publicRating: typeof l.publicRating === "number" ? l.publicRating : 0,
           bio: l.bio,
           proximityScore: proximityScore,
           originalLeader: l,
@@ -393,9 +384,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       }
     });
 
-    // From Users with representative category (excluding dummy seed records)
+    // From Users with representative category
     dbUsers.forEach((u) => {
-      if (u.category === "representative" && !u.id.startsWith("lead_")) {
+      if (u.category === "representative") {
         const uid = u.id.toLowerCase();
         if (!seenIds.has(uid)) {
           seenIds.add(uid);
@@ -429,7 +420,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             positionTitle: repDetails?.position || "Elected Representative",
             party: repDetails?.party || "Official",
             constituency: constituency,
-            systemScore: u.systemScore || 84,
+            systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
             publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
             bio: u.bio,
             proximityScore: proximityScore,
@@ -447,27 +438,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
     return dbUsers
       .filter((u) => {
         const cat = u.category || "citizen";
-        const name = (u.fullName || "").toLowerCase();
-        const username = (u.username || "").toLowerCase();
-        const isDummy =
-          u.id === "guest_citizen" ||
-          u.id.startsWith("lead_") ||
-          u.id.startsWith("dept_") ||
-          cat === "contractor" ||
-          name.includes("rahul tiwari") ||
-          name.includes("rajesh") ||
-          name.includes("contractor") ||
-          name.includes("afcons") ||
-          name.includes("wabag") ||
-          name.includes("gurugram") ||
-          name.includes("bijli") ||
-          name.includes("jbvnl") ||
-          name.includes("gmda") ||
-          username.includes("rahul") ||
-          username.includes("rajesh") ||
-          username.includes("gmda") ||
-          username.includes("jbvnl");
-        return (cat === "citizen" || cat === "business") && !isDummy;
+        const isGuest = u.id === "guest_citizen";
+        return (cat === "citizen" || cat === "business") && !isGuest;
       })
       .filter((u) => {
         const isVerified = Boolean(u.verified === true || u.verificationStatus === "approved");

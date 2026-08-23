@@ -10,7 +10,6 @@ import { Leader, UserProfile, UserCategory } from "../types.ts";
 import { db } from "../firebase.ts";
 import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
-import { INITIAL_USERS } from "../data/seedData.ts";
 
 interface ConnectHubViewProps {
   userProfile: UserProfile;
@@ -50,13 +49,6 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
       setLoading(true);
       const userMap = new Map<string, UserProfile>();
       const leaderMap = new Map<string, Leader>();
-
-      // 0. Seed baseline departments and verified entities from INITIAL_USERS
-      Object.values(INITIAL_USERS).forEach((u) => {
-        if (u && u.id) {
-          userMap.set(u.id.toLowerCase(), u);
-        }
-      });
 
       // 1. Load Firestore "users" collection (Strict Real DB)
       try {
@@ -170,27 +162,8 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     return dbUsers
       .filter((u) => {
         const cat = u.category || "citizen";
-        const name = (u.fullName || "").toLowerCase();
-        const username = (u.username || "").toLowerCase();
-        const isDummy =
-          u.id === "guest_citizen" ||
-          u.id.startsWith("lead_") ||
-          u.id.startsWith("dept_") ||
-          cat === "contractor" ||
-          name.includes("rahul tiwari") ||
-          name.includes("rajesh") ||
-          name.includes("contractor") ||
-          name.includes("afcons") ||
-          name.includes("wabag") ||
-          name.includes("gurugram") ||
-          name.includes("bijli") ||
-          name.includes("jbvnl") ||
-          name.includes("gmda") ||
-          username.includes("rahul") ||
-          username.includes("rajesh") ||
-          username.includes("gmda") ||
-          username.includes("jbvnl");
-        return (cat === "citizen" || cat === "business") && !isDummy;
+        const isGuest = u.id === "guest_citizen";
+        return (cat === "citizen" || cat === "business") && !isGuest;
       });
   }, [dbUsers]);
 
@@ -215,13 +188,12 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     }> = [];
 
     const seenIdentifiers = new Set<string>();
-    const validPoliceIds = new Set(Object.keys(INITIAL_USERS));
 
-    // 1. Representatives from Firestore `leaders` collection (exclude dummy seed IDs)
+    // 1. Representatives from Firestore `leaders` collection
     dbLeaders.forEach((l) => {
       const normId = l.id.toLowerCase();
       const normUser = (l.username || "").toLowerCase().replace(/^@+/, "");
-      if (!normId.startsWith("lead_") && !seenIdentifiers.has(normId) && !seenIdentifiers.has(normUser)) {
+      if (!seenIdentifiers.has(normId) && (!normUser || !seenIdentifiers.has(normUser))) {
         seenIdentifiers.add(normId);
         if (normUser) seenIdentifiers.add(normUser);
 
@@ -245,8 +217,8 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
           verified: isVerified,
           positionTitle: l.title || "Elected Representative",
           partyOrDept: l.party,
-          systemScore: l.systemScore || 85,
-          publicRating: l.publicRating || 4.5,
+          systemScore: typeof l.systemScore === "number" ? l.systemScore : 0,
+          publicRating: typeof l.publicRating === "number" ? l.publicRating : 0,
           metricLabel: "Active Term",
           metricValue: "2024-2029",
           originalLeader: l,
@@ -258,14 +230,13 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     dbUsers.forEach((u) => {
       const uId = u.id.toLowerCase();
       const uName = (u.username || "").toLowerCase().replace(/^@+/, "");
-      const isPoliceDept = u.category === "department" && validPoliceIds.has(u.id);
-      const isRealRep = u.category === "representative" && !u.id.startsWith("lead_");
+      const isDept = u.category === "department";
+      const isRep = u.category === "representative";
 
-      if ((isPoliceDept || isRealRep) && !seenIdentifiers.has(uId) && !seenIdentifiers.has(uName)) {
+      if ((isDept || isRep) && !seenIdentifiers.has(uId) && (!uName || !seenIdentifiers.has(uName))) {
         seenIdentifiers.add(uId);
         if (uName) seenIdentifiers.add(uName);
 
-        const isDept = u.category === "department";
         const isUserVerified = Boolean(
           u.verified === true || u.verificationStatus === "approved"
         );
@@ -276,7 +247,9 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
           username: uName,
           avatarUrl:
             u.avatarUrl ||
-            "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=400&auto=format&fit=crop&q=80",
+            (isDept
+              ? "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=400&auto=format&fit=crop&q=80"
+              : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"),
           bio:
             u.bio ||
             (isDept ? "Official Government Department" : "Elected Representative"),
@@ -284,7 +257,7 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
             (isDept
               ? u.departmentDetails?.jurisdictionRegion
               : u.representativeDetails?.constituency) ||
-            u.location,
+              u.location,
           category: u.category,
           verified: isUserVerified,
           positionTitle: isDept
@@ -293,11 +266,11 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
           partyOrDept: isDept
             ? u.departmentDetails?.name
             : u.representativeDetails?.party,
-          systemScore: u.systemScore || (isDept ? 91 : 84),
+          systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
           publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
           metricLabel: isDept ? "SLA Solved" : "Active Term",
           metricValue: isDept
-            ? `${u.departmentDetails?.resolvedTickets || 100}+`
+            ? `${u.departmentDetails?.resolvedTickets || 0}`
             : "2024-2029",
         });
       }
