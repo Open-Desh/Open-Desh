@@ -2,8 +2,6 @@ import React from "react";
 import {
   User,
   IndianRupee,
-  TrendingUp,
-  Building2,
   Bookmark,
   Settings,
   HelpCircle,
@@ -14,8 +12,6 @@ import {
   LogIn,
   LogOut,
   Languages,
-  Bell,
-  Users,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
@@ -83,7 +79,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: "profile", label: t("nav.profile", "Profile"), icon: User },
     { id: "budget", label: t("nav.budget", "Budget"), icon: IndianRupee },
-    { id: "infrastructure", label: t("nav.infrastructure", "Infrastructure"), icon: Building2 },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
     {

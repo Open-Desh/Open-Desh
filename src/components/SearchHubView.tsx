@@ -293,6 +293,40 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             if (!matchesQuery) return;
           }
 
+          const hasBreakdown = Boolean(
+            u.systemScoreBreakdown?.criteria &&
+            Array.isArray(u.systemScoreBreakdown.criteria) &&
+            u.systemScoreBreakdown.criteria.length > 0
+          );
+          const validatedSystemScore = hasBreakdown && typeof u.systemScore === "number" ? u.systemScore : 0;
+
+          // Calculate real solved count strictly from database reports
+          const normUId = u.id.toLowerCase();
+          const normUName = (u.username || "").toLowerCase().replace(/^@+/, "");
+          const normUFullName = u.fullName.toLowerCase();
+
+          const realSolvedCount = (reports || []).filter((r) => {
+            const status = (r.status || "").toLowerCase();
+            const auditLvl = (r.auditLevel || "").toLowerCase();
+            const isResolved =
+              status === "resolved" ||
+              auditLvl.includes("resolved") ||
+              auditLvl.includes("verified closed") ||
+              Boolean(r.resolvedImageUrl);
+            if (!isResolved) return false;
+
+            const isAuthor = (r.authorId && r.authorId.toLowerCase() === normUId) ||
+              (r.authorUsername && r.authorUsername.toLowerCase().replace(/^@+/, "") === normUName);
+            const isTagged = Array.isArray(r.taggedAuthorities) && r.taggedAuthorities.some((ta) => {
+              const cleanTa = ta.toLowerCase().replace(/^@+/, "");
+              return cleanTa === normUName || cleanTa === normUId || (normUName && cleanTa.includes(normUName));
+            });
+            const isClaimedDept = r.claimedByDept && (normUFullName.includes(r.claimedByDept.toLowerCase()) || r.claimedByDept.toLowerCase().includes(normUFullName));
+            const isClaimedOfficer = r.claimedByOfficer && (normUFullName.includes(r.claimedByOfficer.toLowerCase()) || r.claimedByOfficer.toLowerCase().includes(normUFullName));
+
+            return isAuthor || isTagged || isClaimedDept || isClaimedOfficer;
+          }).length;
+
           list.push({
             id: u.id,
             fullName: u.fullName,
@@ -305,8 +339,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             positionTitle: title,
             departmentName: deptName,
             jurisdiction: jurisdiction,
-            slaSolvedCount: deptDetails?.resolvedTickets || 0,
-            systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
+            slaSolvedCount: realSolvedCount,
+            systemScore: validatedSystemScore,
             publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
             bio: u.bio,
             proximityScore: proximityScore,
@@ -317,7 +351,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
     // Sort by proximity score descending, then by SLA/rating
     return list.sort((a, b) => b.proximityScore - a.proximityScore || b.systemScore - a.systemScore);
-  }, [dbUsers, query, isNearMeOnly, selectedDeptCategory, verifiedOnly, locationTokens]);
+  }, [dbUsers, reports, query, isNearMeOnly, selectedDeptCategory, verifiedOnly, locationTokens]);
 
   // 3. Leader Profiles (Elected Representatives & Real Officials)
   const leaderProfiles = useMemo(() => {
@@ -363,6 +397,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
           if (!matchesQuery) return;
         }
 
+        const hasBreakdown = Boolean(
+          l.systemScoreBreakdown?.criteria &&
+          Array.isArray(l.systemScoreBreakdown.criteria) &&
+          l.systemScoreBreakdown.criteria.length > 0
+        );
+        const validatedSystemScore = hasBreakdown && typeof l.systemScore === "number" ? l.systemScore : 0;
+
         list.push({
           id: l.id,
           fullName: l.name,
@@ -375,7 +416,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
           positionTitle: l.title || "Elected Representative",
           party: l.party || "Public Official",
           constituency: l.constituency || l.location || "Constituency",
-          systemScore: typeof l.systemScore === "number" ? l.systemScore : 0,
+          systemScore: validatedSystemScore,
           publicRating: typeof l.publicRating === "number" ? l.publicRating : 0,
           bio: l.bio,
           proximityScore: proximityScore,
@@ -408,6 +449,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             if (!matchesQuery) return;
           }
 
+          const hasBreakdown = Boolean(
+            u.systemScoreBreakdown?.criteria &&
+            Array.isArray(u.systemScoreBreakdown.criteria) &&
+            u.systemScoreBreakdown.criteria.length > 0
+          );
+          const validatedSystemScore = hasBreakdown && typeof u.systemScore === "number" ? u.systemScore : 0;
+
           list.push({
             id: u.id,
             fullName: u.fullName,
@@ -420,7 +468,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             positionTitle: repDetails?.position || "Elected Representative",
             party: repDetails?.party || "Official",
             constituency: constituency,
-            systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
+            systemScore: validatedSystemScore,
             publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
             bio: u.bio,
             proximityScore: proximityScore,

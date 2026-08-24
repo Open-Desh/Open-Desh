@@ -335,13 +335,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimSuccess, setClaimSuccess] = useState(false);
 
-  // Check if this profile is an official system profile eligible for claim
+  // Effective profile claim status
+  const isProfileActuallyClaimed = Boolean(
+    userProfile.isClaimed ||
+    userProfile.claimedAt ||
+    userProfile.claimedByOfficerName ||
+    userProfile.claimedByEmail ||
+    isOwnProfile
+  );
+
+  // Check if this profile is an official/system profile eligible for claim
   const isClaimableProfile = Boolean(
     !isOwnProfile &&
-    !userProfile.isClaimed &&
-    (userProfile.isClaimable === true ||
-      (userProfile.category === "department" &&
-        (userProfile.id?.startsWith("user_") || userProfile.id?.startsWith("dept_"))))
+    !isProfileActuallyClaimed &&
+    (userProfile.isClaimable !== false) &&
+    (userProfile.category === "department" ||
+      userProfile.category === "representative" ||
+      userProfile.id?.startsWith("user_") ||
+      userProfile.id?.startsWith("dept_") ||
+      userProfile.id?.startsWith("rep_"))
   );
 
   const handleClaimSubmit = async (e: React.FormEvent) => {
@@ -696,8 +708,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             />
           )}
 
-          {/* Secondary Rate Action (Representative, Department or Business) */}
+          {/* Secondary Rate Action (ONLY visible when profile is claimed or verified to prevent unverified evaluation) */}
           {!isOwnProfile &&
+            isProfileActuallyClaimed &&
             (userProfile.category === "representative" ||
               userProfile.category === "department" ||
               userProfile.category === "business") && (
@@ -715,11 +728,59 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </span>
               </button>
             )}
+
+          {/* Claim Profile Action Button (When profile is unverified / unclaimed) */}
+          {isClaimableProfile && (
+            <button
+              onClick={() => {
+                setClaimError(null);
+                setClaimSuccess(false);
+                setShowClaimModal(true);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Claim Handle</span>
+            </button>
+          )}
         </div>
+
+        {/* Unclaimed & Unofficial Statutory Disclaimer Banner */}
+        {isClaimableProfile && (
+          <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 sm:p-3.5 flex items-start gap-3 text-amber-900 shadow-2xs animate-fadeIn">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-800">
+                  Unclaimed Official Directory Index
+                </span>
+                <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-md">
+                  Awaiting Verification
+                </span>
+              </div>
+              <p className="text-xs text-amber-800/90 font-medium leading-relaxed">
+                This handle is an indexing entry created for civic grievance tagging and is not yet managed by the authorized nodal officer. Citizen ratings and audits will activate once claimed.
+              </p>
+              <div className="pt-1">
+                <button
+                  onClick={() => {
+                    setClaimError(null);
+                    setClaimSuccess(false);
+                    setShowClaimModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-black text-amber-900 hover:text-amber-950 underline underline-offset-2 cursor-pointer"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Are you the official authority? Claim & verify this handle →</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bio & Details Section */}
         <div className="space-y-1.5">
-          <p className="text-xs sm:text-sm text-slate-800 font-normal leading-relaxed">
+          <p className="text-[16px] sm:text-[18px] text-slate-800 font-normal leading-relaxed">
             {userProfile.bio ||
               (userProfile.category === "representative"
                 ? "Public Representative & Civic Tech Advocate working for urban transparency and infrastructural acceleration in Jharkhand."
@@ -764,22 +825,34 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* 3. Performance Scorecard Card (Rendered for Representative & Department only) */}
-        {isLeadershipOrDept && (
+        {/* 3. Performance Scorecard Card (Rendered for Representative & Department ONLY when claimed) */}
+        {isLeadershipOrDept && isProfileActuallyClaimed && (
           <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 grid grid-cols-3 divide-x divide-slate-200 shadow-2xs">
             {/* System Score */}
-            <div
-              onClick={() => setEvaluationViewTab("score")}
-              className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
-              title="View 100-Pt Algorithm Breakdown"
-            >
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-blue-600 transition-colors">
-                SYSTEM SCORE
-              </span>
-              <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
-                {typeof userProfile.systemScore === "number" ? userProfile.systemScore : (userProfile.systemScore || 0)}
-              </span>
-            </div>
+            {(() => {
+              const hasBreakdown =
+                userProfile.systemScoreBreakdown?.criteria &&
+                Array.isArray(userProfile.systemScoreBreakdown.criteria) &&
+                userProfile.systemScoreBreakdown.criteria.length > 0;
+              const displayScore = hasBreakdown && typeof userProfile.systemScore === "number"
+                ? userProfile.systemScore
+                : 0;
+
+              return (
+                <div
+                  onClick={() => setEvaluationViewTab("score")}
+                  className="px-2 text-center cursor-pointer hover:bg-slate-100/70 rounded-xl transition-colors py-1 group"
+                  title="View 100-Pt Algorithm Breakdown"
+                >
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block mb-0.5 group-hover:text-blue-600 transition-colors">
+                    SYSTEM SCORE
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-blue-600 block leading-tight">
+                    {displayScore}
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Public Rating */}
             <div
@@ -1381,75 +1454,73 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {activeTab === "Performance" && (
           <div className="p-4 sm:p-5 space-y-4 animate-fadeIn">
             {/* Scorecard Banner */}
-            <div
-              onClick={() => setEvaluationViewTab("score")}
-              className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-3xl cursor-pointer hover:shadow-lg transition-all space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-blue-100">
-                  Civic Performance Score
-                </span>
-                <span className="text-2xl font-black">{typeof userProfile.systemScore === "number" ? userProfile.systemScore : (userProfile.systemScore || 0)}/100</span>
-              </div>
-              <p className="text-xs text-blue-100 font-normal">
-                Click here to view transparent 100-point algorithm, CAG audits, and legislative floor attendance.
-              </p>
-            </div>
+            {(() => {
+              const hasBreakdown =
+                userProfile.systemScoreBreakdown?.criteria &&
+                Array.isArray(userProfile.systemScoreBreakdown.criteria) &&
+                userProfile.systemScoreBreakdown.criteria.length > 0;
+              const displayScore = hasBreakdown && typeof userProfile.systemScore === "number"
+                ? userProfile.systemScore
+                : 0;
+
+              return (
+                <div
+                  onClick={() => setEvaluationViewTab("score")}
+                  className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-3xl cursor-pointer hover:shadow-lg transition-all space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-blue-100">
+                      Civic Performance Score
+                    </span>
+                    <span className="text-2xl font-black">{displayScore}/100</span>
+                  </div>
+                  <p className="text-xs text-blue-100 font-normal">
+                    {hasBreakdown
+                      ? "Verified 100-point algorithm and CAG audits loaded from database."
+                      : "Awaiting audit log records in database. Click to view 100-point audit framework."}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Performance Indicators */}
-            <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200/90 space-y-4">
-              <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider">
-                Constituency Delivery Matrix (FY 2025-2026)
-              </h4>
-
-              {/* Metric 1 */}
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800">
-                    Legislative Attendance (Vidhan Sabha Hansard)
-                  </span>
-                  <span className="font-black text-blue-600">92%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 rounded-full"
-                    style={{ width: "92%" }}
-                  ></div>
-                </div>
+            {userProfile.systemScoreBreakdown?.criteria &&
+            Array.isArray(userProfile.systemScoreBreakdown.criteria) &&
+            userProfile.systemScoreBreakdown.criteria.length > 0 ? (
+              <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200/90 space-y-4">
+                <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider">
+                  Constituency Delivery Matrix (Audit Verified)
+                </h4>
+                {userProfile.systemScoreBreakdown.criteria.map((crit, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-800">{crit.label}</span>
+                      <span className="font-black text-blue-600">
+                        {crit.scoreAwarded} / {crit.weight} pts
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-600 rounded-full"
+                        style={{
+                          width: `${Math.min(100, (crit.scoreAwarded / (crit.weight || 1)) * 100)}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Metric 2 */}
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800">
-                    Grievance SLA Compliance (24-hr Turnaround)
-                  </span>
-                  <span className="font-black text-emerald-600">89.4%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-600 rounded-full"
-                    style={{ width: "89.4%" }}
-                  ></div>
-                </div>
+            ) : (
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200/90 text-center space-y-2">
+                <Award className="w-8 h-8 text-slate-400 mx-auto" />
+                <h4 className="text-sm font-black text-slate-800">
+                  Audit Records Awaiting Filing
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Official statutory SLA logs, CAG financial audit records, and Hansard floor attendance will be listed here once recorded.
+                </p>
               </div>
-
-              {/* Metric 3 */}
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800">
-                    Constituency Fund (MLALAD) Allocation Utilized
-                  </span>
-                  <span className="font-black text-indigo-600">₹4.2 Cr / ₹5.0 Cr (84%)</span>
-                </div>
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-600 rounded-full"
-                    style={{ width: "84%" }}
-                  ></div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
 

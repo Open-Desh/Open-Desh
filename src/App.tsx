@@ -4,7 +4,6 @@ import { Header } from "./components/Header.tsx";
 import { BottomNav } from "./components/BottomNav.tsx";
 import { FeedView } from "./components/FeedView.tsx";
 import { HelpView } from "./components/HelpView.tsx";
-import { InfrastructureView } from "./components/InfrastructureView.tsx";
 import { ProfileView } from "./components/ProfileView.tsx";
 import { BookmarksView } from "./components/BookmarksView.tsx";
 import { EnterpriseTelemetryView } from "./components/EnterpriseTelemetryView.tsx";
@@ -36,6 +35,7 @@ import {
   getLeadersDirect,
   getInfrastructureDirect,
   saveReportToFirestore,
+  saveUserProfileToFirestore,
   toggleLikeInFirestore,
   toggleReReportInFirestore,
   addReplyInFirestore,
@@ -306,13 +306,21 @@ export default function App() {
                 (firebaseUser.email
                   ? firebaseUser.email.split("@")[0]
                   : `citizen_${firebaseUser.uid.slice(0, 6)}`),
+              location: savedData.location !== undefined ? savedData.location : (prevProfile.location || "Jharkhand, India"),
+              bio: savedData.bio !== undefined ? savedData.bio : prevProfile.bio,
+              websiteUrl: savedData.websiteUrl !== undefined ? savedData.websiteUrl : prevProfile.websiteUrl,
               avatarUrl: savedData.avatarUrl || firebaseUser.photoURL || prevProfile.avatarUrl,
               verified: isVerified,
               verificationStatus:
                 savedData.verificationStatus || (isVerified ? "approved" : "none"),
-              category: savedData.category || "citizen",
-              age: savedData.age || prevProfile.age,
+              category: savedData.category || prevProfile.category || "citizen",
+              age: savedData.age !== undefined ? savedData.age : prevProfile.age,
               birthDate: (savedData as any).birthDate || prevProfile.birthDate,
+              citizenDetails: savedData.citizenDetails || prevProfile.citizenDetails,
+              representativeDetails: savedData.representativeDetails || prevProfile.representativeDetails,
+              departmentDetails: savedData.departmentDetails || prevProfile.departmentDetails,
+              businessDetails: savedData.businessDetails || prevProfile.businessDetails,
+              services: savedData.services || prevProfile.services,
               joiningDate: existingJoiningDate || prevProfile.joiningDate,
             }));
           } else {
@@ -1005,15 +1013,7 @@ export default function App() {
       });
 
       const uid = currentUser?.uid || userProfile.id;
-      await setDoc(
-        doc(db, "users", uid),
-        {
-          ...updatedProfile,
-          id: uid,
-          lastUpdated: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      await saveUserProfileToFirestore(uid, updatedProfile);
     } catch (err) {
       console.warn("Profile Firestore sync notice:", err);
     }
@@ -1816,6 +1816,7 @@ export default function App() {
             <ConnectHubView
               userProfile={userProfile}
               leaders={leaders}
+              reports={reports}
               onBack={() => navigateTo("dashboard")}
               onSelectUser={handleSelectUserProfile}
               onSelectLeaderProfile={handleSelectLeaderProfile}
@@ -1824,15 +1825,6 @@ export default function App() {
                 await handleRateUser(leaderId, rating, comment);
               }}
               initialTab={currentView === "leader" ? "leaders" : "leaders"}
-            />
-          )}
-
-          {currentView === "infrastructure" && (
-            <InfrastructureView
-              projects={infrastructure}
-              reports={reports}
-              onBack={() => navigateTo("dashboard")}
-              onSelectUser={handleSelectUserProfile}
             />
           )}
 

@@ -104,13 +104,20 @@ export async function saveReportToFirestore(report: ReportIssue): Promise<void> 
   }
 }
 
-// 4b. Save / Update User Profile safely to Firestore ({ merge: true } added)
-export async function saveUserProfileToFirestore(userProfile: UserProfile): Promise<void> {
+// 4b. Save / Update User Profile safely to Firestore ({ merge: true } with deep sanitization)
+export async function saveUserProfileToFirestore(
+  userIdOrProfile: string | UserProfile,
+  profileData?: Partial<UserProfile>
+): Promise<void> {
   try {
-    const userDocRef = doc(db, "users", userProfile.id);
+    const uid = typeof userIdOrProfile === "string" ? userIdOrProfile : userIdOrProfile.id;
+    const dataToSave = typeof userIdOrProfile === "string" ? (profileData || {}) : userIdOrProfile;
+    const userDocRef = doc(db, "users", uid);
     const sanitized = sanitizeData({
-      ...userProfile,
+      ...dataToSave,
+      id: uid,
       updatedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
     });
     await setDoc(userDocRef, sanitized, { merge: true });
   } catch (err) {

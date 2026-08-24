@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, Search, Plus, Building2, Bell } from "lucide-react";
+import { Home, Search, Plus, IndianRupee, Bell } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.tsx";
 
 interface BottomNavProps {
@@ -82,16 +82,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <span className="text-[10px] mt-1">{t("bottom.notifications", "Alerts")}</span>
         </button>
 
-        {/* 5. Infrastructure */}
+        {/* 5. Budget */}
         <button
-          id="bottom-nav-infra"
-          onClick={() => onNavigate("infrastructure")}
+          id="bottom-nav-budget"
+          onClick={() => onNavigate("budget")}
           className={`flex flex-col items-center justify-center flex-1 transition-colors ${
-            currentView === "infrastructure" ? "text-blue-600 font-bold" : "text-slate-500 font-medium"
+            currentView === "budget" ? "text-blue-600 font-bold" : "text-slate-500 font-medium"
           }`}
         >
-          <Building2 className="w-5 h-5" />
-          <span className="text-[10px] mt-1">{t("bottom.infra", "Infra")}</span>
+          <IndianRupee className="w-5 h-5" />
+          <span className="text-[10px] mt-1">{t("bottom.budget", "Budget")}</span>
         </button>
       </div>
     </nav>

@@ -161,9 +161,7 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     ? targetProfile.systemScoreBreakdown!.criteria
     : defaultCriteria;
 
-  const displaySystemScore: number = hasDbScore
-    ? targetProfile.systemScore!
-    : hasDbBreakdown
+  const displaySystemScore: number = hasDbBreakdown
     ? Math.round(criteriaList.reduce((acc, c) => acc + (c.scoreAwarded || 0), 0))
     : 0;
 
@@ -252,6 +250,9 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                 <img
                   src={targetProfile.avatarUrl}
                   alt={targetProfile.fullName}
+                  onError={(e) => {
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80";
+                  }}
                   className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-white/90 shadow-md bg-white"
                   referrerPolicy="no-referrer"
                 />

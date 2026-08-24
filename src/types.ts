@@ -19,6 +19,7 @@ export interface BusinessDetails {
 export interface DepartmentDetails {
   name: string;
   designation?: string;
+  jurisdiction?: string;
   jurisdictionRegion?: string;
   departmentCode?: string;
   officialBadge?: string;
@@ -93,6 +94,7 @@ export interface SystemScoreBreakdown {
 export interface UserProfile {
   id: string;
   fullName: string;
+  name?: string;
   username: string;
   bio: string;
   location: string;
@@ -107,6 +109,8 @@ export interface UserProfile {
   followersCount: number;
   followingCount: number;
   postsCount: number;
+  following?: string[];
+  followers?: string[];
   systemScore: number; // 0 to 100
   publicRating: number; // 0 to 5.0
   reviewsCount: number;
@@ -197,7 +201,11 @@ export interface ReportIssue {
   images?: string[]; // Multiple photos / Cloudflare R2 evidence array
   structuredDetails?: Record<string, string>; // Category-specific structured inputs
   taggedOfficers?: string[];
+  taggedOfficials?: string[];
+  taggedAuthorities?: string[];
   taggedLeaders?: string[];
+  routedDepartment?: string;
+  auditLevel?: string;
   urgencyLevel?: "Normal" | "High Priority" | "Critical Emergency";
   location: LocationGeo;
   timestamp: string;
@@ -256,6 +264,7 @@ export interface Leader {
   keyFocus: string[];
   recentPromises: PromiseItem[];
   reviews: UserReview[];
+  systemScoreBreakdown?: SystemScoreBreakdown;
   verified?: boolean;
   isFollowing?: boolean;
   followersCount?: number;
@@ -301,6 +310,7 @@ export interface EnterpriseScaleMetrics {
   databaseConnections: number;
   queueBacklog: number;
   geminiAiAuditLatencyMs: number;
+  triageLatencyMs?: number;
   regionalNodes: {
     region: string;
     status: "healthy" | "degraded" | "offline";

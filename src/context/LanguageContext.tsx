@@ -61,7 +61,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "bottom.search": "Search",
     "bottom.post": "Post",
     "bottom.leader": "Leader",
-    "bottom.infra": "Infra",
+    "bottom.budget": "Budget",
 
     // Feed & Compose
     "feed.kyaProblem": "What is the problem? (Kya Problem ha?)",
@@ -180,7 +180,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     "bottom.search": "खोजें",
     "bottom.post": "पोस्ट",
     "bottom.leader": "नेता",
-    "bottom.infra": "इन्फ्रा",
+    "bottom.budget": "बजट",
 
     // Feed & Compose
     "feed.kyaProblem": "क्या समस्या है? (Kya Problem ha?)",

@@ -372,6 +372,26 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     setServicesList((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Keep form fields synchronized when userProfile is loaded or updated
+  useEffect(() => {
+    if (userProfile.fullName) setFullName(userProfile.fullName);
+    if (userProfile.username) setUsername(userProfile.username);
+    if (userProfile.location !== undefined) setLocation(userProfile.location);
+    if (userProfile.age !== undefined) setAge(userProfile.age ? String(userProfile.age) : "");
+    if (userProfile.bio !== undefined) setBio(userProfile.bio);
+    if (userProfile.websiteUrl !== undefined) setWebsiteUrl(userProfile.websiteUrl);
+    if (userProfile.avatarUrl) setAvatarUrl(userProfile.avatarUrl);
+    if (userProfile.category) setCategory(userProfile.category);
+    if (userProfile.citizenDetails?.occupation) setOccupation(userProfile.citizenDetails.occupation);
+    if (userProfile.businessDetails?.companyName) setCompanyName(userProfile.businessDetails.companyName);
+    if (userProfile.businessDetails?.industry) setIndustry(userProfile.businessDetails.industry);
+    if (userProfile.representativeDetails?.position) setRepDesignation(userProfile.representativeDetails.position);
+    if (userProfile.representativeDetails?.constituency) setConstituency(userProfile.representativeDetails.constituency);
+    if (userProfile.departmentDetails?.name) setDeptName(userProfile.departmentDetails.name);
+    if (userProfile.departmentDetails?.state) setSelectedState(userProfile.departmentDetails.state);
+    if (userProfile.services && userProfile.services.length > 0) setServicesList(userProfile.services);
+  }, [userProfile.id]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -398,7 +418,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     setSaving(true);
     try {
       const updatedData: Partial<UserProfile> = {
-        fullName: (fullName.trim() || userProfile.fullName).slice(0, 15),
+        fullName: fullName.trim() || userProfile.fullName || "Citizen Resident",
         username: cleanUsername,
         location: location.trim(),
         age: age.trim() ? parseInt(age, 10) : undefined,

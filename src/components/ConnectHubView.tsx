@@ -6,7 +6,7 @@ import {
   MapPin,
   TrendingUp,
 } from "lucide-react";
-import { Leader, UserProfile, UserCategory } from "../types.ts";
+import { Leader, UserProfile, UserCategory, ReportIssue } from "../types.ts";
 import { db } from "../firebase.ts";
 import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
@@ -14,6 +14,7 @@ import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 interface ConnectHubViewProps {
   userProfile: UserProfile;
   leaders: Leader[];
+  reports?: ReportIssue[];
   onBack: () => void;
   onSelectUser: (userId: string) => void;
   onSelectLeaderProfile: (leader: Leader) => void;
@@ -27,6 +28,7 @@ type ConnectTab = "leader" | "public";
 export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
   userProfile,
   leaders,
+  reports = [],
   onBack,
   onSelectUser,
   onSelectLeaderProfile,
@@ -38,10 +40,11 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
   );
   const [dbUsers, setDbUsers] = useState<UserProfile[]>([]);
   const [dbLeaders, setDbLeaders] = useState<Leader[]>(leaders || []);
+  const [dbReports, setDbReports] = useState<ReportIssue[]>(reports || []);
   const [loading, setLoading] = useState(true);
   const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
 
-  // 1. Enterprise Scale: Fetch ONLY real registered profiles from Firestore database
+  // 1. Enterprise Scale: Fetch ONLY real registered profiles & reports from Firestore database
   useEffect(() => {
     let isMounted = true;
 
@@ -49,6 +52,7 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
       setLoading(true);
       const userMap = new Map<string, UserProfile>();
       const leaderMap = new Map<string, Leader>();
+      const fetchedReports: ReportIssue[] = [];
 
       // 1. Load Firestore "users" collection (Strict Real DB)
       try {
@@ -86,6 +90,22 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
         });
       } catch (err) {
         console.warn("Firestore leaders query notice:", err);
+      }
+
+      // 3. Load Firestore "reports" collection to count real resolved civic problems
+      try {
+        const reportsSnap = await getDocs(collection(db, "reports"));
+        reportsSnap.forEach((docSnap) => {
+          const rData = docSnap.data() as ReportIssue;
+          if (rData) {
+            fetchedReports.push({
+              ...rData,
+              id: docSnap.id,
+            });
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore reports query notice:", err);
       }
 
       // Merge any live leaders passed in props if not present
@@ -127,6 +147,9 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
 
         setDbUsers(finalUsers);
         setDbLeaders(finalLeaders);
+        if (fetchedReports.length > 0) {
+          setDbReports(fetchedReports);
+        }
 
         // Follow state map
         const initialFollowMap: Record<string, boolean> = {};
@@ -145,6 +168,13 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     };
   }, [userProfile.id, leaders]);
 
+  // Keep dbReports in sync with props
+  useEffect(() => {
+    if (reports && reports.length > 0) {
+      setDbReports(reports);
+    }
+  }, [reports]);
+
   const handleFollowToggle = (e: React.MouseEvent, targetId: string) => {
     e.stopPropagation();
     setFollowingMap((prev) => ({
@@ -155,6 +185,54 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     if (onToggleFollow) {
       onToggleFollow(targetId);
     }
+  };
+
+  // Helper: Strictly calculate REAL resolved problem count from database reports
+  const getRealSolvedCount = (id: string, username: string, fullName: string) => {
+    const normId = (id || "").toLowerCase();
+    const normUser = (username || "").toLowerCase().replace(/^@+/, "");
+    const normName = (fullName || "").toLowerCase();
+
+    return dbReports.filter((r) => {
+      const status = (r.status || "").toLowerCase();
+      const auditLvl = (r.auditLevel || "").toLowerCase();
+      const isResolved =
+        status === "resolved" ||
+        auditLvl.includes("resolved") ||
+        auditLvl.includes("verified closed") ||
+        Boolean(r.resolvedImageUrl);
+
+      if (!isResolved) return false;
+
+      // Check if tagged / assigned / authored / claimed
+      const isAuthor =
+        (r.authorId && r.authorId.toLowerCase() === normId) ||
+        (r.authorUsername &&
+          r.authorUsername.toLowerCase().replace(/^@+/, "") === normUser);
+
+      const isTagged =
+        Array.isArray(r.taggedAuthorities) &&
+        r.taggedAuthorities.some((ta) => {
+          const cleanTa = ta.toLowerCase().replace(/^@+/, "");
+          return (
+            cleanTa === normUser ||
+            cleanTa === normId ||
+            (normUser && (cleanTa.includes(normUser) || normUser.includes(cleanTa)))
+          );
+        });
+
+      const isClaimedDept =
+        r.claimedByDept &&
+        (normName.includes(r.claimedByDept.toLowerCase()) ||
+          r.claimedByDept.toLowerCase().includes(normName));
+
+      const isClaimedOfficer =
+        r.claimedByOfficer &&
+        (normName.includes(r.claimedByOfficer.toLowerCase()) ||
+          r.claimedByOfficer.toLowerCase().includes(normName));
+
+      return isAuthor || isTagged || isClaimedDept || isClaimedOfficer;
+    }).length;
   };
 
   // Enterprise Deduplication: Public profiles (Real Citizen & Business only)
@@ -200,6 +278,14 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
         // Strict DB verification check
         const isVerified = Boolean(l.verified !== false);
 
+        const hasBreakdown = Boolean(
+          l.systemScoreBreakdown?.criteria &&
+          Array.isArray(l.systemScoreBreakdown.criteria) &&
+          l.systemScoreBreakdown.criteria.length > 0
+        );
+        const validatedSystemScore = hasBreakdown && typeof l.systemScore === "number" ? l.systemScore : 0;
+        const realSolvedCount = getRealSolvedCount(l.id, normUser, l.name);
+
         list.push({
           id: l.id,
           fullName: l.name,
@@ -217,10 +303,10 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
           verified: isVerified,
           positionTitle: l.title || "Elected Representative",
           partyOrDept: l.party,
-          systemScore: typeof l.systemScore === "number" ? l.systemScore : 0,
+          systemScore: validatedSystemScore,
           publicRating: typeof l.publicRating === "number" ? l.publicRating : 0,
-          metricLabel: "Active Term",
-          metricValue: "2024-2029",
+          metricLabel: "SLA Solved",
+          metricValue: `${realSolvedCount}`,
           originalLeader: l,
         });
       }
@@ -240,6 +326,14 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
         const isUserVerified = Boolean(
           u.verified === true || u.verificationStatus === "approved"
         );
+
+        const hasBreakdown = Boolean(
+          u.systemScoreBreakdown?.criteria &&
+          Array.isArray(u.systemScoreBreakdown.criteria) &&
+          u.systemScoreBreakdown.criteria.length > 0
+        );
+        const validatedSystemScore = hasBreakdown && typeof u.systemScore === "number" ? u.systemScore : 0;
+        const realSolvedCount = getRealSolvedCount(u.id, uName, u.fullName);
 
         list.push({
           id: u.id,
@@ -266,18 +360,16 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
           partyOrDept: isDept
             ? u.departmentDetails?.name
             : u.representativeDetails?.party,
-          systemScore: typeof u.systemScore === "number" ? u.systemScore : 0,
+          systemScore: validatedSystemScore,
           publicRating: typeof u.publicRating === "number" ? u.publicRating : 0,
-          metricLabel: isDept ? "SLA Solved" : "Active Term",
-          metricValue: isDept
-            ? `${u.departmentDetails?.resolvedTickets || 0}`
-            : "2024-2029",
+          metricLabel: "SLA Solved",
+          metricValue: `${realSolvedCount}`,
         });
       }
     });
 
     return list;
-  }, [dbLeaders, dbUsers]);
+  }, [dbLeaders, dbUsers, dbReports]);
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
@@ -469,7 +561,7 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                         Public Rating
                       </span>
                       <span className="text-xs sm:text-sm font-black text-slate-900 flex items-center justify-center gap-1 leading-tight mt-0.5 truncate">
-                        {(item.publicRating || 4.2).toFixed(1)}
+                        {(typeof item.publicRating === "number" ? item.publicRating : 0).toFixed(1)}
                         <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
                       </span>
                     </div>
