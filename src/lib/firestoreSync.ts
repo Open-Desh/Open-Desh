@@ -621,7 +621,7 @@ export async function saveBudgetToFirestore(budget: BudgetHierarchyNode): Promis
       ...budget,
       updatedAt: new Date().toISOString(),
     });
-    await setDoc(budgetDoc, sanitized, { merge: true });
+    await setDoc(budgetDoc, sanitized);
   } catch (err) {
     console.warn("Firestore save budget notice:", err);
   }
@@ -636,7 +636,7 @@ export async function seedRealBudgetsToFirestore(): Promise<BudgetHierarchyNode[
         ...budgetNode,
         updatedAt: new Date().toISOString(),
       });
-      return setDoc(budgetDoc, sanitized, { merge: true });
+      return setDoc(budgetDoc, sanitized);
     });
     await Promise.all(writePromises);
   } catch (err) {
@@ -700,5 +700,35 @@ export async function claimOfficialProfileInFirestore(
   } catch (err) {
     console.error("Error claiming official profile in Firestore:", err);
     throw err;
+  }
+}
+
+// 22. Submit Content Violation / Flag to Firestore
+export async function submitContentFlagInFirestore(flagData: {
+  reportId: string;
+  reportText: string;
+  authorId: string;
+  authorUsername?: string;
+  reportedByUserId: string;
+  reportedByUsername?: string;
+  categoryKey: string;
+  categoryTitle: string;
+  subCategory?: string;
+  customDetails?: string;
+  createdAt: string;
+}): Promise<void> {
+  try {
+    const flagId = `flag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const flagDoc = doc(db, "moderation_flags", flagId);
+    await setDoc(flagDoc, sanitizeData({ ...flagData, id: flagId }), { merge: true });
+    
+    // Also update report document with flag count
+    const repDoc = doc(db, "reports", flagData.reportId);
+    await updateDoc(repDoc, {
+      flagsCount: increment(1),
+      lastFlaggedAt: flagData.createdAt,
+    }).catch(() => {});
+  } catch (err) {
+    console.warn("Error submitting content flag to Firestore:", err);
   }
 }

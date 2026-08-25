@@ -17,6 +17,7 @@ import {
   X,
   Send,
   MoreHorizontal,
+  MoreVertical,
   CheckCircle2,
   Clock,
   Sparkles,
@@ -27,6 +28,7 @@ import {
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
+import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -57,6 +59,10 @@ interface PostDetailViewProps {
   ) => Promise<void>;
   onSelectUser?: (userId: string) => void;
   onToggleFollow?: (userId: string) => void;
+  onDeleteReport?: (reportId: string) => Promise<void>;
+  onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onMuteUser?: (authorUsername: string, authorId?: string) => void;
+  mutedUsers?: string[];
 }
 
 export const PostDetailView: React.FC<PostDetailViewProps> = ({
@@ -72,6 +78,10 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   onUpdateStatus,
   onSelectUser,
   onToggleFollow,
+  onDeleteReport,
+  onTogglePinReport,
+  onMuteUser,
+  mutedUsers = [],
 }) => {
   const [replyText, setReplyText] = useState("");
   const [replyImage, setReplyImage] = useState<string | null>(null);
@@ -81,6 +91,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   const [copiedToast, setCopiedToast] = useState(false);
   const [statusUpdateNotes, setStatusUpdateNotes] = useState("");
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -497,13 +508,21 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           <h1 className="text-lg font-bold text-slate-900 tracking-tight">Report</h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={handleShare}
             className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
             title="Share Post"
           >
             <Share2 className="w-4 h-4" />
+          </button>
+          <button
+            id="post-detail-top-options-btn"
+            onClick={() => setIsActionSheetOpen(true)}
+            className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+            title="More Options"
+          >
+            <MoreVertical className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -578,13 +597,25 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             </div>
           </div>
 
-          <span
-            className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ${getStatusPill(
-              report.status
-            )}`}
-          >
-            {report.status}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ${getStatusPill(
+                report.status
+              )}`}
+            >
+              {report.status}
+            </span>
+
+            {/* 3-Dot Action Button */}
+            <button
+              id={`post-detail-card-options-btn-${report.id}`}
+              onClick={() => setIsActionSheetOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 rounded-full transition-colors cursor-pointer"
+              title="More Options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Post Text Description */}
@@ -1353,6 +1384,31 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Post Action Sheet (3-dot menu & Violation Reporting) */}
+      <PostActionSheet
+        isOpen={isActionSheetOpen}
+        onClose={() => setIsActionSheetOpen(false)}
+        report={report}
+        userProfile={userProfile}
+        isProfileView={false}
+        onDeleteReport={async (reportId) => {
+          if (onDeleteReport) {
+            await onDeleteReport(reportId);
+            onBack();
+          }
+        }}
+        onTogglePinReport={onTogglePinReport}
+        onMuteUser={onMuteUser}
+        isAuthorMuted={
+          mutedUsers.includes(
+            (report.authorUsername || report.authorName || "")
+              .replace(/^@/, "")
+              .toLowerCase()
+              .trim()
+          )
+        }
+      />
     </div>
   );
 };

@@ -44,6 +44,7 @@ import {
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
+import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   cleanReportText,
   getCleanAuthorUsername,
@@ -78,6 +79,8 @@ interface ProfileViewProps {
   onReply?: (reportId: string, replyText: string) => void;
   onDeleteReport?: (reportId: string) => Promise<void>;
   onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onMuteUser?: (authorUsername: string, authorId?: string) => void;
+  mutedUsers?: string[];
   onSelectUser?: (userId: string) => void;
   onClaimProfile?: (
     profileId: string,
@@ -112,6 +115,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onReply,
   onDeleteReport,
   onTogglePinReport,
+  onMuteUser,
+  mutedUsers = [],
   onSelectUser,
   onClaimProfile,
 }) => {
@@ -1737,134 +1742,27 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         )}
 
-        {/* 7. Modern Slide-Up Action Sheet for Report (Pin / Delete Options) */}
-        {selectedReportForActions && (
-          <div
-            className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50 backdrop-blur-xs animate-fadeIn"
-            onClick={() => {
-              setSelectedReportForActions(null);
-              setShowDeleteConfirm(false);
-            }}
-          >
-            <div
-              className="bg-white rounded-t-3xl border-t border-slate-200 shadow-2xl p-5 space-y-4 max-w-lg w-full mx-auto animate-slideUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Top Pull Handle Indicator */}
-              <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto -mt-1 mb-2"></div>
-
-              {/* Header / Post Summary */}
-              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700">
-                    {selectedReportForActions.category} Report
-                  </span>
-                  <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
-                    "{cleanReportText(selectedReportForActions.text)}"
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setSelectedReportForActions(null);
-                    setShowDeleteConfirm(false);
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Action Options */}
-              {!showDeleteConfirm ? (
-                <div className="space-y-2">
-                  {/* Option 1: Pin / Unpin Report */}
-                  <button
-                    onClick={handlePinAction}
-                    className="w-full p-3.5 bg-slate-50 hover:bg-blue-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-blue-200"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                      <Pin
-                        className={`w-5 h-5 ${
-                          selectedReportForActions.isPinned
-                            ? "fill-blue-600 rotate-0"
-                            : "rotate-45"
-                        }`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors">
-                        {selectedReportForActions.isPinned
-                          ? "Unpin Report from Profile"
-                          : "Pin Report to Profile"}
-                      </h4>
-                      <p className="text-xs text-slate-500 font-medium">
-                        {selectedReportForActions.isPinned
-                          ? "Remove this report from top position"
-                          : "Feature this grievance at the very top of your profile"}
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Option 2: Delete Report */}
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="w-full p-3.5 bg-slate-50 hover:bg-rose-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-rose-200"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                      <Trash2 className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-extrabold text-rose-600">
-                        Delete Report
-                      </h4>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Permanently remove this grievance and all official updates
-                      </p>
-                    </div>
-                  </button>
-                </div>
-              ) : (
-                /* Confirmation Screen for Deletion */
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-3 animate-fadeIn">
-                  <div className="flex items-center gap-2 text-rose-800 font-extrabold text-sm">
-                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                    <span>Confirm Permanent Deletion?</span>
-                  </div>
-                  <p className="text-xs text-rose-700 leading-relaxed font-normal">
-                    Are you sure you want to delete this report? This action cannot
-                    be undone and will erase all verification records and thread
-                    history.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleDeleteAction}
-                      className="flex-1 py-2.5 bg-rose-600 text-white font-black text-xs rounded-xl hover:bg-rose-700 transition-colors cursor-pointer shadow-xs"
-                    >
-                      Yes, Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Cancel Button */}
-              {!showDeleteConfirm && (
-                <button
-                  onClick={() => setSelectedReportForActions(null)}
-                  className="w-full py-3 text-center text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* 7. Modern Slide-Up Action Sheet for Report (Pin / Delete / Report Violation Options) */}
+        <PostActionSheet
+          isOpen={Boolean(selectedReportForActions)}
+          onClose={() => setSelectedReportForActions(null)}
+          report={selectedReportForActions}
+          userProfile={activeUser || userProfile}
+          isProfileView={isOwnProfile}
+          onDeleteReport={onDeleteReport}
+          onTogglePinReport={onTogglePinReport}
+          onMuteUser={onMuteUser}
+          isAuthorMuted={
+            selectedReportForActions
+              ? mutedUsers.includes(
+                  (selectedReportForActions.authorUsername || selectedReportForActions.authorName || "")
+                    .replace(/^@/, "")
+                    .toLowerCase()
+                    .trim()
+                )
+              : false
+          }
+        />
 
         {/* ========================================================================= */}
         {/* 3-DOTS MODERN ACTION SHEET (BOTTOM SLIDE-UP SHEET)                        */}

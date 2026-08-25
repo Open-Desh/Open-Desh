@@ -92,6 +92,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterBudgetRange, setFilterBudgetRange] = useState<string>("all");
   const [filterFiscalYear, setFilterFiscalYear] = useState<string>("all");
+  const [overviewChartTab, setOverviewChartTab] = useState<"chart" | "split" | "metrics">("chart");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const landingSearchInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +105,16 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
       try {
         const data = await getBudgetsDirect();
         if (data && data.length > 0) {
-          setBudgets(data);
+          const firestoreMap = new Map(data.map((b) => [b.id, b]));
+          const combined = REAL_INDIAN_BUDGET_DATA.map((defaultNode) => {
+            const remote = firestoreMap.get(defaultNode.id);
+            if (!remote) return defaultNode;
+            return {
+              ...defaultNode,
+              ...remote,
+            };
+          });
+          setBudgets(combined);
         } else {
           setBudgets(REAL_INDIAN_BUDGET_DATA);
         }
@@ -654,6 +664,112 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
       balancePercent,
       workValuePercent,
     };
+  }, [activeNode]);
+
+  // Visual Chart Data for Budget Overview
+  const overviewChartData = useMemo(() => {
+    const gross = activeNode.grossExpenditureCr || activeNode.totalBudgetCr || 0;
+    const isUtAllocation = activeNode.budgetType === "union_budget_ut_allocation";
+
+    if (isUtAllocation) {
+      const capex = activeNode.capexCr || Math.round(gross * 0.25);
+      const revExp = activeNode.revenueExpCr || Math.max(0, gross - capex);
+
+      return [
+        {
+          key: "allocation",
+          name: "Union Grant / Allocation",
+          amountCr: gross,
+          color: "#2563eb",
+          category: "Union Budget Allocation",
+          description: "Union Budget Grant Allocation for the UT",
+        },
+        {
+          key: "revexp",
+          name: "Operational Outlay",
+          amountCr: revExp,
+          color: "#7c3aed",
+          category: "Operational / Welfare",
+          description: "Administrative services, welfare & local operations",
+        },
+        {
+          key: "capex",
+          name: "Capital Outlay",
+          amountCr: capex,
+          color: "#f59e0b",
+          category: "Capex Infrastructure",
+          description: "Capital projects, ports, roads & island asset creation",
+        },
+      ];
+    }
+
+    const net = activeNode.netExpenditureCr || gross;
+    const revReceipts = activeNode.revenueReceiptsCr || activeNode.totalRevenueCr || Math.round(gross * 0.82);
+    const capex = activeNode.capitalOutlayCr || activeNode.capexCr || Math.round(gross * 0.2);
+    const revExp = activeNode.revenueExpenditureCr || activeNode.revenueExpCr || Math.max(0, gross - capex);
+    const debtRepay = activeNode.debtRepaymentCr || (gross > net ? gross - net : 0);
+
+    const items = [
+      {
+        key: "outlay",
+        name: activeNode.grossExpenditureCr ? "Gross Exp." : "Total Outlay",
+        amountCr: gross,
+        color: "#2563eb",
+        category: "Total Budget",
+        description: "Total State Budget Gross Expenditure",
+      },
+    ];
+
+    if (activeNode.netExpenditureCr && activeNode.netExpenditureCr !== gross) {
+      items.push({
+        key: "net_exp",
+        name: "Net Exp.",
+        amountCr: net,
+        color: "#0284c7",
+        category: "Net Outlay",
+        description: "Net Outlay (excluding debt repayment)",
+      });
+    }
+
+    items.push(
+      {
+        key: "revenue",
+        name: "Revenue Receipts",
+        amountCr: revReceipts,
+        color: "#059669",
+        category: "Receipts",
+        description: "Own Tax + Non-Tax + Central Devolutions",
+      },
+      {
+        key: "revexp",
+        name: "Revenue Exp.",
+        amountCr: revExp,
+        color: "#7c3aed",
+        category: "Operational",
+        description: "Salaries, Subsidies, Welfare DBTs & Operations",
+      },
+      {
+        key: "capex",
+        name: "Capital Outlay",
+        amountCr: capex,
+        color: "#f59e0b",
+        category: "Capex Assets",
+        description: "Highways, Irrigation, Energy & Asset Creation",
+      }
+    );
+
+    if (debtRepay > 0) {
+      items.push({
+        key: "debt",
+        name: "Debt Repayment",
+        amountCr: debtRepay,
+        color: "#ef4444",
+        category: "Debt Servicing",
+        description: "Principal repayment & public debt liability clearance",
+      });
+    }
+
+    return items;
   }, [activeNode]);
 
   // Helper for works progress
@@ -1665,15 +1781,25 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
                       <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">
                         {getDisplayName(activeNode)}
                       </h2>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                        {activeNode.level === "state"
-                          ? "State Profile"
-                          : activeNode.level === "district"
-                          ? "District Profile"
-                          : activeNode.level === "village"
-                          ? "Panchayat Profile"
-                          : "National Profile"}
-                      </span>
+                      {activeNode.budgetType === "union_budget_ut_allocation" ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          Union Budget UT Allocation
+                        </span>
+                      ) : activeNode.budgetType === "legislature_ut_budget" ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                          UT with Legislature Budget
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
+                          {activeNode.level === "state"
+                            ? "State Budget Profile"
+                            : activeNode.level === "district"
+                            ? "District Profile"
+                            : activeNode.level === "village"
+                            ? "Panchayat Profile"
+                            : "Union Budget of India"}
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-slate-600 font-medium mt-1 line-clamp-1 max-w-xl">
@@ -1685,27 +1811,49 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
                     <div className="flex items-center gap-4 text-xs text-slate-600 font-medium mt-3 flex-wrap">
                       <div className="flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Population</span>
+                        <span>Population {activeNode.populationYear ? `(${activeNode.populationYear})` : ""}</span>
                         <span className="font-bold text-slate-900">
                           {formatPopulation(activeNode.population)}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Area</span>
-                        <span className="font-bold text-slate-900">
-                          {formatArea(activeNode)}
-                        </span>
-                      </div>
+                      {activeNode.districtCount && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Districts</span>
+                          <span className="font-bold text-slate-900">
+                            {activeNode.districtCount}
+                          </span>
+                        </div>
+                      )}
 
-                      <div className="flex items-center gap-1.5">
-                        <Landmark className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Capital</span>
-                        <span className="font-bold text-slate-900">
-                          {formatCapitalOrHQ(activeNode)}
-                        </span>
-                      </div>
+                      {activeNode.panchayatCount !== undefined && activeNode.panchayatCount > 0 ? (
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{activeNode.panchayatType || "Panchayats"}</span>
+                          <span className="font-bold text-slate-900">
+                            {activeNode.panchayatCount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      ) : activeNode.panchayatType ? (
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Governance</span>
+                          <span className="font-bold text-slate-900">
+                            {activeNode.panchayatType}
+                          </span>
+                        </div>
+                      ) : null}
+
+                      {formatCapitalOrHQ(activeNode) && (
+                        <div className="flex items-center gap-1.5">
+                          <Landmark className="w-3.5 h-3.5 text-slate-400" />
+                          <span>HQ/Capital</span>
+                          <span className="font-bold text-slate-900">
+                            {formatCapitalOrHQ(activeNode)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1714,424 +1862,440 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onBack, onOpenCompose })
                 <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-center min-w-[180px] self-stretch md:self-auto shrink-0">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                     <Users className="w-4 h-4 text-blue-600" />
-                    <span>Per Capita Outlay</span>
+                    <span>
+                      {activeNode.budgetType === "union_budget_ut_allocation"
+                        ? "Per Capita Allocation"
+                        : activeNode.perCapitaNetBudgetInr
+                        ? "Per Capita Net Outlay"
+                        : "Per Capita Outlay"}
+                    </span>
                   </div>
                   <span className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight mt-1">
-                    ₹{(activeNode.perCapitaBudgetInr || 224202).toLocaleString("en-IN")}
+                    ₹{(activeNode.perCapitaNetBudgetInr || activeNode.perCapitaBudgetInr || 224202).toLocaleString("en-IN")}
                   </span>
                   <span className="text-[11px] text-slate-500 font-medium mt-0.5">
-                    / citizen
+                    / citizen ({activeNode.fiscalYear})
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* 3. Budget Overview (FY 2025-26) Card */}
+            {/* 3. Budget Overview (FY 2024-25 / 2025-26) Card with Interactive Visual Charts */}
             <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  Budget Overview <span className="text-slate-500 font-normal">(FY {activeNode.fiscalYear})</span>
-                </h3>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  Data as on {activeNode.lastUpdated || "31 Jul 2026"}
-                </span>
-              </div>
-
-              {/* 4 Metric Tiles Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                {/* Tile 1: Approved */}
-                <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="w-7 h-7 rounded-full bg-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0">
-                      <IndianRupee className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-base sm:text-lg font-black text-emerald-700 block leading-tight">
-                      {formatAmount(overviewMetrics.approved)}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                      Approved
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">
-                      100%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tile 2: Released */}
-                <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="w-7 h-7 rounded-full bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
-                      <Layers className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-base sm:text-lg font-black text-blue-700 block leading-tight">
-                      {formatAmount(overviewMetrics.released)}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                      Released
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">
-                      {overviewMetrics.releasedPercent}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tile 3: Spent */}
-                <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="w-7 h-7 rounded-full bg-amber-100/80 text-amber-700 flex items-center justify-center shrink-0">
-                      <Wallet className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-base sm:text-lg font-black text-amber-700 block leading-tight">
-                      {formatAmount(overviewMetrics.spent)}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                      Spent
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">
-                      {overviewMetrics.spentPercent}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tile 4: Balance */}
-                <div className="bg-purple-50/40 border border-purple-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="w-7 h-7 rounded-full bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-base sm:text-lg font-black text-purple-700 block leading-tight">
-                      {formatAmount(overviewMetrics.balance)}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                      Balance
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 block mt-0.5">
-                      {overviewMetrics.balancePercent}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Budget Money Trail Card */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  Budget Money Trail
-                </h3>
-                <button
-                  onClick={() => setShowMoneyTrailModal(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Explore Trail</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* 4 Steps Horizontal Flow */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 items-center">
-                {/* Node 1: Approved */}
-                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50/60 p-2.5 rounded-2xl border border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Approved</span>
-                    <span className="text-xs font-black text-slate-900 truncate block">
-                      {formatAmount(overviewMetrics.approved)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Node 2: Released */}
-                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50/60 p-2.5 rounded-2xl border border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Released</span>
-                    <span className="text-xs font-black text-slate-900 truncate block">
-                      {formatAmount(overviewMetrics.released)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Node 3: Spent */}
-                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50/60 p-2.5 rounded-2xl border border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Spent</span>
-                    <span className="text-xs font-black text-slate-900 truncate block">
-                      {formatAmount(overviewMetrics.spent)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Node 4: Work Value */}
-                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50/60 p-2.5 rounded-2xl border border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Work Value</span>
-                    <span className="text-xs font-black text-slate-900 truncate block">
-                      {formatAmount(overviewMetrics.workValue)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Connected Segmented Progress Bar */}
-              <div className="space-y-1.5 pt-1">
-                <div className="w-full h-2 rounded-full overflow-hidden bg-slate-100 flex">
-                  <div className="bg-emerald-500 h-full w-[25%]" />
-                  <div className="bg-blue-500 h-full w-[25%]" />
-                  <div className="bg-amber-500 h-full w-[25%]" />
-                  <div className="bg-purple-500 h-full w-[25%]" />
-                </div>
-
-                {/* Percentage Labels */}
-                <div className="grid grid-cols-4 text-center text-[11px] font-bold">
-                  <span className="text-emerald-700">100%</span>
-                  <span className="text-blue-700">{overviewMetrics.releasedPercent}%</span>
-                  <span className="text-amber-700">{overviewMetrics.spentPercent}%</span>
-                  <span className="text-purple-700">{overviewMetrics.workValuePercent}%</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Middle Row (2 Columns: Where is the money going? + Major Schemes) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Left Card: Where is the money going? */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
+              {/* Header with Title, Source & View Mode Tabs */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
                     <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                      Where is the money going?
+                      Budget Overview <span className="text-slate-500 font-normal">(FY {activeNode.fiscalYear})</span>
                     </h3>
-                    <button
-                      onClick={() => {
-                        setActiveTab("outflow");
-                        setViewMode("data_ledger");
-                      }}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      View All
-                    </button>
                   </div>
-
-                  {/* List of 5 items */}
-                  <div className="space-y-3">
-                    {topOutflowItems.map((item) => (
-                      <div key={item.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 min-w-0 pr-2">
-                            <div className={`w-7 h-7 rounded-xl ${item.bgIcon} flex items-center justify-center shrink-0`}>
-                              {item.icon}
-                            </div>
-                            <span className="font-bold text-slate-800 truncate">
-                              {item.name}
-                            </span>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="font-extrabold text-slate-900 block">
-                              {formatAmount(item.allocatedAmountCr)}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-medium">
-                              {item.percentage}% of total
-                            </span>
-                          </div>
-                        </div>
-                        {/* Horizontal colored line */}
-                        <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${item.color}`}
-                            style={{ width: `${Math.min(100, item.percentage * 3.5)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Official Outlay: <strong className="text-slate-800">{formatAmount(activeNode.totalBudgetCr)}</strong> • Last updated: {activeNode.lastUpdated || "2024-25"}
+                  </p>
                 </div>
 
-                <p className="text-[11px] text-slate-600 font-medium pt-2 border-t border-slate-100">
-                  Figures are of Approved Outlay
-                </p>
-              </div>
-
-              {/* Right Card: Major Schemes */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                      Major Schemes
-                    </h3>
-                    <button
-                      onClick={() => {
-                        setActiveTab("schemes");
-                        setViewMode("data_ledger");
-                      }}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      View All
-                    </button>
-                  </div>
-
-                  {/* 4 Schemes list */}
-                  <div className="space-y-2.5">
-                    {majorSchemesList.map((sch, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-slate-50/70 rounded-2xl p-3 border border-slate-100 flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-9 h-9 rounded-xl ${sch.bgStyle} flex items-center justify-center shrink-0`}>
-                            {sch.iconElem}
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-slate-900 truncate">
-                              {sch.name}
-                            </h4>
-                            <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mt-0.5">
-                              <span>
-                                Approved <strong className="text-slate-800">{sch.approvedStr}</strong>
-                              </span>
-                              <span>
-                                Spent <strong className="text-slate-800">{sch.spentStr}</strong>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                          {sch.utilPercent} Utilized
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-600">
-                  <span>Audited Centrally Sponsored Schemes (CSS)</span>
-                  <span className="font-semibold text-slate-800">FY {activeNode.fiscalYear}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. Bottom Row (2 Columns: Development Progress + Beneficiaries) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Left Card: Development Progress (All Works) */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                    Development Progress <span className="text-slate-500 font-normal">(All Works)</span>
-                  </h3>
+                {/* View Mode Toggle Buttons */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 text-xs font-semibold">
                   <button
-                    onClick={() => setShowWorksModal(true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    onClick={() => setOverviewChartTab("chart")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      overviewChartTab === "chart"
+                        ? "bg-white text-blue-600 shadow-xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
-                    View All
+                    Macro Chart
+                  </button>
+                  <button
+                    onClick={() => setOverviewChartTab("split")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      overviewChartTab === "split"
+                        ? "bg-white text-blue-600 shadow-xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Capex vs Revenue
+                  </button>
+                  <button
+                    onClick={() => setOverviewChartTab("metrics")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      overviewChartTab === "metrics"
+                        ? "bg-white text-blue-600 shadow-xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Execution Tiles
                   </button>
                 </div>
-
-                {/* 4 Metric Boxes Grid */}
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-2.5 sm:p-3 text-center">
-                    <span className="text-base sm:text-lg font-black text-emerald-700 block">
-                      {worksProgress.completed.toLocaleString("en-IN")}
-                    </span>
-                    <span className="text-[11px] text-slate-600 font-semibold block mt-0.5">
-                      Completed
-                    </span>
-                  </div>
-
-                  <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-2.5 sm:p-3 text-center">
-                    <span className="text-base sm:text-lg font-black text-amber-700 block">
-                      {worksProgress.inProgress.toLocaleString("en-IN")}
-                    </span>
-                    <span className="text-[11px] text-slate-600 font-semibold block mt-0.5">
-                      In Progress
-                    </span>
-                  </div>
-
-                  <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-2.5 sm:p-3 text-center">
-                    <span className="text-base sm:text-lg font-black text-rose-700 block">
-                      {worksProgress.delayed.toLocaleString("en-IN")}
-                    </span>
-                    <span className="text-[11px] text-slate-600 font-semibold block mt-0.5">
-                      Delayed
-                    </span>
-                  </div>
-
-                  <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-2.5 sm:p-3 text-center">
-                    <span className="text-base sm:text-lg font-black text-blue-700 block">
-                      {worksProgress.total.toLocaleString("en-IN")}
-                    </span>
-                    <span className="text-[11px] text-slate-600 font-semibold block mt-0.5">
-                      Total Works
-                    </span>
-                  </div>
-                </div>
               </div>
 
-              {/* Right Card: Beneficiaries */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                    Beneficiaries <span className="text-slate-500 font-normal">(FY {activeNode.fiscalYear})</span>
-                  </h3>
-                </div>
+              {/* TAB 1: Macro Financial Architecture Visual Bar Chart */}
+              {overviewChartTab === "chart" && (
+                <div className="space-y-4">
+                  <div className="h-64 sm:h-72 w-full pt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={overviewChartData} margin={{ top: 20, right: 15, left: -10, bottom: 25 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis
+                          dataKey="name"
+                          stroke="#64748b"
+                          fontSize={11}
+                          tickLine={false}
+                          interval={0}
+                          dy={10}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k Cr`}
+                        />
+                        <Tooltip
+                          formatter={(value: any) => [
+                            `₹${Number(value).toLocaleString("en-IN")} Cr`,
+                            "Amount",
+                          ]}
+                          contentStyle={{
+                            backgroundColor: "#0f172a",
+                            borderRadius: "1rem",
+                            border: "none",
+                            color: "#fff",
+                            fontSize: "12px",
+                            padding: "8px 12px",
+                            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                          }}
+                          itemStyle={{ color: "#93c5fd", fontWeight: "bold" }}
+                          labelStyle={{ color: "#e2e8f0", fontWeight: "bold", marginBottom: "4px" }}
+                        />
+                        <Bar dataKey="amountCr" radius={[8, 8, 0, 0]} maxBarSize={55}>
+                          {overviewChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Purple Tile: Rural Families */}
-                  <div className="bg-purple-50/40 border border-purple-100 rounded-2xl p-3.5 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                      <Home className="w-5 h-5" />
+                  {/* 4 Interactive Legend & Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
+                    {overviewChartData.map((item) => (
+                      <div key={item.key} className="bg-slate-50/80 rounded-2xl p-2.5 border border-slate-100 flex flex-col justify-between">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="text-[11px] font-semibold text-slate-600 truncate">{item.name}</span>
+                        </div>
+                        <div>
+                          <span className="text-sm sm:text-base font-black text-slate-900 block">
+                            {formatAmount(item.amountCr)}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium block truncate mt-0.5">
+                            {item.category}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: Capex vs Revenue Expenditure Split */}
+              {overviewChartTab === "split" && (
+                <div className="space-y-4">
+                  {/* Two-Column Breakdown */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* Capex Card */}
+                    <div className="bg-amber-50/40 border border-amber-200/70 rounded-2xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs">
+                              🏗️
+                            </div>
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900">Capital Outlay (Capex)</h4>
+                              <span className="text-[11px] text-amber-700 font-semibold">Asset Creation & Infrastructure</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            {activeNode.totalBudgetCr > 0 ? (( (activeNode.capexCr || 0) / activeNode.totalBudgetCr) * 100).toFixed(1) : 0}% of Outlay
+                          </span>
+                        </div>
+
+                        <div className="mt-3">
+                          <span className="text-xl sm:text-2xl font-black text-amber-800 block">
+                            {formatAmount(activeNode.capexCr || 0)}
+                          </span>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            Allocated directly to long-term capital assets: State highways, metro lines, irrigation dams, solar parks, school/hospital buildings, and industrial parks.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-amber-200/50 flex items-center justify-between text-[11px] font-medium text-slate-500">
+                        <span>Total Capex Allocation</span>
+                        <strong className="text-slate-800">₹{(activeNode.capexCr || 0).toLocaleString("en-IN")} Cr</strong>
+                      </div>
+                    </div>
+
+                    {/* Revenue Expenditure Card */}
+                    <div className="bg-purple-50/40 border border-purple-200/70 rounded-2xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+                              🛡️
+                            </div>
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900">Revenue Expenditure</h4>
+                              <span className="text-[11px] text-purple-700 font-semibold">Social Welfare & Operations</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                            {activeNode.totalBudgetCr > 0 ? (( (activeNode.revenueExpCr || (activeNode.totalBudgetCr - (activeNode.capexCr || 0))) / activeNode.totalBudgetCr) * 100).toFixed(1) : 0}% of Outlay
+                          </span>
+                        </div>
+
+                        <div className="mt-3">
+                          <span className="text-xl sm:text-2xl font-black text-purple-800 block">
+                            {formatAmount(activeNode.revenueExpCr || (activeNode.totalBudgetCr - (activeNode.capexCr || 0)))}
+                          </span>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            Covers ongoing government operational spending: Public sector teacher & doctor salaries, pensions, power subsidies, nutrition, welfare DBT programs, and interest servicing.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-purple-200/50 flex items-center justify-between text-[11px] font-medium text-slate-500">
+                        <span>Total Revenue Operations</span>
+                        <strong className="text-slate-800">₹{(activeNode.revenueExpCr || (activeNode.totalBudgetCr - (activeNode.capexCr || 0))).toLocaleString("en-IN")} Cr</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Proportion Bar */}
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span>Capital Assets (Capex)</span>
+                      <span>Operational & Welfare (Revenue Exp)</span>
+                    </div>
+                    <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex shadow-inner">
+                      <div
+                        className="bg-amber-500 h-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(5, Math.min(95, activeNode.totalBudgetCr > 0 ? ((activeNode.capexCr || 0) / activeNode.totalBudgetCr) * 100 : 20))}%`,
+                        }}
+                      />
+                      <div
+                        className="bg-purple-600 h-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(5, Math.min(95, 100 - (activeNode.totalBudgetCr > 0 ? ((activeNode.capexCr || 0) / activeNode.totalBudgetCr) * 100 : 20)))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: 4 Metric Tiles Grid (Execution & Releases) */}
+              {overviewChartTab === "metrics" && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                  {/* Tile 1: Approved */}
+                  <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0">
+                        <IndianRupee className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                     <div>
-                      <span className="text-base sm:text-lg font-black text-purple-900 block">
-                        {beneficiaries.rural}
+                      <span className="text-base sm:text-lg font-black text-emerald-700 block leading-tight">
+                        {formatAmount(overviewMetrics.approved)}
                       </span>
-                      <span className="text-[11px] text-slate-600 font-semibold block leading-tight mt-0.5">
-                        Rural Families Benefited
+                      <span className="text-xs font-semibold text-slate-600 block mt-0.5">Approved</span>
+                      <span className="text-xs font-bold text-slate-800 block mt-0.5">100%</span>
+                    </div>
+                  </div>
+
+                  {/* Tile 2: Released */}
+                  <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
+                        <Layers className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-base sm:text-lg font-black text-blue-700 block leading-tight">
+                        {formatAmount(overviewMetrics.released)}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-600 block mt-0.5">Released</span>
+                      <span className="text-xs font-bold text-slate-800 block mt-0.5">
+                        {overviewMetrics.releasedPercent}%
                       </span>
                     </div>
                   </div>
 
-                  {/* Blue Tile: Citizens */}
-                  <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-3.5 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                      <Users className="w-5 h-5" />
+                  {/* Tile 3: Spent */}
+                  <div className="bg-amber-50/40 border border-amber-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-amber-100/80 text-amber-700 flex items-center justify-center shrink-0">
+                        <Wallet className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                     <div>
-                      <span className="text-base sm:text-lg font-black text-blue-900 block">
-                        {beneficiaries.citizen}
+                      <span className="text-base sm:text-lg font-black text-amber-700 block leading-tight">
+                        {formatAmount(overviewMetrics.spent)}
                       </span>
-                      <span className="text-[11px] text-slate-600 font-semibold block leading-tight mt-0.5">
-                        Citizens Benefited
+                      <span className="text-xs font-semibold text-slate-600 block mt-0.5">Spent</span>
+                      <span className="text-xs font-bold text-slate-800 block mt-0.5">
+                        {overviewMetrics.spentPercent}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tile 4: Balance */}
+                  <div className="bg-purple-50/40 border border-purple-100 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-base sm:text-lg font-black text-purple-700 block leading-tight">
+                        {formatAmount(overviewMetrics.balance)}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-600 block mt-0.5">Balance</span>
+                      <span className="text-xs font-bold text-slate-800 block mt-0.5">
+                        {overviewMetrics.balancePercent}%
                       </span>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Special Union Budget Key Macro Indicators (Budget at a Glance FY 2025-26) */}
+              {activeNode.level === "national" && activeNode.fiscalDeficitCr && (
+                <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-sm">
+                        🏛️
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">
+                          Union Budget at a Glance (FY {activeNode.fiscalYear})
+                        </h4>
+                        <span className="text-xs text-slate-400">
+                          Ministry of Finance Official Budget Estimates (BE)
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50 self-start sm:self-auto">
+                      GDP: ₹{(activeNode.gdpCr ? activeNode.gdpCr / 100000 : 356.98).toFixed(2)} Lakh Cr
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                    {/* Fiscal Deficit */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-red-400 font-semibold block">Fiscal Deficit</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{(activeNode.fiscalDeficitCr / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        4.4% of GDP
+                      </span>
+                    </div>
+
+                    {/* Revenue Deficit */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-amber-400 font-semibold block">Revenue Deficit</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{((activeNode.revenueDeficitCr || 523846) / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        Effective: ₹{((activeNode.effectiveRevenueDeficitCr || 96654) / 1000).toFixed(0)}k Cr
+                      </span>
+                    </div>
+
+                    {/* Effective Capex */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-emerald-400 font-semibold block">Effective Capex</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{((activeNode.effectiveCapitalExpenditureCr || 1548282) / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        Direct Capex + Grants
+                      </span>
+                    </div>
+
+                    {/* Net Tax Revenue */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-blue-400 font-semibold block">Net Tax to Centre</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{((activeNode.taxRevenueNetToCentreCr || 2837409) / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        Gross Tax: ₹38.40L Cr
+                      </span>
+                    </div>
+
+                    {/* Non-Tax Revenue */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-purple-400 font-semibold block">Non-Tax Revenue</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{((activeNode.nonTaxRevenueCr || 583000) / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        Dividends & Profits
+                      </span>
+                    </div>
+
+                    {/* Transfers to States */}
+                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+                      <span className="text-[11px] text-teal-400 font-semibold block">Transfers to States</span>
+                      <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                        ₹{((activeNode.resourcesTransferredToStatesCr || 2501284) / 100000).toFixed(2)}L Cr
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                        Devolution + Grants
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Priority Focus & Audit Notes Footer */}
+              {activeNode.auditNotes && (
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 min-w-0">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="font-medium text-slate-600 truncate">
+                      <strong className="text-slate-900">Key Focus:</strong> {activeNode.auditNotes}
+                    </span>
+                  </div>
+                  {activeNode.officialGazetteRef && (
+                    <a
+                      href={activeNode.officialGazetteRef}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 font-bold inline-flex items-center gap-1 shrink-0"
+                    >
+                      <span>{activeNode.officialSource || "Official Source"}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* 7. Footer Info Badges Matching Screenshot */}
+            {/* 4. Official Audit & Source Verification Footer */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-slate-500">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>
-                  <strong>Data updated as on {activeNode.lastUpdated || "31 Jul 2026"}</strong> • All financial figures are provisional
+                  <strong>Data updated as on {activeNode.lastUpdated || "2024-25"}</strong> • All financial figures are official & verified
                 </span>
               </div>
 

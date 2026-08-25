@@ -112,6 +112,38 @@ export default function App() {
     }
   });
 
+  // Muted users state (persisted across sessions)
+  const [mutedUsers, setMutedUsers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("open_desh_muted_users");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("open_desh_muted_users", JSON.stringify(mutedUsers));
+    } catch (e) {
+      console.error("Failed to persist muted users:", e);
+    }
+  }, [mutedUsers]);
+
+  const handleMuteUser = (authorUsername: string, authorId?: string) => {
+    const cleanUname = (authorUsername || "").replace(/^@/, "").toLowerCase().trim();
+    const cleanId = (authorId || "").replace(/^@/, "").toLowerCase().trim();
+    setMutedUsers((prev) => {
+      const isMuted = (cleanUname && prev.includes(cleanUname)) || (cleanId && prev.includes(cleanId));
+      if (isMuted) {
+        return prev.filter((u) => u !== cleanUname && u !== cleanId);
+      } else {
+        const toAdd = [cleanUname, cleanId].filter(Boolean);
+        return [...prev, ...toAdd];
+      }
+    });
+  };
+
   // Sync notifications to localStorage
   useEffect(() => {
     try {
@@ -1721,6 +1753,10 @@ export default function App() {
               onOpenCreateModal={handleOpenCompose}
               onSelectUser={handleSelectUserProfile}
               onSelectPost={handleSelectPost}
+              onDeleteReport={handleDeleteReport}
+              onTogglePinReport={handleTogglePinReport}
+              onMuteUser={handleMuteUser}
+              mutedUsers={mutedUsers}
               loading={loadingReports}
               isNavVisible={isNavVisible}
               selectedCategory={selectedCategory}
@@ -1761,6 +1797,10 @@ export default function App() {
               onUpdateStatus={handleUpdateStatus}
               onSelectUser={handleSelectUserProfile}
               onToggleFollow={handleToggleFollow}
+              onDeleteReport={handleDeleteReport}
+              onTogglePinReport={handleTogglePinReport}
+              onMuteUser={handleMuteUser}
+              mutedUsers={mutedUsers}
             />
           )}
 
@@ -1840,6 +1880,10 @@ export default function App() {
               onNavigate={navigateTo}
               onSelectUser={handleSelectUserProfile}
               onSelectPost={handleSelectPost}
+              onDeleteReport={handleDeleteReport}
+              onTogglePinReport={handleTogglePinReport}
+              onMuteUser={handleMuteUser}
+              mutedUsers={mutedUsers}
               searchQuery={bookmarkSearchQuery}
               onSearchQueryChange={setBookmarkSearchQuery}
             />
@@ -1903,6 +1947,8 @@ export default function App() {
               onReply={handleReply}
               onDeleteReport={handleDeleteReport}
               onTogglePinReport={handleTogglePinReport}
+              onMuteUser={handleMuteUser}
+              mutedUsers={mutedUsers}
               onSelectUser={handleSelectUserProfile}
               onClaimProfile={handleClaimProfile}
             />
@@ -1931,6 +1977,10 @@ export default function App() {
               onReReport={handleReReport}
               onBookmark={handleBookmark}
               onReply={handleReply}
+              onDeleteReport={handleDeleteReport}
+              onTogglePinReport={handleTogglePinReport}
+              onMuteUser={handleMuteUser}
+              mutedUsers={mutedUsers}
               onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
             />
           )}

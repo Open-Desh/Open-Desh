@@ -25,6 +25,7 @@ import {
   FileText,
   Briefcase,
   AlertTriangle,
+  MoreVertical,
 } from "lucide-react";
 import {
   ReportIssue,
@@ -36,6 +37,7 @@ import {
 import { db } from "../firebase.ts";
 import { collection, getDocs } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -56,6 +58,10 @@ interface SearchHubViewProps {
   onReReport?: (reportId: string) => Promise<void>;
   onBookmark?: (reportId: string) => Promise<void>;
   onReply?: (reportId: string, text: string, parentReplyId?: string) => Promise<void>;
+  onDeleteReport?: (reportId: string) => Promise<void>;
+  onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onMuteUser?: (authorUsername: string, authorId?: string) => void;
+  mutedUsers?: string[];
   onOpenMobileSidebar?: () => void;
 }
 
@@ -74,8 +80,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
   onReReport,
   onBookmark,
   onReply,
+  onDeleteReport,
+  onTogglePinReport,
+  onMuteUser,
+  mutedUsers = [],
   onOpenMobileSidebar,
 }) => {
+  const [activeActionReport, setActiveActionReport] = useState<ReportIssue | null>(null);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<SearchTab>("all");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1181,9 +1192,21 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </div>
                     </div>
 
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded">
-                      {report.category}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                        {report.category}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveActionReport(report);
+                        }}
+                        className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                        title="More Options"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
@@ -1426,6 +1449,25 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Slide-Up Post Action & Moderation Sheet */}
+      {activeActionReport && (
+        <PostActionSheet
+          report={activeActionReport}
+          userProfile={userProfile}
+          isOpen={!!activeActionReport}
+          onClose={() => setActiveActionReport(null)}
+          onDeleteReport={onDeleteReport}
+          onTogglePinReport={onTogglePinReport}
+          onMuteUser={onMuteUser}
+          isAuthorMuted={
+            mutedUsers.includes(
+              (activeActionReport.authorUsername || "").replace(/^@/, "").toLowerCase()
+            ) ||
+            (activeActionReport.authorId ? mutedUsers.includes(activeActionReport.authorId.toLowerCase()) : false)
+          }
+        />
       )}
     </div>
   );

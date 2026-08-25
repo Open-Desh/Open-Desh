@@ -341,24 +341,56 @@ export interface BudgetLineItem {
   fiscalYear?: string;
 }
 
+export type BudgetType =
+  | "national_budget"
+  | "state_budget"
+  | "legislature_ut_budget"
+  | "union_budget_ut_allocation"
+  | string;
+
 export interface BudgetHierarchyNode {
   id: string;
   level: BudgetLevel;
   name: string;
   hindiName?: string;
   code: string;
-  parentState?: string;
-  parentDistrict?: string;
-  parentBlock?: string;
+  parentState?: string | null;
+  parentDistrict?: string | null;
+  parentBlock?: string | null;
+  budgetType?: BudgetType;
   totalBudgetCr: number; // in Crores INR
   totalRevenueCr: number;
   totalExpenditureCr: number;
   capexCr: number;
   revenueExpCr: number;
+  grossExpenditureCr?: number;
+  netExpenditureCr?: number | null;
+  revenueReceiptsCr?: number | null;
+  revenueExpenditureCr?: number | null;
+  capitalOutlayCr?: number | null;
+  debtRepaymentCr?: number | null;
+  taxRevenueNetToCentreCr?: number;
+  nonTaxRevenueCr?: number;
+  capitalReceiptsCr?: number;
+  recoveryOfLoansCr?: number;
+  otherReceiptsCr?: number;
+  borrowingsAndOtherLiabilitiesCr?: number;
+  interestPaymentsCr?: number;
+  grantsForCapitalAssetCreationCr?: number;
+  effectiveCapitalExpenditureCr?: number;
+  revenueDeficitCr?: number;
+  effectiveRevenueDeficitCr?: number;
+  fiscalDeficitCr?: number;
+  primaryDeficitCr?: number;
+  gdpCr?: number;
+  resourcesTransferredToStatesCr?: number;
   fiscalYear: string;
   population?: number;
+  populationYear?: number;
   areaSqKm?: string | number;
   perCapitaBudgetInr?: number;
+  perCapitaNetBudgetInr?: number | null;
+  panchayatType?: string;
   releasedCr?: number;
   spentCr?: number;
   workValueCr?: number;
@@ -368,8 +400,8 @@ export interface BudgetHierarchyNode {
   totalWorks?: number;
   ruralBeneficiaries?: string;
   citizenBeneficiaries?: string;
-  inflows: BudgetLineItem[];
-  outflows: BudgetLineItem[];
+  inflows?: BudgetLineItem[];
+  outflows?: BudgetLineItem[];
   keySchemes?: {
     name: string;
     allocatedCr: number;
@@ -391,7 +423,7 @@ export interface BudgetHierarchyNode {
   capitalOrHQ?: string;
   tagline?: string;
   districtCount?: number;
-  panchayatCount?: number;
+  panchayatCount?: number | null;
   officialSource: string;
   officialGazetteRef?: string;
   lastUpdated: string;

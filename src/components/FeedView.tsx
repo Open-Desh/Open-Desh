@@ -17,10 +17,12 @@ import {
   ExternalLink,
   MessageSquare,
   Plus,
+  MoreVertical,
 } from "lucide-react";
 import { ReportIssue, UserProfile, IssueCategory } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
+import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -39,6 +41,10 @@ interface FeedViewProps {
   onOpenCreateModal: () => void;
   onSelectUser?: (userId: string) => void;
   onSelectPost: (reportId: string) => void;
+  onDeleteReport?: (reportId: string) => Promise<void>;
+  onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onMuteUser?: (authorUsername: string, authorId?: string) => void;
+  mutedUsers?: string[];
   loading?: boolean;
   isNavVisible?: boolean;
   selectedCategory?: string;
@@ -55,6 +61,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onOpenCreateModal,
   onSelectUser,
   onSelectPost,
+  onDeleteReport,
+  onTogglePinReport,
+  onMuteUser,
+  mutedUsers = [],
   loading = false,
   isNavVisible = true,
   selectedCategory = "All",
@@ -62,10 +72,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [activeImageSlideIndex, setActiveImageSlideIndex] = useState<Record<string, number>>({});
   const [statusUpdateNotes, setStatusUpdateNotes] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeActionReport, setActiveActionReport] = useState<ReportIssue | null>(null);
 
-  const filteredReports = reports.filter(
-    (r) => selectedCategory === "All" || r.category === selectedCategory
-  );
+  const filteredReports = reports.filter((r) => {
+    const isCategoryMatch = selectedCategory === "All" || r.category === selectedCategory;
+    const authorUname = (r.authorUsername || r.authorName || "").replace(/^@/, "").toLowerCase().trim();
+    const isMuted = mutedUsers.includes(authorUname);
+    return isCategoryMatch && !isMuted;
+  });
 
   const getStatusPill = (status: ReportIssue["status"]) => {
     switch (status) {
@@ -217,13 +231,28 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   </div>
                 </div>
 
-                <span
-                  className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ${getStatusPill(
-                    report.status
-                  )}`}
-                >
-                  {report.status}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ${getStatusPill(
+                      report.status
+                    )}`}
+                  >
+                    {report.status}
+                  </span>
+
+                  {/* 3-Dot Options Action Button */}
+                  <button
+                    id={`report-options-btn-${report.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveActionReport(report);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 rounded-full transition-colors cursor-pointer"
+                    title="More Options"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Text Description */}
@@ -466,6 +495,28 @@ export const FeedView: React.FC<FeedViewProps> = ({
           );
         }))}
       </div>
+
+      {/* Post Action Sheet (3-dot menu & Violation Reporting) */}
+      <PostActionSheet
+        isOpen={Boolean(activeActionReport)}
+        onClose={() => setActiveActionReport(null)}
+        report={activeActionReport}
+        userProfile={userProfile}
+        isProfileView={false}
+        onDeleteReport={onDeleteReport}
+        onTogglePinReport={onTogglePinReport}
+        onMuteUser={onMuteUser}
+        isAuthorMuted={
+          activeActionReport
+            ? mutedUsers.includes(
+                (activeActionReport.authorUsername || activeActionReport.authorName || "")
+                  .replace(/^@/, "")
+                  .toLowerCase()
+                  .trim()
+              )
+            : false
+        }
+      />
     </div>
   );
 };

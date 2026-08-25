@@ -13,9 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Flame,
+  MoreVertical,
 } from "lucide-react";
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -34,6 +36,10 @@ interface BookmarksViewProps {
   onNavigate: (view: string) => void;
   onSelectUser?: (userId: string) => void;
   onSelectPost?: (id: string) => void;
+  onDeleteReport?: (reportId: string) => Promise<void>;
+  onTogglePinReport?: (reportId: string, isCurrentlyPinned?: boolean) => Promise<void>;
+  onMuteUser?: (authorUsername: string, authorId?: string) => void;
+  mutedUsers?: string[];
   searchQuery?: string;
   onSearchQueryChange?: (q: string) => void;
 }
@@ -49,9 +55,14 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onNavigate,
   onSelectUser,
   onSelectPost,
+  onDeleteReport,
+  onTogglePinReport,
+  onMuteUser,
+  mutedUsers = [],
   searchQuery = "",
   onSearchQueryChange,
 }) => {
+  const [activeActionReport, setActiveActionReport] = useState<ReportIssue | null>(null);
   const [replyInputMap, setReplyInputMap] = useState<Record<string, string>>({});
   const [activeReplyBoxReportId, setActiveReplyBoxReportId] = useState<string | null>(null);
   const [activeNestedReplyId, setActiveNestedReplyId] = useState<string | null>(null);
@@ -320,7 +331,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Status Badge */}
+                  {/* Status Badge + 3-dot Action Menu */}
                   <div className="shrink-0 flex items-center gap-1.5">
                     {report.urgencyLevel === "Critical Emergency" && (
                       <span className="flex items-center gap-0.5 bg-red-100 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse">
@@ -335,6 +346,18 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     >
                       {report.status}
                     </span>
+
+                    {/* 3-Dot Action Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveActionReport(report);
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                      title="More Options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -606,6 +629,25 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
           })
         )}
       </div>
+
+      {/* Slide-Up Post Action & Moderation Sheet */}
+      {activeActionReport && (
+        <PostActionSheet
+          report={activeActionReport}
+          userProfile={userProfile}
+          isOpen={!!activeActionReport}
+          onClose={() => setActiveActionReport(null)}
+          onDeleteReport={onDeleteReport}
+          onTogglePinReport={onTogglePinReport}
+          onMuteUser={onMuteUser}
+          isAuthorMuted={
+            mutedUsers.includes(
+              (activeActionReport.authorUsername || "").replace(/^@/, "").toLowerCase()
+            ) ||
+            (activeActionReport.authorId ? mutedUsers.includes(activeActionReport.authorId.toLowerCase()) : false)
+          }
+        />
+      )}
     </div>
   );
 };
