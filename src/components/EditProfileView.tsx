@@ -417,6 +417,10 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
     setSaving(true);
     try {
+      const originalVerifiedCategory =
+        userProfile.verifiedCategory ||
+        (userProfile.verified ? userProfile.category : undefined);
+
       const updatedData: Partial<UserProfile> = {
         fullName: fullName.trim() || userProfile.fullName || "Citizen Resident",
         username: cleanUsername,
@@ -426,6 +430,9 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         websiteUrl: websiteUrl.trim(),
         avatarUrl: avatarUrl.trim() || userProfile.avatarUrl,
         category: category,
+        verified: Boolean(userProfile.verified),
+        // Crucial: Keep the original verified category approved by document verification
+        verifiedCategory: originalVerifiedCategory,
       };
 
       if (category === "citizen") {
@@ -644,7 +651,6 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
               <span>User name</span>
-              <span className="text-slate-400 font-normal">(Unique handle)</span>
             </label>
             <span
               className={`text-[10px] font-semibold ${
@@ -687,11 +693,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-1 leading-tight">
               <span>@{username} is available!</span>
             </p>
-          ) : (
-            <p className="text-[10px] text-slate-400 mt-1">
-              Must be unique, 3-15 chars (letters, numbers, underscore).
-            </p>
-          )}
+          ) : null}
         </div>
 
         {/* Bio */}
@@ -837,6 +839,36 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               </span>
             </button>
           </div>
+
+          {/* Verification Badge Category Notice */}
+          {(() => {
+            const originalVerifiedCategory =
+              userProfile.verifiedCategory ||
+              (userProfile.verified ? userProfile.category : undefined);
+            if (
+              userProfile.verified &&
+              originalVerifiedCategory &&
+              category !== originalVerifiedCategory
+            ) {
+              return (
+                <div className="mt-3 p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-2.5 text-xs text-amber-950 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                      <span>Document Verification Protection</span>
+                      <span className="text-[10px] bg-amber-200/70 text-amber-900 px-1.5 py-0.2 rounded font-black uppercase">
+                        {originalVerifiedCategory}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                      Aapka verified badge statutory document verification ke anusaar <strong>{originalVerifiedCategory.toUpperCase()}</strong> par approved hai. Category badalne par aapka verified badge <strong>{originalVerifiedCategory.toUpperCase()}</strong> hi rahega, aur new <strong>{category.toUpperCase()}</strong> badge ke liye administrative document verification ki aavashyakta hogi.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {/* Dynamic Category Specific Inputs */}

@@ -607,10 +607,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </button>
           )}
           <div className="flex items-center gap-1.5 min-w-0">
-            {/* Top Bar: Clean Username */}
-            <h1 className="text-base sm:text-lg font-black text-slate-900 leading-none truncate">
+            {/* Top Bar: Clean Username WITH Verified Badge (+2px larger username: 18px, +1px badge: 17px) */}
+            <h1 className="text-[18px] font-extrabold text-slate-900 leading-none truncate">
               {headerUsername}
             </h1>
+            {userProfile.verified && (
+              <span className="shrink-0">
+                <CategoryVerifiedTick
+                  category={userProfile.verifiedCategory || (userProfile.verified ? userProfile.category : undefined) || "citizen"}
+                  size="xs"
+                  className="!w-[17px] !h-[17px]"
+                />
+              </span>
+            )}
           </div>
         </div>
 
@@ -647,20 +656,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          {/* Right Info: Real Full Name WITH Verified Badge & Counters (No duplicate @username) */}
+          {/* Right Info: Real Full Name & Counters (No verified badge on full name) */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-slate-900 leading-snug line-clamp-2 break-words">
                 {profileFullName}
               </h2>
-              {userProfile.verified && (
-                <span className="shrink-0">
-                  <CategoryVerifiedTick
-                    category={userProfile.category}
-                    size="xs"
-                  />
-                </span>
-              )}
             </div>
 
             {/* 3 Stats Counters */}
@@ -695,8 +696,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <CategoryBadge
             category={userProfile.category}
             verified={userProfile.verified}
+            verifiedCategory={userProfile.verifiedCategory || (userProfile.verified ? userProfile.category : undefined)}
             size="sm"
           />
+
+          {/* If user is verified for a different category, show informative badge pill */}
+          {userProfile.verified &&
+            userProfile.verifiedCategory &&
+            userProfile.category !== userProfile.verifiedCategory && (
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200/80 flex items-center gap-1">
+                <CategoryVerifiedTick
+                  category={userProfile.verifiedCategory}
+                  size="xs"
+                  className="!w-3.5 !h-3.5"
+                />
+                <span>Verified {userProfile.verifiedCategory.toUpperCase()}</span>
+              </span>
+            )}
 
           {/* 2. "Get verified" / "Under Review" Button (ONLY visible to user themselves when unverified) */}
           {!userProfile.verified && isOwnProfile && (
@@ -1030,26 +1046,37 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                                 report.authorUsername,
                                 report.authorName
                               );
-                              const isVerified = isReportAuthorVerified(report);
+                              const isVerified = isReportAuthorVerified(report, userProfile);
+                              const effectiveCategory =
+                                userProfile?.verified &&
+                                (report.authorId === userProfile.id ||
+                                  (report.authorUsername &&
+                                    userProfile.username &&
+                                    report.authorUsername.replace(/^@+/, "").toLowerCase() ===
+                                      userProfile.username.replace(/^@+/, "").toLowerCase()))
+                                  ? userProfile.category
+                                  : report.authorCategory;
 
                               return (
-                                <h3
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onSelectUser)
-                                      onSelectUser(report.authorId);
-                                  }}
-                                  className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
-                                  title={cleanUsername}
-                                >
-                                  <span>{cleanUsername}</span>
+                                <div className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-[260px] md:max-w-[340px]">
+                                  <h3
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (onSelectUser)
+                                        onSelectUser(report.authorId);
+                                    }}
+                                    className="text-[16px] font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap"
+                                    title={cleanUsername}
+                                  >
+                                    {cleanUsername}
+                                  </h3>
                                   {isVerified && (
                                     <CategoryVerifiedTick
-                                      category={report.authorCategory}
+                                      category={effectiveCategory}
                                       size="xs"
                                     />
                                   )}
-                                </h3>
+                                </div>
                               );
                             })()}
 
@@ -1105,7 +1132,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </div>
 
                     {/* Text Description */}
-                    <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
+                    <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
                       {cleanReportText(report.text)}
                     </p>
 
@@ -1629,7 +1656,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         <span className="text-slate-400 font-medium">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                       </div>
 
-                      <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal">
+                      <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal">
                         {cleanReportText(report.text)}
                       </p>
 
@@ -1796,17 +1823,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-extrabold text-slate-900 truncate">
+                    {profileFullName}
+                  </h3>
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-extrabold text-slate-900 truncate">
-                      {profileFullName}
-                    </h3>
+                    <p className="text-xs text-slate-500 font-medium truncate">
+                      @{headerUsername}
+                    </p>
                     {userProfile.verified && (
                       <CategoryVerifiedTick category={userProfile.category} size="xs" />
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 font-medium truncate">
-                    {headerUsername}
-                  </p>
                 </div>
                 <button
                   onClick={() => setIsMenuOpen(false)}

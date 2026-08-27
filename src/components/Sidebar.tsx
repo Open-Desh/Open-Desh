@@ -162,16 +162,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {!isCollapsed && (
-                <div className="mt-1 space-y-1">
-                  <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate flex items-center gap-1.5">
-                    <span>
-                      {userProfile.fullName ||
-                        (userProfile.username ? userProfile.username.replace(/^@+/, "") : "Citizen")}
-                    </span>
+                <div className="mt-1 space-y-0.5">
+                  <h2 className="text-lg sm:text-[19px] font-black text-slate-900 leading-tight truncate">
+                    {userProfile.fullName || "Citizen"}
+                  </h2>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate">
+                    <span>@{userProfile.username ? userProfile.username.replace(/^@+/, "") : "citizen"}</span>
                     {userProfile.verified && (
                       <CategoryVerifiedTick category={userProfile.category} size="xs" />
                     )}
-                  </h2>
+                  </div>
                   <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
                     <span>
                       <strong className="text-slate-900 font-bold">

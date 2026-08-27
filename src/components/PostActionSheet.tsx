@@ -361,7 +361,7 @@ export const PostActionSheet: React.FC<PostActionSheetProps> = ({
                     by @{cleanAuthorHandle}
                   </span>
                 </div>
-                <p className="text-xs text-slate-700 font-medium line-clamp-2 leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-700 font-medium line-clamp-2 leading-relaxed">
                   "{cleanReportText(report.text)}"
                 </p>
               </div>

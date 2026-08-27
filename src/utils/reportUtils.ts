@@ -18,19 +18,56 @@ export const getCleanAuthorUsername = (
 
 /**
  * Checks if the author has genuine database-backed verification
- * (Only returns true if authorVerified is explicitly true or official badge is present)
+ * (Returns true if authorVerified is explicitly true, or if author matches active verified user, or official authority)
  */
 export const isReportAuthorVerified = (
   item?: {
     authorVerified?: boolean;
     authorBadge?: string;
     authorCategory?: string;
+    authorId?: string;
+    authorUsername?: string;
+  } | null,
+  activeUser?: {
+    id?: string;
+    username?: string;
+    verified?: boolean;
+    category?: string;
   } | null
 ): boolean => {
   if (!item) return false;
+
+  // 1. If activeUser is logged in & verified, check if this report is authored by activeUser
+  if (activeUser && activeUser.verified) {
+    const cleanItemUsername = item.authorUsername
+      ? item.authorUsername.replace(/^@+/, "").trim().toLowerCase()
+      : "";
+    const cleanActiveUsername = activeUser.username
+      ? activeUser.username.replace(/^@+/, "").trim().toLowerCase()
+      : "";
+
+    const isSameId = Boolean(
+      item.authorId &&
+        activeUser.id &&
+        (item.authorId === activeUser.id ||
+          item.authorId.toLowerCase() === activeUser.id.toLowerCase())
+    );
+
+    const isSameUsername = Boolean(
+      cleanItemUsername &&
+        cleanActiveUsername &&
+        cleanItemUsername === cleanActiveUsername
+    );
+
+    if (isSameId || isSameUsername) {
+      return true;
+    }
+  }
+
+  // 2. Direct verified boolean flag on the report object
   if (item.authorVerified === true) return true;
 
-  // Department and Representative accounts are verified authorities
+  // 3. Department and Representative accounts are verified authorities
   if (
     item.authorCategory === "department" ||
     item.authorCategory === "representative"
@@ -38,7 +75,7 @@ export const isReportAuthorVerified = (
     return true;
   }
 
-  // If authorBadge has explicit verified text
+  // 4. If authorBadge has explicit verified text
   if (
     item.authorBadge &&
     (item.authorBadge.toLowerCase().includes("verified") ||
@@ -49,9 +86,68 @@ export const isReportAuthorVerified = (
     return true;
   }
 
-  if (item.authorVerified === false) return false;
-
   return false;
+};
+
+/**
+ * Resolves the genuine verified category approved by document verification.
+ * If a user was verified for 'citizen' but edits profile to 'business' or 'representative',
+ * their verified badge category stays strictly the document-verified one ('citizen')
+ * until new documents are approved by Open Desh administration.
+ */
+export const getReportAuthorVerifiedCategory = (
+  item?: {
+    authorVerified?: boolean;
+    authorVerifiedCategory?: string;
+    authorCategory?: string;
+    authorId?: string;
+    authorUsername?: string;
+  } | null,
+  activeUser?: {
+    id?: string;
+    username?: string;
+    verified?: boolean;
+    verifiedCategory?: string;
+    category?: string;
+  } | null
+): string => {
+  if (!item) return "citizen";
+
+  // 1. If this item is authored by active logged-in user who is verified
+  if (activeUser && activeUser.verified) {
+    const cleanItemUsername = item.authorUsername
+      ? item.authorUsername.replace(/^@+/, "").trim().toLowerCase()
+      : "";
+    const cleanActiveUsername = activeUser.username
+      ? activeUser.username.replace(/^@+/, "").trim().toLowerCase()
+      : "";
+
+    const isSameId = Boolean(
+      item.authorId &&
+        activeUser.id &&
+        (item.authorId === activeUser.id ||
+          item.authorId.toLowerCase() === activeUser.id.toLowerCase())
+    );
+
+    const isSameUsername = Boolean(
+      cleanItemUsername &&
+        cleanActiveUsername &&
+        cleanItemUsername === cleanActiveUsername
+    );
+
+    if (isSameId || isSameUsername) {
+      // Prioritize the document-verified category!
+      return activeUser.verifiedCategory || (activeUser.verified ? activeUser.category : undefined) || "citizen";
+    }
+  }
+
+  // 2. Direct verifiedCategory recorded on the item/report
+  if (item.authorVerifiedCategory) {
+    return item.authorVerifiedCategory;
+  }
+
+  // 3. Fallback to author category
+  return item.authorCategory || "citizen";
 };
 
 /**

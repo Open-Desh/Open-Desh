@@ -72,6 +72,9 @@
     },
     "/budgets/{budgetId}": {
       "description": "Real public budget allocations across National, State, District, and Village Gram Panchayat levels."
+    },
+    "/help_articles/{articleId}": {
+      "description": "Public Knowledge Base and Help Center articles with SEO metadata and community guidance."
     }
   }
 }

@@ -252,7 +252,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                             e.stopPropagation();
                             if (onSelectUser) onSelectUser(report.authorId);
                           }}
-                          className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
+                          className="text-[16px] font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
                           title={report.authorName}
                         >
                           <span>{report.authorName}</span>
@@ -293,7 +293,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 </div>
 
                 {/* Text Description */}
-                <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
+                <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
                   {report.text}
                 </p>
 

@@ -585,8 +585,11 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                                 {rev.authorName}
                               </span>
                               {rev.verifiedVoter && (
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
-                                  {t("eval.verifiedVoter", "Verified Voter")}
+                                <span className="inline-flex items-center gap-1">
+                                  <CategoryVerifiedTick category="citizen" size="xs" />
+                                  <span className="text-[9px] font-black uppercase px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                                    {t("eval.verifiedVoter", "Verified Voter")}
+                                  </span>
                                 </span>
                               )}
                             </div>

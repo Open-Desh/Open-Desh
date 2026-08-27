@@ -118,6 +118,7 @@ export interface UserProfile {
   services?: CivicService[];
   systemScoreBreakdown?: SystemScoreBreakdown;
   verified: boolean;
+  verifiedCategory?: UserCategory;
   verificationStatus?: "none" | "pending" | "approved" | "rejected";
   verificationSubmittedAt?: string;
   verificationSubmittedCategory?: UserCategory;
@@ -145,6 +146,7 @@ export interface ThreadedReply {
   authorCategory: UserCategory;
   authorBadge?: string;
   authorVerified?: boolean;
+  authorVerifiedCategory?: UserCategory;
   text: string;
   imageUrl?: string;
   timestamp: string;
@@ -195,6 +197,7 @@ export interface ReportIssue {
   authorCategory: UserCategory;
   authorBadge?: string;
   authorVerified?: boolean;
+  authorVerifiedCategory?: UserCategory;
   category: IssueCategory;
   text: string;
   imageUrl?: string;
@@ -427,6 +430,58 @@ export interface BudgetHierarchyNode {
   officialSource: string;
   officialGazetteRef?: string;
   lastUpdated: string;
+}
+
+export type HelpCategoryId =
+  | "getting_started"
+  | "reports_and_complaints"
+  | "government_and_officials"
+  | "ratings_and_reviews"
+  | "public_budget"
+  | "account_and_privacy"
+  | "safety_and_policies"
+  | string;
+
+export interface HelpCategoryInfo {
+  id: HelpCategoryId;
+  label: string;
+  hindiLabel: string;
+  description: string;
+  descriptionHindi?: string;
+  icon: string;
+  color: string;
+  badgeBg: string;
+}
+
+export interface HelpFaqItem {
+  question: string;
+  answer: string;
+  englishQuestion?: string;
+  englishAnswer?: string;
+}
+
+export interface HelpArticle {
+  id: string;
+  slug: string;
+  category: HelpCategoryId;
+  categoryLabel: string;
+  categoryHindi: string;
+  title: string;
+  englishTitle?: string;
+  summary: string;
+  englishSummary?: string;
+  keyPoints: string[];
+  englishKeyPoints?: string[];
+  fullContent: string[];
+  englishFullContent?: string[];
+  faqQuestions?: HelpFaqItem[];
+  tags: string[];
+  englishTags?: string[];
+  readTimeMinutes: number;
+  sourceUrl: string;
+  lastUpdated: string;
+  iconName?: string;
+  relatedArticleIds?: string[];
 }
 
 export * from "./types/notification.ts";

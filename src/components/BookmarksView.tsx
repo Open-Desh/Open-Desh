@@ -142,17 +142,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span
                         onClick={() => onSelectUser && onSelectUser(reply.authorId)}
-                        className="font-extrabold text-slate-900 cursor-pointer hover:underline flex items-center gap-1"
+                        className="font-extrabold text-[16px] text-slate-900 cursor-pointer hover:underline flex items-center gap-1"
                       >
                         <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
-                        {isReportAuthorVerified(reply) && (
+                        {isReportAuthorVerified(reply, userProfile) && (
                           <CategoryVerifiedTick
                             category={reply.authorCategory}
                             size="xs"
                           />
                         )}
                       </span>
-                      {reply.authorBadge && isReportAuthorVerified(reply) && (
+                      {reply.authorBadge && isReportAuthorVerified(reply, userProfile) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                             reply.isOfficialIntervention
@@ -294,17 +294,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                          className="font-extrabold text-slate-900 text-sm hover:underline cursor-pointer truncate flex items-center gap-1"
+                          className="font-extrabold text-slate-900 text-[16px] hover:underline cursor-pointer truncate flex items-center gap-1"
                         >
                           <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
-                          {isReportAuthorVerified(report) && (
+                          {isReportAuthorVerified(report, userProfile) && (
                             <CategoryVerifiedTick
                               category={report.authorCategory}
                               size="xs"
                             />
                           )}
                         </span>
-                        {report.authorBadge && isReportAuthorVerified(report) && (
+                        {report.authorBadge && isReportAuthorVerified(report, userProfile) && (
                           <span
                             className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                               report.authorCategory === "department"
@@ -317,9 +317,6 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                             {report.authorBadge}
                           </span>
                         )}
-                        <span className="text-xs text-slate-400 truncate">
-                          @{getCleanAuthorUsername(report.authorUsername, report.authorName)}
-                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
                         <span>{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
@@ -362,7 +359,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 </div>
 
                 {/* Grievance Post Content Text */}
-                <p className="text-slate-800 text-sm sm:text-[15px] leading-relaxed break-words font-normal">
+                <p className="text-slate-800 text-sm sm:text-base leading-relaxed break-words font-normal">
                   {cleanReportText(report.text)}
                 </p>
 

@@ -930,9 +930,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                           className="w-8 h-8 rounded-full object-cover border border-slate-200"
                         />
                         <div>
-                          <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                          <span className="font-extrabold text-[16px] text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
                             <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
-                            {isReportAuthorVerified(report) && (
+                            {isReportAuthorVerified(report, userProfile) && (
                               <CategoryVerifiedTick category={report.authorCategory} size="xs" />
                             )}
                           </span>
@@ -947,7 +947,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </span>
                     </div>
 
-                    <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
+                    <p className="text-sm sm:text-base text-slate-900 font-normal leading-relaxed">
                       {cleanReportText(report.text)}
                     </p>
 
@@ -1180,9 +1180,9 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         className="w-8 h-8 rounded-full object-cover border border-slate-200"
                       />
                       <div>
-                        <span className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                        <span className="font-extrabold text-[16px] text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
                           <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
-                          {isReportAuthorVerified(report) && (
+                          {isReportAuthorVerified(report, userProfile) && (
                             <CategoryVerifiedTick category={report.authorCategory} size="xs" />
                           )}
                         </span>
@@ -1209,7 +1209,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-xs sm:text-sm text-slate-900 font-normal leading-relaxed">
+                  <p className="text-sm sm:text-base text-slate-900 font-normal leading-relaxed">
                     {cleanReportText(report.text)}
                   </p>
 
@@ -1288,10 +1288,11 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0 group-hover:scale-105 transition-transform"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="font-black text-sm text-slate-900 group-hover:text-blue-600 truncate">
-                            {displayFullName}
-                          </h4>
+                        <h4 className="font-black text-sm text-slate-900 group-hover:text-blue-600 truncate">
+                          {displayFullName}
+                        </h4>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate">
+                          <span>@{user.username ? user.username.replace(/^@+/, "") : displayFullName.toLowerCase().replace(/\s+/g, "_")}</span>
                           {(user.verified || user.verificationStatus === "approved") && (
                             <CategoryVerifiedTick category={user.category} size="xs" />
                           )}

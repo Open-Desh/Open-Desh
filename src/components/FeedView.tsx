@@ -26,6 +26,7 @@ import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -190,25 +191,31 @@ export const FeedView: React.FC<FeedViewProps> = ({
                           report.authorUsername,
                           report.authorName
                         );
-                        const isVerified = isReportAuthorVerified(report);
+                        const isVerified = isReportAuthorVerified(report, userProfile);
+                        const effectiveVerifiedCategory = getReportAuthorVerifiedCategory(
+                          report,
+                          userProfile
+                        );
 
                         return (
-                          <h3
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onSelectUser) onSelectUser(report.authorId);
-                            }}
-                            className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
-                            title={cleanUsername}
-                          >
-                            <span>{cleanUsername}</span>
+                          <div className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-[260px] md:max-w-[340px]">
+                            <h3
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onSelectUser) onSelectUser(report.authorId);
+                              }}
+                              className="text-[16px] font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap"
+                              title={cleanUsername}
+                            >
+                              {cleanUsername}
+                            </h3>
                             {isVerified && (
                               <CategoryVerifiedTick
-                                category={report.authorCategory}
+                                category={effectiveVerifiedCategory}
                                 size="xs"
                               />
                             )}
-                          </h3>
+                          </div>
                         );
                       })()}
                       {report.authorBadge && isReportAuthorVerified(report) && (
@@ -256,7 +263,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               </div>
 
               {/* Text Description */}
-              <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
+              <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
                 {cleanReportText(report.text)}
               </p>
 

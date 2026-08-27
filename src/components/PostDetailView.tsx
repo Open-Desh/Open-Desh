@@ -364,17 +364,17 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                           e.stopPropagation();
                           onSelectUser && onSelectUser(reply.authorId);
                         }}
-                        className="font-extrabold text-sm text-slate-900 cursor-pointer hover:underline truncate flex items-center gap-1"
+                        className="font-extrabold text-[16px] text-slate-900 cursor-pointer hover:underline truncate flex items-center gap-1"
                       >
                         <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
-                        {isReportAuthorVerified(reply) && (
+                        {isReportAuthorVerified(reply, userProfile) && (
                           <CategoryVerifiedTick
                             category={reply.authorCategory}
                             size="xs"
                           />
                         )}
                       </span>
-                      {reply.authorBadge && isReportAuthorVerified(reply) && (
+                      {reply.authorBadge && isReportAuthorVerified(reply, userProfile) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
                             reply.isOfficialIntervention
@@ -385,10 +385,6 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                           {reply.authorBadge}
                         </span>
                       )}
-                      <span className="text-xs text-slate-400 truncate">
-                        @{reply.authorUsername || "citizen"}
-                      </span>
-                      <span className="text-xs text-slate-400">·</span>
                       <span className="text-xs text-slate-400 shrink-0">
                         {formatReportTimestamp(reply.createdAt || reply.timestamp)}
                       </span>
@@ -405,7 +401,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                   )}
 
                   {/* Reply text */}
-                  <p className="text-sm text-slate-900 mt-1.5 leading-relaxed whitespace-pre-line font-normal">
+                  <p className="text-sm sm:text-base text-slate-900 mt-1.5 leading-relaxed whitespace-pre-line font-normal">
                     {reply.text}
                   </p>
 
@@ -553,22 +549,33 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                     report.authorUsername,
                     report.authorName
                   );
-                  const isVerified = isReportAuthorVerified(report);
+                  const isVerified = isReportAuthorVerified(report, userProfile);
+                  const effectiveCategory =
+                    userProfile?.verified &&
+                    (report.authorId === userProfile.id ||
+                      (report.authorUsername &&
+                        userProfile.username &&
+                        report.authorUsername.replace(/^@+/, "").toLowerCase() ===
+                          userProfile.username.replace(/^@+/, "").toLowerCase()))
+                      ? userProfile.category
+                      : report.authorCategory;
 
                   return (
-                    <h3
-                      onClick={() => onSelectUser && onSelectUser(report.authorId)}
-                      className="text-sm font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap max-w-[140px] sm:max-w-[220px] md:max-w-[300px] flex items-center gap-1"
-                      title={cleanUsername}
-                    >
-                      <span>{cleanUsername}</span>
+                    <div className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-[260px] md:max-w-[340px]">
+                      <h3
+                        onClick={() => onSelectUser && onSelectUser(report.authorId)}
+                        className="text-[16px] font-extrabold text-slate-900 cursor-pointer hover:underline truncate whitespace-nowrap"
+                        title={cleanUsername}
+                      >
+                        {cleanUsername}
+                      </h3>
                       {isVerified && (
                         <CategoryVerifiedTick
-                          category={report.authorCategory}
+                          category={effectiveCategory}
                           size="xs"
                         />
                       )}
-                    </h3>
+                    </div>
                   );
                 })()}
 
@@ -619,7 +626,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
         </div>
 
         {/* Post Text Description */}
-        <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-normal whitespace-pre-line">
+        <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
           {cleanReportText(report.text)}
         </p>
 

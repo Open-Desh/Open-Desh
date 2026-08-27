@@ -629,19 +629,24 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                       />
 
                       <div className="min-w-0 flex-1">
-                        {/* Name + Strict DB Verified Category Badge */}
+                        {/* Name */}
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h2 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate flex items-center gap-1 leading-tight">
-                            <span>{displayFullName}</span>
-                            {isVerified && (
-                              <CategoryVerifiedTick category={user.category} size="xs" />
-                            )}
+                          <h2 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate leading-tight">
+                            {displayFullName}
                           </h2>
 
                           {isBusiness && (
                             <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 shrink-0">
                               {user.businessDetails?.industry || "Business"}
                             </span>
+                          )}
+                        </div>
+
+                        {/* Username & Verified Badge */}
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate mt-0.5">
+                          <span>@{user.username ? user.username.replace(/^@+/, "") : displayFullName.toLowerCase().replace(/\s+/g, "_")}</span>
+                          {isVerified && (
+                            <CategoryVerifiedTick category={user.category} size="xs" />
                           )}
                         </div>
 

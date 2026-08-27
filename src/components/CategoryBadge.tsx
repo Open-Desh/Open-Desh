@@ -1,21 +1,22 @@
 import React from "react";
-import { Check, Clock, AlertCircle } from "lucide-react";
+import { Clock } from "lucide-react";
 import { UserCategory } from "../types.ts";
 
 export interface CategoryBadgeProps {
   category?: UserCategory | string;
   verified?: boolean;
-  size?: "xs" | "sm" | "md" | "lg";
+  verifiedCategory?: UserCategory | string;
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   showLabel?: boolean;
   className?: string;
   onClick?: () => void;
 }
 
-// 4 Official Color Specifications:
-// Citizen: 🔵 Royal Blue (#2563eb / blue-600)
-// Business: 🟡 Golden Yellow (#eab308 / #f59e0b / amber-500)
-// Department: 🟤 Brown / Bronze (#78350f / amber-900 / #8B4513)
-// Representative: 🟢 Emerald Green (#16a34a / emerald-600)
+// 4 Official Color Specifications with modern Meta / Facebook style Scalloped Rosette:
+// 1. Citizen: 🔵 Sky/Royal Blue Rosette (#1d9bf0 / #2563eb)
+// 2. Business: 🟡 Golden Amber Rosette (#f59e0b / #d97706)
+// 3. Department: 🟤 Brown / Bronze Rosette (#78350f / #92400e)
+// 4. Representative: 🟢 Emerald Green Rosette (#10b981 / #059669)
 
 export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
   const cat = typeof category === "string" ? category.toLowerCase() : category;
@@ -25,8 +26,9 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         label: "Verified Business",
         shortLabel: "Business",
         categoryTitle: "BUSINESS / COMPANY",
-        tickColor: "bg-amber-500",
-        tickBorder: "border-amber-400",
+        gradientFrom: "#fbbf24", // Amber 400
+        gradientTo: "#d97706",   // Amber 600
+        shadowColor: "rgba(217, 119, 6, 0.4)",
         textColor: "text-amber-900",
         bgColor: "bg-amber-50",
         borderColor: "border-amber-300",
@@ -35,7 +37,7 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         buttonStyle: "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-400/80 shadow-amber-500/10",
         hexColor: "#f59e0b",
         symbolEmoji: "🟡",
-        themeName: "Yellow Tick",
+        themeName: "Gold Badge",
         description: "Corporate, Enterprise & MSME verified organization",
       };
     case "department":
@@ -43,8 +45,9 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         label: "Verified Govt Dept",
         shortLabel: "Govt Dept",
         categoryTitle: "DEPARTMENT",
-        tickColor: "bg-[#78350f]",
-        tickBorder: "border-amber-800",
+        gradientFrom: "#92400e", // Bronze / Amber 800
+        gradientTo: "#78350f",   // Deep Brown 900
+        shadowColor: "rgba(120, 53, 15, 0.4)",
         textColor: "text-[#582707]",
         bgColor: "bg-[#fcf6f0]",
         borderColor: "border-[#b45309]/30",
@@ -53,7 +56,7 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         buttonStyle: "bg-[#fcf6f0] hover:bg-[#f5e9dc] text-[#78350f] border-[#b45309]/50 shadow-[#78350f]/10",
         hexColor: "#78350f",
         symbolEmoji: "🟤",
-        themeName: "Brown Tick",
+        themeName: "Bronze Badge",
         description: "Official government department, municipal board or nodal agency",
       };
     case "representative":
@@ -61,8 +64,9 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         label: "Verified Leader",
         shortLabel: "Representative",
         categoryTitle: "REPRESENTATIVE",
-        tickColor: "bg-emerald-600",
-        tickBorder: "border-emerald-500",
+        gradientFrom: "#10b981", // Emerald 500
+        gradientTo: "#047857",   // Emerald 700
+        shadowColor: "rgba(5, 150, 105, 0.4)",
         textColor: "text-emerald-900",
         bgColor: "bg-emerald-50",
         borderColor: "border-emerald-300",
@@ -71,7 +75,7 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         buttonStyle: "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-400/80 shadow-emerald-600/10",
         hexColor: "#16a34a",
         symbolEmoji: "🟢",
-        themeName: "Green Tick",
+        themeName: "Green Badge",
         description: "Elected public representative, MP, MLA, Minister, or Councillor",
       };
     case "citizen":
@@ -80,8 +84,9 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         label: "Verified Citizen",
         shortLabel: "Citizen",
         categoryTitle: "CITIZEN",
-        tickColor: "bg-blue-600",
-        tickBorder: "border-blue-500",
+        gradientFrom: "#2563eb", // Brand Royal Blue (Blue 600 - matching center + button)
+        gradientTo: "#1d4ed8",   // Brand Deep Royal Blue (Blue 700)
+        shadowColor: "rgba(37, 99, 235, 0.4)",
         textColor: "text-blue-900",
         bgColor: "bg-blue-50",
         borderColor: "border-blue-300",
@@ -90,45 +95,70 @@ export const getCategoryBadgeConfig = (category?: UserCategory | string) => {
         buttonStyle: "bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-400/80 shadow-blue-600/10",
         hexColor: "#2563eb",
         symbolEmoji: "🔵",
-        themeName: "Blue Tick",
+        themeName: "Brand Royal Blue Badge",
         description: "Authenticated Indian citizen voter and civic contributor",
       };
   }
 };
 
 /**
- * Category-colored Verified Tick Icon
+ * Modern Meta / Instagram / Facebook Scalloped 16-point Rosette Verified Badge
  */
 export const CategoryVerifiedTick: React.FC<{
   category?: UserCategory | string;
-  size?: "xs" | "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   className?: string;
   animate?: boolean;
 }> = ({ category = "citizen", size = "sm", className = "", animate = false }) => {
   const config = getCategoryBadgeConfig(category);
+  const gradId = `meta-badge-${category}-${size}`;
 
   const sizeClasses = {
-    xs: "w-3.5 h-3.5 p-0.5",
-    sm: "w-4 h-4 p-0.5",
-    md: "w-5 h-5 p-0.5",
-    lg: "w-6 h-6 p-1",
-  };
-
-  const iconSizes = {
-    xs: "w-2.5 h-2.5",
-    sm: "w-3 h-3",
-    md: "w-3.5 h-3.5",
-    lg: "w-4 h-4",
+    xs: "w-4 h-4",
+    sm: "w-5 h-5",
+    md: "w-6 h-6",
+    lg: "w-7 h-7",
+    xl: "w-9 h-9",
   };
 
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full text-white font-black shrink-0 ${
-        config.tickColor
-      } ${sizeClasses[size]} ${animate ? "animate-pulse" : ""} ${className}`}
+      className={`inline-flex items-center justify-center shrink-0 align-middle ${sizeClasses[size]} ${
+        animate ? "animate-pulse" : ""
+      } ${className}`}
       title={`${config.label} (${config.themeName})`}
     >
-      <Check className={`${iconSizes[size]} stroke-[3.5]`} />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full drop-shadow-xs transition-transform hover:scale-110"
+        style={{
+          filter: `drop-shadow(0 1px 2px ${config.shadowColor})`,
+        }}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={config.gradientFrom} />
+            <stop offset="100%" stopColor={config.gradientTo} />
+          </linearGradient>
+        </defs>
+
+        {/* 12-point Scalloped Star Badge from reference image */}
+        <path
+          d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z"
+          fill={`url(#${gradId})`}
+        />
+
+        {/* Crisp Checkmark */}
+        <path
+          d="M7.75 12.25l2.75 2.75 5.75-5.75"
+          stroke="#ffffff"
+          strokeWidth="2.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </span>
   );
 };
@@ -181,12 +211,14 @@ export const CategoryGetVerifiedButton: React.FC<{
 export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
   category = "citizen",
   verified = false,
+  verifiedCategory,
   size = "sm",
   showLabel = true,
   className = "",
   onClick,
 }) => {
   const config = getCategoryBadgeConfig(category);
+  const badgeTickCategory = verifiedCategory || category;
 
   return (
     <div
@@ -196,9 +228,9 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
       } ${config.textColor} ${config.borderColor} ${
         onClick ? "cursor-pointer hover:opacity-90 active:scale-95" : "cursor-default"
       } ${className}`}
-      title={`${config.categoryTitle} ${verified ? `(${config.themeName})` : ""}`}
+      title={`${config.categoryTitle} ${verified ? `(Verified ${badgeTickCategory})` : ""}`}
     >
-      {verified && <CategoryVerifiedTick category={category} size={size === "lg" ? "md" : "xs"} />}
+      {verified && <CategoryVerifiedTick category={badgeTickCategory} size={size === "lg" ? "md" : "xs"} />}
       {showLabel && <span>{config.categoryTitle}</span>}
     </div>
   );

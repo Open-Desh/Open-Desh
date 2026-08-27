@@ -10,10 +10,6 @@ import {
   MapPin,
   Bell,
   VolumeX,
-  Languages,
-  Palette,
-  EyeOff,
-  Wifi,
   Scale,
   FileText,
   ShieldAlert,
@@ -31,7 +27,6 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
-import { useLanguage, INDIAN_LANGUAGES } from "../context/LanguageContext.tsx";
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -46,8 +41,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onNavigate,
   onBackToHome,
 }) => {
-  const { language, setLanguage, currentLanguageInfo, t } = useLanguage();
-
   // Navigation stack for full-screen drilldown (No popups!)
   const [currentScreen, setCurrentScreen] = useState<string>("main");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -67,29 +60,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [publicGrievanceTimeline, setPublicGrievanceTimeline] = useState<boolean>(true);
   const [allowOfficialTagging, setAllowOfficialTagging] = useState<boolean>(true);
 
-  // Display & Data Toggles
-  const [lowDataMode, setLowDataMode] = useState<boolean>(false);
-  const [highContrast, setHighContrast] = useState<boolean>(false);
-  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
-  const [fontSize, setFontSize] = useState<string>("Medium");
-
   // Download Archive State
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportComplete, setExportComplete] = useState<boolean>(false);
-
-  // Languages list for India
-  const indianLanguages = [
-    { name: "English (India)", native: "English", code: "en-IN" },
-    { name: "Hindi", native: "हिन्दी", code: "hi" },
-    { name: "Bengali", native: "বাংলা", code: "bn" },
-    { name: "Telugu", native: "తెలుగు", code: "te" },
-    { name: "Marathi", native: "मराठी", code: "mr" },
-    { name: "Tamil", native: "தமிழ்", code: "ta" },
-    { name: "Gujarati", native: "ગુજરાતી", code: "gu" },
-    { name: "Kannada", native: "ಕನ್ನಡ", code: "kn" },
-    { name: "Odia", native: "ଓଡ଼ିଆ", code: "or" },
-    { name: "Punjabi", native: "ਪੰਜਾਬੀ", code: "pa" },
-  ];
 
   const handleDownloadData = () => {
     setIsExporting(true);
@@ -176,13 +149,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         description:
           "Manage what information you see and share on Open Desh, location precision, and whistleblower protection.",
         icon: Shield,
-      },
-      {
-        id: "accessibility_display",
-        title: "Accessibility, display and languages",
-        description:
-          "Manage display contrast, regional Indian languages, and low-bandwidth data usage optimizations.",
-        icon: Palette,
       },
       {
         id: "legal_notices",
@@ -643,123 +609,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="w-5 h-5 accent-blue-600 shrink-0 cursor-pointer"
             />
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ----------------------------------------------------
-   * 4. ACCESSIBILITY, DISPLAY & LANGUAGES SCREEN
-   * ---------------------------------------------------- */
-  if (currentScreen === "accessibility_display") {
-    return (
-      <div className="w-full max-w-2xl mx-auto bg-white min-h-screen pb-24 md:pb-12 animate-fadeIn">
-        {renderHeader("Accessibility, display and languages", "Preferences", () => setCurrentScreen("main"))}
-
-        <div className="divide-y divide-slate-100">
-          {/* Languages Selector */}
-          <button
-            onClick={() => setCurrentScreen("languages_list")}
-            className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-slate-50 transition-colors cursor-pointer group"
-          >
-            <div className="flex items-center gap-4">
-              <Languages className="w-5 h-5 text-slate-600 group-hover:text-blue-600 shrink-0" />
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Regional Indian Languages</h3>
-                <p className="text-xs text-slate-500">Currently: {currentLanguageInfo.name} ({currentLanguageInfo.nativeName})</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-slate-400" />
-          </button>
-
-          {/* Low-Data Mode for 2G/3G */}
-          <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-            <div className="flex items-start gap-4 pr-2">
-              <Wifi className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Low-Bandwidth Data Saver</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Optimize images and reduce network usage for rural 2G/3G connectivity across Indian districts.
-                </p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={lowDataMode}
-              onChange={(e) => setLowDataMode(e.target.checked)}
-              className="w-5 h-5 accent-blue-600 shrink-0 cursor-pointer"
-            />
-          </div>
-
-          {/* High Contrast Mode */}
-          <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-            <div className="flex items-start gap-4 pr-2">
-              <Palette className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">High Contrast Mode</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Increase text contrast and border sharpness for outdoor sunlight readability.
-                </p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={highContrast}
-              onChange={(e) => setHighContrast(e.target.checked)}
-              className="w-5 h-5 accent-blue-600 shrink-0 cursor-pointer"
-            />
-          </div>
-
-          {/* Reduce Motion */}
-          <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-            <div className="flex items-start gap-4 pr-2">
-              <EyeOff className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Reduce Motion & Transitions</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Minimize UI animation loops and slider effects.
-                </p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={reduceMotion}
-              onChange={(e) => setReduceMotion(e.target.checked)}
-              className="w-5 h-5 accent-blue-600 shrink-0 cursor-pointer"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ----------------------------------------------------
-   * 4A. REGIONAL LANGUAGES SELECTION SCREEN
-   * ---------------------------------------------------- */
-  if (currentScreen === "languages_list") {
-    return (
-      <div className="w-full max-w-2xl mx-auto bg-white min-h-screen pb-24 md:pb-12 animate-fadeIn">
-        {renderHeader("Languages of India", "Select App Language", () => setCurrentScreen("accessibility_display"))}
-
-        <div className="divide-y divide-slate-100">
-          {INDIAN_LANGUAGES.map((lang) => (
-            <button
-              key={lang.code}
-              onClick={() => {
-                setLanguage(lang.code);
-                setCurrentScreen("accessibility_display");
-              }}
-              className="w-full p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left cursor-pointer"
-            >
-              <div>
-                <div className="text-sm font-bold text-slate-900">{lang.nativeName} ({lang.name})</div>
-                <div className="text-xs text-slate-500">{lang.region}</div>
-              </div>
-              {language === lang.code && (
-                <Check className="w-5 h-5 text-blue-600 stroke-[2.5]" />
-              )}
-            </button>
-          ))}
         </div>
       </div>
     );

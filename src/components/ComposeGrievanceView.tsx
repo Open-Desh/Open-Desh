@@ -19,7 +19,6 @@ import {
   Zap,
   Trash2,
   RefreshCw,
-  EyeOff,
   ShieldCheck,
   Plus,
   Compass,
@@ -84,7 +83,6 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   const [aiRefinedDraft, setAiRefinedDraft] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<IssueCategory>(initialCategory || "Infrastructure");
   const [urgencyLevel, setUrgencyLevel] = useState<"Normal" | "High Priority" | "Critical Emergency">("Normal");
-  const [isAnonymous, setIsAnonymous] = useState(false);
   const [isAIPolishing, setIsAIPolishing] = useState(false);
   const [aiRefinedSuccess, setAiRefinedSuccess] = useState(false);
 
@@ -464,10 +462,6 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
         fullReportText = fullReportText ? `${fullReportText}\n\n${structuredItems.join(" • ")}` : structuredItems.join(" • ");
       }
 
-      if (isAnonymous) {
-        fullReportText = `[PROTECTED IDENTITY REPORT]\n${fullReportText}`;
-      }
-
       // Collect all tagged mentions from both activeSelectedTags and manual @ tags in text
       const extractedManualMentions = (fullReportText.match(/@+([a-zA-Z0-9_]+)/g) || []);
       const allMentionedTags = Array.from(
@@ -680,18 +674,14 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           <div className="flex items-start gap-2.5 pb-1">
             {/* User DP / Avatar */}
             <img
-              src={
-                isAnonymous
-                  ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
-                  : userProfile.avatarUrl
-              }
+              src={userProfile.avatarUrl}
               alt={userProfile.fullName}
               className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5"
             />
 
             {/* Right side aligned content */}
             <div className="flex-1 min-w-0 space-y-1.5">
-              {/* Row 1: Category and Anonymous button in one line */}
+              {/* Row 1: Category pill & Urgency badge */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 {/* Category Slider Trigger Pill */}
                 <button
@@ -704,21 +694,6 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   <CategoryIcon className="w-3.5 h-3.5 text-blue-600" />
                   <span>{selectedCategoryMeta.label}</span>
                   <span className="text-[10px] text-blue-500 ml-0.5">▼</span>
-                </button>
-
-                {/* Whistleblower Mode Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setIsAnonymous(!isAnonymous)}
-                  className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
-                    isAnonymous
-                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                  }`}
-                  title="Hide your name and profile to protect your identity"
-                >
-                  <EyeOff className="w-3 h-3" />
-                  <span>{isAnonymous ? "Protected Identity" : "Anonymous"}</span>
                 </button>
 
                 {/* Urgent/Critical Active Indicator Badge */}
