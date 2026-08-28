@@ -7,7 +7,7 @@ interface PwaInstallBannerProps {
 }
 
 export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ onOpenModal }) => {
-  const { isInstalled, hasNativePrompt, installApp } = usePwaInstall();
+  const { isInstalled, isIframe, hasNativePrompt, installApp } = usePwaInstall();
   const [dismissed, setDismissed] = useState<boolean>(false);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ onOpenModal 
 
   const handleQuickInstall = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (hasNativePrompt) {
+    if (!isIframe && hasNativePrompt) {
       await installApp();
     } else {
       onOpenModal();

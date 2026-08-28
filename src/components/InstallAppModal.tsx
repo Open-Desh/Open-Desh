@@ -12,6 +12,8 @@ import {
   PlusSquare,
   ShieldCheck,
   Globe,
+  ExternalLink,
+  Info,
 } from "lucide-react";
 import { usePwaInstall } from "../hooks/usePwaInstall.ts";
 
@@ -21,12 +23,25 @@ interface InstallAppModalProps {
 }
 
 export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClose }) => {
-  const { isInstalled, isIOS, installApp, hasNativePrompt } = usePwaInstall();
+  const { isInstalled, isIOS, isIframe, installApp, hasNativePrompt } = usePwaInstall();
   const [installStatus, setInstallStatus] = useState<"idle" | "installing" | "success" | "manual">("idle");
 
   if (!isOpen) return null;
 
+  const handleOpenInNewTab = () => {
+    try {
+      window.open(window.location.href, "_blank");
+    } catch {
+      window.location.href = window.location.href;
+    }
+  };
+
   const handleInstallClick = async () => {
+    if (isIframe) {
+      handleOpenInNewTab();
+      return;
+    }
+
     if (hasNativePrompt) {
       setInstallStatus("installing");
       const res = await installApp();
@@ -45,9 +60,9 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden relative animate-scaleUp">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden relative animate-scaleUp max-h-[90vh] flex flex-col">
         {/* Header Ribbon */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-6 pb-5 text-white relative">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-6 pb-5 text-white relative shrink-0">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
@@ -79,10 +94,10 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-4 overflow-y-auto">
           {/* Key Advantages */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
               <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-xs font-bold text-slate-800">Instant Launch</h4>
@@ -90,7 +105,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
               </div>
             </div>
 
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
               <WifiOff className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-xs font-bold text-slate-800">Offline Caching</h4>
@@ -98,7 +113,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
               </div>
             </div>
 
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
               <Bell className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-xs font-bold text-slate-800">Real-Time Alerts</h4>
@@ -106,7 +121,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
               </div>
             </div>
 
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
               <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-xs font-bold text-slate-800">100% Safe & Secure</h4>
@@ -115,8 +130,19 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          {/* Installation Status / Instructions */}
-          {isInstalled ? (
+          {/* If inside AI Studio preview iframe */}
+          {isIframe ? (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200/80 space-y-2.5 text-left">
+              <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Naye Tab me kholkar Install karein:</span>
+              </div>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Google Chrome security rules ke mutabik kisi preview frame ke andar se direct install nahi kiya ja sakta.
+                App ko <strong>New Browser Tab</strong> me kholiye, wahan Chrome ka 1-Click Install pop-up turant show hoga!
+              </p>
+            </div>
+          ) : isInstalled ? (
             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-1.5">
               <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 mb-1">
                 <CheckCircle2 className="w-5 h-5" />
@@ -132,17 +158,17 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
             <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 space-y-3">
               <p className="text-xs font-extrabold text-blue-900 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-blue-600" />
-                How to install on iPhone / iPad (Safari):
+                iPhone / iPad (Safari) me Install karne ka tarika:
               </p>
               <ol className="text-xs text-blue-800 space-y-2 pl-4 list-decimal font-medium">
                 <li>
-                  Tap the <strong className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded border border-blue-200 text-blue-700"><Share className="w-3 h-3 inline" /> Share</strong> button at the bottom of Safari.
+                  Safari ke bottom me <strong className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded border border-blue-200 text-blue-700"><Share className="w-3 h-3 inline" /> Share</strong> button dabayein.
                 </li>
                 <li>
-                  Scroll down and tap <strong className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded border border-blue-200 text-blue-700"><PlusSquare className="w-3 h-3 inline" /> Add to Home Screen</strong>.
+                  Niche scroll karke <strong className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded border border-blue-200 text-blue-700"><PlusSquare className="w-3 h-3 inline" /> Add to Home Screen</strong> select karein.
                 </li>
                 <li>
-                  Tap <strong>Add</strong> at top right to download.
+                  Top right me <strong>Add</strong> par click karein.
                 </li>
               </ol>
             </div>
@@ -157,9 +183,6 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                   Chrome ke top-right me <strong>3-Dots (<MoreVertical className="w-3.5 h-3.5 inline text-slate-700 font-bold" />)</strong> par tap karein.
                 </li>
                 <li>
-                  Menu me thoda <strong>niche scroll karein</strong> (Desktop site ke theek paas).
-                </li>
-                <li>
                   <strong>"Install app"</strong> ya <strong>"Add to Home screen"</strong> par tap karein.
                 </li>
                 <li>
@@ -172,23 +195,33 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
           {/* Action Buttons */}
           <div className="pt-2 flex flex-col gap-2">
             {!isInstalled && (
-              <button
-                onClick={handleInstallClick}
-                disabled={installStatus === "installing"}
-                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {installStatus === "installing" ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Opening Install Dialog...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    <span>{hasNativePrompt ? "Install App Now (1-Click)" : "Install Open Desh App"}</span>
-                  </>
-                )}
-              </button>
+              isIframe ? (
+                <button
+                  onClick={handleOpenInNewTab}
+                  className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open in Full Browser Tab to Install</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleInstallClick}
+                  disabled={installStatus === "installing"}
+                  className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {installStatus === "installing" ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Opening Install Dialog...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>{hasNativePrompt ? "Install App Now (1-Click)" : "Install Open Desh App"}</span>
+                    </>
+                  )}
+                </button>
+              )
             )}
 
             <button

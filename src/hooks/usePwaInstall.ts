@@ -14,8 +14,16 @@ export function usePwaInstall() {
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
+  const [isIframe, setIsIframe] = useState<boolean>(false);
 
   useEffect(() => {
+    // Check if running inside an iframe (like AI Studio preview)
+    try {
+      setIsIframe(window.self !== window.top);
+    } catch {
+      setIsIframe(true);
+    }
+
     // Check if running in standalone mode (already installed)
     const checkInstalled = () => {
       const isStandalone =
@@ -79,6 +87,7 @@ export function usePwaInstall() {
     isInstallable,
     isInstalled,
     isIOS,
+    isIframe,
     installApp,
     hasNativePrompt: !!deferredPrompt,
   };
