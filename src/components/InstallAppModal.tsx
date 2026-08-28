@@ -147,20 +147,23 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
               </ol>
             </div>
           ) : !hasNativePrompt || installStatus === "manual" ? (
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-              <p className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-blue-600" />
-                How to install in Chrome Browser:
+            <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-100 space-y-2.5">
+              <p className="text-xs font-extrabold text-blue-950 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-blue-600 shrink-0" />
+                Chrome me App Install karne ka tarika:
               </p>
               <ol className="text-xs text-slate-700 space-y-2 pl-4 list-decimal font-medium">
                 <li>
-                  Tap the <strong>3-dots menu (<MoreVertical className="w-3 h-3 inline text-slate-600" />)</strong> at the top right of Chrome.
+                  Chrome ke top-right me <strong>3-Dots (<MoreVertical className="w-3.5 h-3.5 inline text-slate-700 font-bold" />)</strong> par tap karein.
                 </li>
                 <li>
-                  Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+                  Menu me thoda <strong>niche scroll karein</strong> (Desktop site ke theek paas).
                 </li>
                 <li>
-                  Confirm <strong>Install</strong> to add Open Desh to your device.
+                  <strong>"Install app"</strong> ya <strong>"Add to Home screen"</strong> par tap karein.
+                </li>
+                <li>
+                  <strong>"Install"</strong> par click karke confirm karein. App aapke phone me download ho jayegi.
                 </li>
               </ol>
             </div>

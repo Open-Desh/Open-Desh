@@ -1,13 +1,16 @@
 {
-  "name": "Open Desh — Open Voice, Open Desh",
+  "name": "Open Desh",
   "short_name": "Open Desh",
   "description": "Civic governance, leader accountability, and real-time grievance redressal ecosystem.",
   "start_url": "/",
+  "scope": "/",
   "id": "/",
   "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/logo.png",
@@ -17,24 +20,36 @@
     },
     {
       "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["social", "governance", "news", "utilities"],
   "shortcuts": [
     {
-      "name": "Report Problem",
+      "name": "Report Grievance",
       "short_name": "Report",
-      "description": "Report a civic grievance with live GPS",
+      "description": "Report a civic problem with live GPS proof",
       "url": "/?action=compose",
       "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
     },
     {
-      "name": "Connect & Leaders",
+      "name": "Connect Leaders",
       "short_name": "Leaders",
-      "description": "Check leader accountability scorecards",
+      "description": "Track elected leader accountability scorecards",
       "url": "/?view=connect",
       "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
     }
