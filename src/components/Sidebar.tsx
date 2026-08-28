@@ -12,6 +12,7 @@ import {
   LogIn,
   LogOut,
   Languages,
+  Download,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
@@ -29,6 +30,7 @@ interface SidebarProps {
   isLoggedIn?: boolean;
   onOpenLogin?: () => void;
   onLogout?: () => void;
+  onOpenInstallModal?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isLoggedIn = false,
   onOpenLogin,
   onLogout,
+  onOpenInstallModal,
 }) => {
   const [darkMode, setDarkMode] = React.useState(() => {
     try {
@@ -81,6 +84,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "budget", label: t("nav.budget", "Budget"), icon: IndianRupee },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
+    {
+      id: "install",
+      label: "Install App",
+      icon: Download,
+      isAction: true,
+      badge: "PWA",
+    },
     {
       id: "language",
       label: `${t("nav.language", "Language")} (${currentLanguageInfo.nativeName})`,
@@ -169,7 +179,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate">
                     <span>@{userProfile.username ? userProfile.username.replace(/^@+/, "") : "citizen"}</span>
                     {userProfile.verified && (
-                      <CategoryVerifiedTick category={userProfile.category} size="xs" />
+                      <CategoryVerifiedTick
+                        category={
+                          userProfile.verifiedCategory ||
+                          (userProfile.verified ? userProfile.category : undefined) ||
+                          "citizen"
+                        }
+                        size="xs"
+                      />
                     )}
                   </div>
                   <div className="flex gap-4 text-xs sm:text-sm text-slate-600 pt-1.5">
@@ -240,6 +257,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 id={`nav-item-${item.id}`}
                 onClick={() => {
+                  if (item.id === "install") {
+                    if (onOpenInstallModal) onOpenInstallModal();
+                    onCloseMobile();
+                    return;
+                  }
                   if (item.id === "language") {
                     openLanguageModal();
                     onCloseMobile();

@@ -28,9 +28,13 @@
     <meta name="twitter:description" content="Open Voice, Open Desh. Report civic issues with live GPS proof, track MLA/MP accountability ratings, and demand public action." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=1200&auto=format&fit=crop&q=80" />
 
-    <!-- Web App & Fonts -->
+    <!-- Web App & PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Open Desh" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -39,6 +43,15 @@
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-sky-600 selection:text-white font-sans min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Open Desh PWA Service Worker Registered:', reg.scope))
+            .catch((err) => console.warn('PWA Service Worker Registration Failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>
 

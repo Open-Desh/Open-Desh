@@ -123,6 +123,10 @@ export interface UserProfile {
   verificationSubmittedAt?: string;
   verificationSubmittedCategory?: UserCategory;
   verificationSubmittedDocs?: string;
+  verificationDocNumber?: string;
+  verificationDocType?: string;
+  verificationApplicationId?: string;
+  verificationDocUrl?: string;
   savedReports?: string[];
   isFollowing?: boolean;
   email?: string;

@@ -5,10 +5,11 @@ import {
   Users,
   MapPin,
   TrendingUp,
+  CheckCircle2,
 } from "lucide-react";
 import { Leader, UserProfile, UserCategory, ReportIssue } from "../types.ts";
 import { db } from "../firebase.ts";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, limit } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 
 interface ConnectHubViewProps {
@@ -43,6 +44,10 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
   const [dbReports, setDbReports] = useState<ReportIssue[]>(reports || []);
   const [loading, setLoading] = useState(true);
   const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
+  const [visibleLeadersCount, setVisibleLeadersCount] = useState<number>(12);
+  const [visiblePublicCount, setVisiblePublicCount] = useState<number>(12);
+  const leaderSentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const publicSentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   // 1. Enterprise Scale: Fetch ONLY real registered profiles & reports from Firestore database
   useEffect(() => {
@@ -54,9 +59,10 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
       const leaderMap = new Map<string, Leader>();
       const fetchedReports: ReportIssue[] = [];
 
-      // 1. Load Firestore "users" collection (Strict Real DB)
+      // 1. Load Firestore "users" collection (Strict Real DB with query limit)
       try {
-        const usersSnap = await getDocs(collection(db, "users"));
+        const qUsers = query(collection(db, "users"), limit(80));
+        const usersSnap = await getDocs(qUsers);
         usersSnap.forEach((docSnap) => {
           const data = docSnap.data() as UserProfile;
           if (data) {
@@ -73,9 +79,10 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
         console.warn("Firestore users query notice:", err);
       }
 
-      // 2. Load Firestore "leaders" collection (Strict Real DB)
+      // 2. Load Firestore "leaders" collection (Strict Real DB with query limit)
       try {
-        const leadersSnap = await getDocs(collection(db, "leaders"));
+        const qLeaders = query(collection(db, "leaders"), limit(80));
+        const leadersSnap = await getDocs(qLeaders);
         leadersSnap.forEach((docSnap) => {
           const lData = docSnap.data() as Leader;
           if (lData) {
@@ -92,9 +99,10 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
         console.warn("Firestore leaders query notice:", err);
       }
 
-      // 3. Load Firestore "reports" collection to count real resolved civic problems
+      // 3. Load Firestore "reports" collection (with query limit)
       try {
-        const reportsSnap = await getDocs(collection(db, "reports"));
+        const qReports = query(collection(db, "reports"), limit(80));
+        const reportsSnap = await getDocs(qReports);
         reportsSnap.forEach((docSnap) => {
           const rData = docSnap.data() as ReportIssue;
           if (rData) {
@@ -371,6 +379,44 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
     return list;
   }, [dbLeaders, dbUsers, dbReports]);
 
+  // Auto infinite scroll for leaders
+  React.useEffect(() => {
+    const sentinel = leaderSentinelRef.current;
+    if (!sentinel || activeTab !== "leader") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisibleLeadersCount((p) => p + 12);
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, leaderItems.length, visibleLeadersCount]);
+
+  // Auto infinite scroll for public citizens
+  React.useEffect(() => {
+    const sentinel = publicSentinelRef.current;
+    if (!sentinel || activeTab !== "public") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisiblePublicCount((p) => p + 12);
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, publicUsers.length, visiblePublicCount]);
+
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
       {/* 1. Header: Clean Back Button + Brand Icon + Title */}
@@ -448,8 +494,9 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
               </p>
             </div>
           ) : (
-            leaderItems.map((item) => {
-              const isFollowing = followingMap[item.id] || false;
+            <>
+              {leaderItems.slice(0, visibleLeadersCount).map((item) => {
+                const isFollowing = followingMap[item.id] || false;
 
               return (
                 <article
@@ -577,9 +624,17 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                   </div>
                 </article>
               );
-            })
-          )
-        ) : (
+            })}
+
+            {/* Leader Infinite Scroll Sentinel */}
+            {leaderItems.length > visibleLeadersCount && (
+              <div ref={leaderSentinelRef} className="h-8 w-full flex items-center justify-center py-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin opacity-40" />
+              </div>
+            )}
+          </>
+        )
+      ) : (
           /* ================= PUBLIC TAB (CITIZENS & BUSINESS) ================= */
           publicUsers.length === 0 ? (
             <div className="p-16 text-center space-y-2">
@@ -594,8 +649,9 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
               </p>
             </div>
           ) : (
-            publicUsers.map((user) => {
-              const isFollowing = followingMap[user.id] || false;
+            <>
+              {publicUsers.slice(0, visiblePublicCount).map((user) => {
+                const isFollowing = followingMap[user.id] || false;
               const isBusiness = user.category === "business";
               const isVerified = Boolean(
                 user.verified === true || user.verificationStatus === "approved"
@@ -646,7 +702,14 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate mt-0.5">
                           <span>@{user.username ? user.username.replace(/^@+/, "") : displayFullName.toLowerCase().replace(/\s+/g, "_")}</span>
                           {isVerified && (
-                            <CategoryVerifiedTick category={user.category} size="xs" />
+                            <CategoryVerifiedTick
+                              category={
+                                user.verifiedCategory ||
+                                (user.verified ? user.category : undefined) ||
+                                "citizen"
+                              }
+                              size="xs"
+                            />
                           )}
                         </div>
 
@@ -683,9 +746,17 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                   )}
                 </article>
               );
-            })
-          )
-        )}
+            })}
+
+            {/* Public Citizens Infinite Scroll Sentinel */}
+            {publicUsers.length > visiblePublicCount && (
+              <div ref={publicSentinelRef} className="h-8 w-full flex items-center justify-center py-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin opacity-40" />
+              </div>
+            )}
+          </>
+        )
+      )}
       </div>
     </div>
   );

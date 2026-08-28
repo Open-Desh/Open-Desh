@@ -152,3 +152,144 @@ html.dark .text-white {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 1);
 }
+
+/* ========================================================================= */
+/* TWITTER/X & YOUTUBE LIKE ANIMATIONS & FLOATING HEARTS                    */
+/* ========================================================================= */
+
+@keyframes like-heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(0.7);
+  }
+  45% {
+    transform: scale(1.35) rotate(-6deg);
+  }
+  65% {
+    transform: scale(1.15) rotate(4deg);
+  }
+  85% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes like-ring-burst {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.9;
+    border-width: 3px;
+  }
+  60% {
+    opacity: 0.6;
+    border-width: 2px;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+    border-width: 0px;
+  }
+}
+
+@keyframes float-heart-left {
+  0% {
+    transform: translate(0, 0) scale(0.6) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-16px, -24px) scale(1.1) rotate(-14deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-26px, -46px) scale(0.7) rotate(-22deg);
+    opacity: 0;
+  }
+}
+
+@keyframes float-heart-center {
+  0% {
+    transform: translate(0, 0) scale(0.7) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(4px, -30px) scale(1.2) rotate(8deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(8px, -54px) scale(0.8) rotate(14deg);
+    opacity: 0;
+  }
+}
+
+@keyframes float-heart-right {
+  0% {
+    transform: translate(0, 0) scale(0.5) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(18px, -22px) scale(1) rotate(16deg);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(28px, -42px) scale(0.6) rotate(24deg);
+    opacity: 0;
+  }
+}
+
+@keyframes float-heart-tiny {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-8px, -34px) scale(0.9) rotate(-10deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-14px, -58px) scale(0.4) rotate(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes spark-burst-1 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(-14px, -14px) scale(0); opacity: 0; } }
+@keyframes spark-burst-2 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(14px, -14px) scale(0); opacity: 0; } }
+@keyframes spark-burst-3 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(-18px, 2px) scale(0); opacity: 0; } }
+@keyframes spark-burst-4 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(18px, 2px) scale(0); opacity: 0; } }
+@keyframes spark-burst-5 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(-10px, 14px) scale(0); opacity: 0; } }
+@keyframes spark-burst-6 { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(10px, 14px) scale(0); opacity: 0; } }
+
+.animate-like-heart-pop {
+  animation: like-heart-pop 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-like-ring-burst {
+  animation: like-ring-burst 0.55s ease-out forwards;
+}
+
+.animate-float-heart-left {
+  animation: float-heart-left 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-float-heart-center {
+  animation: float-heart-center 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-float-heart-right {
+  animation: float-heart-right 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-float-heart-tiny {
+  animation: float-heart-tiny 0.95s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-spark-1 { animation: spark-burst-1 0.45s ease-out forwards; }
+.animate-spark-2 { animation: spark-burst-2 0.45s ease-out forwards; }
+.animate-spark-3 { animation: spark-burst-3 0.45s ease-out forwards; }
+.animate-spark-4 { animation: spark-burst-4 0.45s ease-out forwards; }
+.animate-spark-5 { animation: spark-burst-5 0.45s ease-out forwards; }
+.animate-spark-6 { animation: spark-burst-6 0.45s ease-out forwards; }
+

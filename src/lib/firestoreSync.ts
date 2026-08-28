@@ -11,6 +11,8 @@ import {
   increment,
   query,
   where,
+  limit,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import {
@@ -30,11 +32,12 @@ function sanitizeData<T>(data: T): any {
   return JSON.parse(JSON.stringify(data));
 }
 
-// 1. Fetch Reports directly from Firestore
-export async function getReportsDirect(): Promise<ReportIssue[]> {
+// 1. Fetch Reports directly from Firestore (Optimized for 100k scale)
+export async function getReportsDirect(maxLimit = 100): Promise<ReportIssue[]> {
   try {
     const repRef = collection(db, "reports");
-    const snapshot = await getDocs(repRef);
+    const q = query(repRef, limit(maxLimit));
+    const snapshot = await getDocs(q);
 
     if (!snapshot.empty) {
       const reports: ReportIssue[] = [];
@@ -55,10 +58,11 @@ export async function getReportsDirect(): Promise<ReportIssue[]> {
 }
 
 // 2. Fetch Leaders directly from Firestore
-export async function getLeadersDirect(): Promise<Leader[]> {
+export async function getLeadersDirect(maxLimit = 100): Promise<Leader[]> {
   try {
     const leadRef = collection(db, "leaders");
-    const snapshot = await getDocs(leadRef);
+    const q = query(leadRef, limit(maxLimit));
+    const snapshot = await getDocs(q);
 
     if (!snapshot.empty) {
       const leaders: Leader[] = [];
@@ -75,10 +79,11 @@ export async function getLeadersDirect(): Promise<Leader[]> {
 }
 
 // 3. Fetch Infrastructure Projects directly from Firestore
-export async function getInfrastructureDirect(): Promise<InfrastructureProject[]> {
+export async function getInfrastructureDirect(maxLimit = 100): Promise<InfrastructureProject[]> {
   try {
     const infraRef = collection(db, "infrastructure");
-    const snapshot = await getDocs(infraRef);
+    const q = query(infraRef, limit(maxLimit));
+    const snapshot = await getDocs(q);
 
     if (!snapshot.empty) {
       const projects: InfrastructureProject[] = [];
@@ -356,7 +361,8 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
 
   try {
     const usersRef = collection(db, "users");
-    const userSnaps = await getDocs(usersRef);
+    const qUsers = query(usersRef, limit(100));
+    const userSnaps = await getDocs(qUsers);
     userSnaps.forEach((docSnap) => {
       const data = docSnap.data() as UserProfile;
       if (data) {
@@ -387,7 +393,8 @@ export async function getRegisteredAuthoritiesDirect(): Promise<RegisteredAuthor
     });
 
     const leadersRef = collection(db, "leaders");
-    const leaderSnaps = await getDocs(leadersRef);
+    const qLeaders = query(leadersRef, limit(100));
+    const leaderSnaps = await getDocs(qLeaders);
     leaderSnaps.forEach((docSnap) => {
       const l = docSnap.data() as Leader;
       if (l && l.username) {

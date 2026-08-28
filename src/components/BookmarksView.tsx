@@ -18,9 +18,11 @@ import {
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -147,7 +149,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                         <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
                         {isReportAuthorVerified(reply, userProfile) && (
                           <CategoryVerifiedTick
-                            category={reply.authorCategory}
+                            category={getReportAuthorVerifiedCategory(reply, userProfile)}
                             size="xs"
                           />
                         )}
@@ -299,7 +301,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                           <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
                           {isReportAuthorVerified(report, userProfile) && (
                             <CategoryVerifiedTick
-                              category={report.authorCategory}
+                              category={getReportAuthorVerifiedCategory(report, userProfile)}
                               size="xs"
                             />
                           )}
@@ -511,20 +513,14 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     <span>{report.reReportsCount || 0}</span>
                   </button>
 
-                  {/* Like Button */}
-                  <button
-                    onClick={() => onLike(report.id)}
-                    className={`flex items-center gap-1.5 transition-colors p-1.5 rounded-lg hover:bg-rose-50 group cursor-pointer ${
-                      isLiked ? "text-rose-600 font-bold" : "hover:text-rose-600"
-                    }`}
-                  >
-                    <Heart
-                      className={`w-4 h-4 group-hover:scale-110 transition-transform ${
-                        isLiked ? "fill-rose-600 text-rose-600" : ""
-                      }`}
-                    />
-                    <span>{report.likesCount || 0}</span>
-                  </button>
+                  {/* Like Button with Twitter/YouTube Flying Hearts FX */}
+                  <AnimatedLikeButton
+                    isLiked={Boolean(isLiked)}
+                    likesCount={report.likesCount || 0}
+                    onLike={() => onLike(report.id)}
+                    size="md"
+                    className="p-1.5 rounded-lg hover:bg-rose-50/50"
+                  />
 
                   {/* Bookmark Button (Active Blue Ribbon) */}
                   <button

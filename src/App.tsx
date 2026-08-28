@@ -18,6 +18,7 @@ import { BudgetView } from "./components/BudgetView.tsx";
 import { PostDetailView } from "./components/PostDetailView.tsx";
 import { LanguageSelectModal } from "./components/LanguageSelectModal.tsx";
 import { NotificationsView } from "./components/NotificationsView.tsx";
+import { InstallAppModal } from "./components/InstallAppModal.tsx";
 import { auth, onAuthStateChanged, logoutUser, FirebaseUser, db } from "./firebase.ts";
 import {
   doc,
@@ -93,6 +94,7 @@ export default function App() {
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
   const [composeInitialMention, setComposeInitialMention] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   // Core Data States - defaults to guest citizen initially
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultGuestProfile);
@@ -1690,6 +1692,7 @@ export default function App() {
             navigateTo("login");
           }}
           onLogout={handleLogout}
+          onOpenInstallModal={() => setIsInstallModalOpen(true)}
         />
       )}
 
@@ -1760,6 +1763,7 @@ export default function App() {
               loading={loadingReports}
               isNavVisible={isNavVisible}
               selectedCategory={selectedCategory}
+              onOpenInstallModal={() => setIsInstallModalOpen(true)}
             />
           )}
 
@@ -1960,6 +1964,7 @@ export default function App() {
               onUpdateProfile={handleUpdateProfile}
               onNavigate={navigateTo}
               onBackToHome={() => navigateTo("dashboard")}
+              onOpenInstallModal={() => setIsInstallModalOpen(true)}
             />
           )}
 
@@ -2035,6 +2040,12 @@ export default function App() {
 
       {/* Global Indian Language Selection Modal */}
       <LanguageSelectModal />
+
+      {/* PWA Install App Modal */}
+      <InstallAppModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+      />
     </div>
   );
 }

@@ -447,7 +447,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             companyName.trim() || fullName.trim() || "Corporate Enterprise",
           industry: industry.trim() || "Civic & Infrastructure Services",
           officialWebsite: websiteUrl.trim() || undefined,
-          verifiedCompany: userProfile.verified || false,
+          verifiedCompany: originalVerifiedCategory === "business",
         };
         // Clean and filter valid services
         updatedData.services = servicesList.filter((s) => s.title.trim() !== "");
@@ -486,7 +486,10 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           jurisdictionRegion: isStateOrPolice
             ? selectedState
             : location || "All India",
-          officialBadge: "Verified Govt Department",
+          officialBadge:
+            originalVerifiedCategory === "department"
+              ? "Verified Govt Department"
+              : "Govt Department",
         };
         updatedData.services = servicesList.filter((s) => s.title.trim() !== "");
       }

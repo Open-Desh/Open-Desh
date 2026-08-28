@@ -35,12 +35,14 @@ import {
   UserCategory,
 } from "../types.ts";
 import { db } from "../firebase.ts";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query as firestoreQuery, limit } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -130,7 +132,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
       // Fetch users from Firestore
       try {
-        const snap = await getDocs(collection(db, "users"));
+        const qUsers = firestoreQuery(collection(db, "users"), limit(80));
+        const snap = await getDocs(qUsers);
         snap.forEach((d) => {
           const uData = d.data() as UserProfile;
           if (uData) {
@@ -146,7 +149,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
       // Fetch leaders from Firestore
       try {
-        const snap = await getDocs(collection(db, "leaders"));
+        const qLeaders = firestoreQuery(collection(db, "leaders"), limit(80));
+        const snap = await getDocs(qLeaders);
         snap.forEach((d) => {
           const lData = d.data() as Leader;
           if (lData) {
@@ -162,7 +166,8 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
       // Fetch reports from Firestore
       try {
-        const snap = await getDocs(collection(db, "reports"));
+        const qReports = firestoreQuery(collection(db, "reports"), limit(80));
+        const snap = await getDocs(qReports);
         snap.forEach((d) => {
           const rData = d.data() as ReportIssue;
           if (rData) {
@@ -933,7 +938,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                           <span className="font-extrabold text-[16px] text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
                             <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
                             {isReportAuthorVerified(report, userProfile) && (
-                              <CategoryVerifiedTick category={report.authorCategory} size="xs" />
+                              <CategoryVerifiedTick category={getReportAuthorVerifiedCategory(report, userProfile)} size="xs" />
                             )}
                           </span>
                           <span className="text-[10px] text-slate-400">
@@ -963,13 +968,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
 
                     {/* Action Bar */}
                     <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-                      <button
-                        onClick={() => onLikeReport && onLikeReport(report.id)}
-                        className="flex items-center gap-1.5 hover:text-rose-600 transition-colors cursor-pointer py-1 px-1.5"
-                      >
-                        <Heart className="w-4 h-4 text-rose-500" />
-                        <span>{report.likesCount}</span>
-                      </button>
+                      <AnimatedLikeButton
+                        isLiked={Boolean(report.likedBy?.includes(userProfile.id))}
+                        likesCount={report.likesCount || 0}
+                        onLike={() => onLikeReport && onLikeReport(report.id)}
+                        size="sm"
+                        className="py-1 px-1.5"
+                      />
 
                       <button
                         onClick={() => onReReport && onReReport(report.id)}
@@ -1183,7 +1188,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         <span className="font-extrabold text-[16px] text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
                           <span>{getCleanAuthorUsername(report.authorUsername, report.authorName)}</span>
                           {isReportAuthorVerified(report, userProfile) && (
-                            <CategoryVerifiedTick category={report.authorCategory} size="xs" />
+                            <CategoryVerifiedTick category={getReportAuthorVerifiedCategory(report, userProfile)} size="xs" />
                           )}
                         </span>
                         <span className="text-[10px] text-slate-400">
@@ -1224,13 +1229,13 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                   )}
 
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-                    <button
-                      onClick={() => onLikeReport && onLikeReport(report.id)}
-                      className="flex items-center gap-1.5 hover:text-rose-600 transition-colors cursor-pointer py-1 px-1.5"
-                    >
-                      <Heart className="w-4 h-4 text-rose-500" />
-                      <span>{report.likesCount}</span>
-                    </button>
+                    <AnimatedLikeButton
+                      isLiked={Boolean(report.likedBy?.includes(userProfile.id))}
+                      likesCount={report.likesCount || 0}
+                      onLike={() => onLikeReport && onLikeReport(report.id)}
+                      size="sm"
+                      className="py-1 px-1.5"
+                    />
 
                     <button
                       onClick={() => onReReport && onReReport(report.id)}
@@ -1294,7 +1299,14 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold truncate">
                           <span>@{user.username ? user.username.replace(/^@+/, "") : displayFullName.toLowerCase().replace(/\s+/g, "_")}</span>
                           {(user.verified || user.verificationStatus === "approved") && (
-                            <CategoryVerifiedTick category={user.category} size="xs" />
+                            <CategoryVerifiedTick
+                              category={
+                                user.verifiedCategory ||
+                                (user.verified ? user.category : undefined) ||
+                                "citizen"
+                              }
+                              size="xs"
+                            />
                           )}
                           {user.category === "business" && (
                             <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 shrink-0">

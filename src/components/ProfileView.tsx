@@ -43,12 +43,14 @@ import {
 } from "lucide-react";
 import { UserProfile, ReportIssue } from "../types.ts";
 import { ServicesMindMap } from "./ServicesMindMap.tsx";
+import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import {
   cleanReportText,
   getCleanAuthorUsername,
   isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 import {
@@ -176,6 +178,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   }, [activeUser?.following, activeUser?.id, activeUser?.username, cleanProfileId, cleanProfileUsername, userProfile.followers, userProfile.isFollowing]);
 
   const [localFollowing, setLocalFollowing] = useState<boolean>(isActivelyFollowing);
+  const [visibleReportsCount, setVisibleReportsCount] = useState<number>(10);
+  const profileReportsSentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     setLocalFollowing(isActivelyFollowing);
@@ -237,6 +241,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return 0;
     });
   }, [allReports, userReports, cleanProfileId, cleanProfileUsername, userProfile.category]);
+
+  // Auto infinite scroll for profile reports
+  React.useEffect(() => {
+    const sentinel = profileReportsSentinelRef.current;
+    if (!sentinel || activeTab !== "Report") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisibleReportsCount((p) => p + 10);
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, effectiveAuthoredReports.length, visibleReportsCount]);
 
   const effectivePostsCount = effectiveAuthoredReports.length;
 
@@ -692,42 +715,57 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         {/* Dynamic Category Verification Badge Area */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* 1. Selected Category Badge (Always visible for all profiles) */}
-          <CategoryBadge
-            category={userProfile.category}
-            verified={userProfile.verified}
-            verifiedCategory={userProfile.verifiedCategory || (userProfile.verified ? userProfile.category : undefined)}
-            size="sm"
-          />
+          {(() => {
+            const verifiedApprovedCategory =
+              userProfile.verifiedCategory ||
+              (userProfile.verified ? userProfile.category : undefined) ||
+              "citizen";
+            const effectiveCategoryForBadge = userProfile.verified
+              ? verifiedApprovedCategory
+              : userProfile.category;
 
-          {/* If user is verified for a different category, show informative badge pill */}
-          {userProfile.verified &&
-            userProfile.verifiedCategory &&
-            userProfile.category !== userProfile.verifiedCategory && (
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200/80 flex items-center gap-1">
-                <CategoryVerifiedTick
-                  category={userProfile.verifiedCategory}
-                  size="xs"
-                  className="!w-3.5 !h-3.5"
+            const isPendingNewCategory = Boolean(
+              userProfile.verified &&
+              userProfile.category &&
+              userProfile.category !== verifiedApprovedCategory
+            );
+
+            return (
+              <>
+                {/* 1. Official Approved/Active Category Badge */}
+                <CategoryBadge
+                  category={effectiveCategoryForBadge}
+                  verified={Boolean(userProfile.verified)}
+                  verifiedCategory={verifiedApprovedCategory}
+                  size="sm"
                 />
-                <span>Verified {userProfile.verifiedCategory.toUpperCase()}</span>
-              </span>
-            )}
 
-          {/* 2. "Get verified" / "Under Review" Button (ONLY visible to user themselves when unverified) */}
-          {!userProfile.verified && isOwnProfile && (
-            <CategoryGetVerifiedButton
-              category={userProfile.category}
-              status={userProfile.verificationStatus}
-              onClick={() => {
-                if (onNavigateToVerification) {
-                  onNavigateToVerification();
-                } else if (onNavigateToEditProfile) {
-                  onNavigateToEditProfile();
-                }
-              }}
-            />
-          )}
+                {/* 2. "Get verified" / "Under Review" Button:
+                    Visible to own profile when:
+                    a) User is unverified (!userProfile.verified)
+                    OR
+                    b) User has selected a new category in edit profile that requires verification documents (isPendingNewCategory) */}
+                {isOwnProfile && (!userProfile.verified || isPendingNewCategory) && (
+                  <CategoryGetVerifiedButton
+                    category={userProfile.category}
+                    status={
+                      userProfile.verificationSubmittedCategory === userProfile.category &&
+                      userProfile.verificationStatus === "pending"
+                        ? "pending"
+                        : (!userProfile.verified ? userProfile.verificationStatus : "none")
+                    }
+                    onClick={() => {
+                      if (onNavigateToVerification) {
+                        onNavigateToVerification();
+                      } else if (onNavigateToEditProfile) {
+                        onNavigateToEditProfile();
+                      }
+                    }}
+                  />
+                )}
+              </>
+            );
+          })()}
 
           {/* Secondary Rate Action (ONLY visible when profile is claimed or verified to prevent unverified evaluation) */}
           {!isOwnProfile &&
@@ -987,8 +1025,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {activeTab === "Report" && (
           <div className="divide-y divide-slate-100">
             {effectiveAuthoredReports.length > 0 ? (
-              effectiveAuthoredReports.map((report) => {
-                const imageList =
+              <>
+                {effectiveAuthoredReports
+                  .slice(0, visibleReportsCount)
+                  .map((report) => {
+                    const imageList =
                   Array.isArray(report.images) && report.images.length > 0
                     ? report.images
                     : report.imageUrl
@@ -1047,15 +1088,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                                 report.authorName
                               );
                               const isVerified = isReportAuthorVerified(report, userProfile);
-                              const effectiveCategory =
-                                userProfile?.verified &&
-                                (report.authorId === userProfile.id ||
-                                  (report.authorUsername &&
-                                    userProfile.username &&
-                                    report.authorUsername.replace(/^@+/, "").toLowerCase() ===
-                                      userProfile.username.replace(/^@+/, "").toLowerCase()))
-                                  ? userProfile.category
-                                  : report.authorCategory;
+                              const effectiveVerifiedCategory = getReportAuthorVerifiedCategory(
+                                report,
+                                userProfile
+                              );
 
                               return (
                                 <div className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-[260px] md:max-w-[340px]">
@@ -1072,7 +1108,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                                   </h3>
                                   {isVerified && (
                                     <CategoryVerifiedTick
-                                      category={effectiveCategory}
+                                      category={effectiveVerifiedCategory}
                                       size="xs"
                                     />
                                   )}
@@ -1411,25 +1447,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         </span>
                       </button>
 
-                      {/* Like Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                      {/* Like Button with Twitter/YouTube Flying Heart FX */}
+                      <AnimatedLikeButton
+                        isLiked={Boolean(isLiked)}
+                        likesCount={report.likesCount || 0}
+                        onLike={() => {
                           if (onLikeReport) onLikeReport(report.id);
                         }}
-                        className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
-                          isLiked
-                            ? "text-rose-600 font-extrabold"
-                            : "hover:text-rose-600"
-                        }`}
-                      >
-                        <Heart
-                          className={`w-4 h-4 group-hover:scale-110 transition-transform ${
-                            isLiked ? "fill-rose-600 text-rose-600" : ""
-                          }`}
-                        />
-                        <span className="font-bold">{report.likesCount || 0}</span>
-                      </button>
+                        size="md"
+                      />
 
                       {/* Bookmark Button */}
                       <button
@@ -1465,14 +1491,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </div>
                   </article>
                 );
-              })
-            ) : (
-              <div className="py-12 text-center text-xs text-slate-400">
-                No reports published by this user yet.
-              </div>
-            )}
-          </div>
-        )}
+              })}
+
+              {/* Profile Reports Infinite Scroll Sentinel */}
+              {effectiveAuthoredReports.length > visibleReportsCount && (
+                <div ref={profileReportsSentinelRef} className="h-8 w-full flex items-center justify-center py-2">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin opacity-40" />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="py-12 text-center text-xs text-slate-400">
+              No reports published by this user yet.
+            </div>
+          )}
+        </div>
+      )}
 
         {/* TAB 2: SERVICES (MIND MAP) */}
         {activeTab === "Services" && (

@@ -23,6 +23,8 @@ import { ReportIssue, UserProfile, IssueCategory } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
+import { PwaInstallBanner } from "./PwaInstallBanner.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -49,6 +51,7 @@ interface FeedViewProps {
   loading?: boolean;
   isNavVisible?: boolean;
   selectedCategory?: string;
+  onOpenInstallModal?: () => void;
 }
 
 export const FeedView: React.FC<FeedViewProps> = ({
@@ -69,11 +72,20 @@ export const FeedView: React.FC<FeedViewProps> = ({
   loading = false,
   isNavVisible = true,
   selectedCategory = "All",
+  onOpenInstallModal,
 }) => {
   const [activeImageSlideIndex, setActiveImageSlideIndex] = useState<Record<string, number>>({});
   const [statusUpdateNotes, setStatusUpdateNotes] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeActionReport, setActiveActionReport] = useState<ReportIssue | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(15);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const loadMoreSentinelRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Reset pagination when category changes
+  React.useEffect(() => {
+    setVisibleCount(15);
+  }, [selectedCategory]);
 
   const filteredReports = reports.filter((r) => {
     const isCategoryMatch = selectedCategory === "All" || r.category === selectedCategory;
@@ -81,6 +93,29 @@ export const FeedView: React.FC<FeedViewProps> = ({
     const isMuted = mutedUsers.includes(authorUname);
     return isCategoryMatch && !isMuted;
   });
+
+  const displayedReports = filteredReports.slice(0, visibleCount);
+
+  // Smooth background infinite scroll
+  React.useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && visibleCount < filteredReports.length) {
+          setVisibleCount((prev) => Math.min(prev + 15, filteredReports.length));
+        }
+      },
+      { rootMargin: "400px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [visibleCount, filteredReports.length]);
 
   const getStatusPill = (status: ReportIssue["status"]) => {
     switch (status) {
@@ -113,6 +148,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
+      {/* PWA Install Banner */}
+      <PwaInstallBanner onOpenModal={onOpenInstallModal || (() => {})} />
+
       {/* Reports Feed Container */}
       <div className="divide-y divide-slate-100">
         {loading ? (
@@ -140,7 +178,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
             </button>
           </div>
         ) : (
-          filteredReports.map((report) => {
+          displayedReports.map((report) => {
           const isLiked = report.likedBy?.includes(userProfile.id);
           const isReReported = report.reReportedBy?.includes(userProfile.id);
           const isSaved = userProfile.savedReports?.includes(report.id);
@@ -452,23 +490,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   <span className="font-bold">{report.reReportsCount || 0}</span>
                 </button>
 
-                {/* Like / Endorse */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLike(report.id);
-                  }}
-                  className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
-                    isLiked ? "text-rose-600 font-extrabold" : "hover:text-rose-600"
-                  }`}
-                >
-                  <Heart
-                    className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                      isLiked ? "fill-rose-600 text-rose-600" : ""
-                    }`}
-                  />
-                  <span className="font-bold">{report.likesCount || 0}</span>
-                </button>
+                {/* Like / Endorse with Floating Hearts & Pop Animation */}
+                <AnimatedLikeButton
+                  isLiked={Boolean(isLiked)}
+                  likesCount={report.likesCount || 0}
+                  onLike={() => onLike(report.id)}
+                  size="md"
+                />
 
                 {/* Bookmark */}
                 <button
@@ -502,6 +530,27 @@ export const FeedView: React.FC<FeedViewProps> = ({
           );
         }))}
       </div>
+
+      {/* Invisible Infinite Scroll Sentinel & Subtle Bottom Status */}
+      {!loading && filteredReports.length > 0 && (
+        <div className="py-4 px-4 text-center">
+          {filteredReports.length > visibleCount ? (
+            <div ref={loadMoreSentinelRef} className="h-10 w-full flex items-center justify-center py-2">
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin opacity-50" />
+            </div>
+          ) : (
+            <div className="py-4 flex flex-col items-center justify-center gap-1 text-slate-400 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                <span>You're all caught up!</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                All {filteredReports.length} civic grievances in this category are displayed.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Post Action Sheet (3-dot menu & Violation Reporting) */}
       <PostActionSheet

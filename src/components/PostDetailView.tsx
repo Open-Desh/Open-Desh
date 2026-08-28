@@ -29,9 +29,11 @@ import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -369,7 +371,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                         <span>{getCleanAuthorUsername(reply.authorUsername, reply.authorName)}</span>
                         {isReportAuthorVerified(reply, userProfile) && (
                           <CategoryVerifiedTick
-                            category={reply.authorCategory}
+                            category={getReportAuthorVerifiedCategory(reply, userProfile)}
                             size="xs"
                           />
                         )}
@@ -451,25 +453,15 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       <span>{reply.reReportsCount || 0}</span>
                     </button>
 
-                    {/* Like comment */}
-                    <button
-                      onClick={() =>
+                    {/* Like comment with Flying Hearts & Pop Animation */}
+                    <AnimatedLikeButton
+                      isLiked={Boolean(isReplyLiked)}
+                      likesCount={reply.likesCount || 0}
+                      onLike={() =>
                         onLikeReply && onLikeReply(report.id, reply.id)
                       }
-                      className={`flex items-center gap-1.5 transition-colors cursor-pointer group py-1 ${
-                        isReplyLiked
-                          ? "text-rose-600 font-bold"
-                          : "hover:text-rose-600"
-                      }`}
-                      title="Like"
-                    >
-                      <Heart
-                        className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                          isReplyLiked ? "fill-rose-600 text-rose-600" : ""
-                        }`}
-                      />
-                      <span>{reply.likesCount || 0}</span>
-                    </button>
+                      size="sm"
+                    />
 
                     {/* Share comment */}
                     <button
@@ -550,15 +542,10 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                     report.authorName
                   );
                   const isVerified = isReportAuthorVerified(report, userProfile);
-                  const effectiveCategory =
-                    userProfile?.verified &&
-                    (report.authorId === userProfile.id ||
-                      (report.authorUsername &&
-                        userProfile.username &&
-                        report.authorUsername.replace(/^@+/, "").toLowerCase() ===
-                          userProfile.username.replace(/^@+/, "").toLowerCase()))
-                      ? userProfile.category
-                      : report.authorCategory;
+                  const effectiveVerifiedCategory = getReportAuthorVerifiedCategory(
+                    report,
+                    userProfile
+                  );
 
                   return (
                     <div className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-[260px] md:max-w-[340px]">
@@ -571,7 +558,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       </h3>
                       {isVerified && (
                         <CategoryVerifiedTick
-                          category={effectiveCategory}
+                          category={effectiveVerifiedCategory}
                           size="xs"
                         />
                       )}
@@ -963,23 +950,13 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             <span className="font-bold">{report.reReportsCount || 0}</span>
           </button>
 
-          {/* Like / Endorse */}
-          <button
-            onClick={() => onLike(report.id)}
-            className={`flex items-center gap-1.5 transition-colors cursor-pointer group py-1 ${
-              isLiked
-                ? "text-rose-600 font-extrabold"
-                : "hover:text-rose-600"
-            }`}
-            title="Like"
-          >
-            <Heart
-              className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                isLiked ? "fill-rose-600 text-rose-600" : ""
-              }`}
-            />
-            <span className="font-bold">{report.likesCount || 0}</span>
-          </button>
+          {/* Like / Endorse with Flying Hearts & Pop Animation */}
+          <AnimatedLikeButton
+            isLiked={Boolean(isLiked)}
+            likesCount={report.likesCount || 0}
+            onLike={() => onLike(report.id)}
+            size="md"
+          />
 
           {/* Bookmark */}
           <button
@@ -1129,27 +1106,16 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       <span>{currentFocusedReply.reReportsCount || 0}</span>
                     </button>
 
-                    <button
-                      onClick={() =>
+                    {/* Focused Reply Like */}
+                    <AnimatedLikeButton
+                      isLiked={Boolean(currentFocusedReply.likedBy?.includes(userProfile.id))}
+                      likesCount={currentFocusedReply.likesCount || 0}
+                      onLike={() =>
                         onLikeReply &&
                         onLikeReply(report.id, currentFocusedReply.id)
                       }
-                      className={`flex items-center gap-1.5 transition-colors cursor-pointer group py-1 ${
-                        currentFocusedReply.likedBy?.includes(userProfile.id)
-                          ? "text-rose-600 font-bold"
-                          : "hover:text-rose-600"
-                      }`}
-                      title="Like"
-                    >
-                      <Heart
-                        className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                          currentFocusedReply.likedBy?.includes(userProfile.id)
-                            ? "fill-rose-600 text-rose-600"
-                            : ""
-                        }`}
-                      />
-                      <span>{currentFocusedReply.likesCount || 0}</span>
-                    </button>
+                      size="sm"
+                    />
 
                     <button
                       onClick={handleShare}

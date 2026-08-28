@@ -20,7 +20,11 @@ import {
 } from "lucide-react";
 import { AppNotification, ReportIssue, UserProfile } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
-import { formatReportTimestamp } from "../utils/reportUtils.ts";
+import {
+  formatReportTimestamp,
+  isReportAuthorVerified,
+  getReportAuthorVerifiedCategory,
+} from "../utils/reportUtils.ts";
 
 interface NotificationsViewProps {
   notifications: AppNotification[];
@@ -256,14 +260,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                           title={report.authorName}
                         >
                           <span>{report.authorName}</span>
-                          {(report.authorBadge || report.authorCategory) && (
+                          {isReportAuthorVerified(report, userProfile) && (
                             <CategoryVerifiedTick
-                              category={report.authorCategory}
+                              category={getReportAuthorVerifiedCategory(report, userProfile)}
                               size="xs"
                             />
                           )}
                         </h3>
-                        {report.authorBadge && (
+                        {report.authorBadge && isReportAuthorVerified(report, userProfile) && (
                           <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
                             {report.authorBadge}
                           </span>
