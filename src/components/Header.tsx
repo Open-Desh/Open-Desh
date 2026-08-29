@@ -201,18 +201,6 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Scale Telemetry Pill (Desktop) */}
-          <button
-            id="header-scale-pill-btn"
-            onClick={() => onNavigate("analytics")}
-            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-full transition-colors cursor-pointer"
-            title="View 100k Scalability Metrics"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-xs font-extrabold tracking-tight flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-blue-600" /> 104.8k
-            </span>
-          </button>
 
           {/* Help Center Quick Pill */}
           <button

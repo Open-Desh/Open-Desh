@@ -58,5 +58,26 @@ service cloud.firestore {
       allow create, update: if isValidId(articleId);
       allow delete: if false;
     }
+
+    // Aggregated Engagement & Analytics Overview
+    match /analytics/{docId} {
+      allow read: if isValidId(docId);
+      allow create, update: if isValidId(docId);
+      allow delete: if false;
+    }
+
+    // Official Government & Civic Circulars
+    match /circulars/{circularId} {
+      allow read: if isValidId(circularId);
+      allow create, update: if isValidId(circularId);
+      allow delete: if false;
+    }
+
+    // Admin Moderation & Audit Logs
+    match /moderation_logs/{logId} {
+      allow read: if isValidId(logId);
+      allow create, update: if isValidId(logId);
+      allow delete: if false;
+    }
   }
 }

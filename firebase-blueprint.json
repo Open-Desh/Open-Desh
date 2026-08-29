@@ -75,6 +75,15 @@
     },
     "/help_articles/{articleId}": {
       "description": "Public Knowledge Base and Help Center articles with SEO metadata and community guidance."
+    },
+    "/analytics/{docId}": {
+      "description": "Aggregated real-time platform metrics, 7-day engagement counters, and interaction telemetry."
+    },
+    "/circulars/{circularId}": {
+      "description": "Official government gazettes, department advisories, and civic circulars broadcast to citizens."
+    },
+    "/moderation_logs/{logId}": {
+      "description": "Audit trail of admin verifications, content flags, status transitions, and moderation actions."
     }
   }
 }

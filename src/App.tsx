@@ -6,7 +6,6 @@ import { FeedView } from "./components/FeedView.tsx";
 import { HelpView } from "./components/HelpView.tsx";
 import { ProfileView } from "./components/ProfileView.tsx";
 import { BookmarksView } from "./components/BookmarksView.tsx";
-import { EnterpriseTelemetryView } from "./components/EnterpriseTelemetryView.tsx";
 import { SearchHubView } from "./components/SearchHubView.tsx";
 import { ConnectHubView } from "./components/ConnectHubView.tsx";
 import { ComposeGrievanceView } from "./components/ComposeGrievanceView.tsx";
@@ -656,7 +655,12 @@ export default function App() {
       );
 
       // Firestore Database Sync
-      await toggleLikeInFirestore(id, userProfile.id, isLiked);
+      await toggleLikeInFirestore(id, userProfile.id, isLiked, {
+        actorName: userProfile.fullName,
+        actorUsername: userProfile.username,
+        targetTitle: target?.text ? (target.text.length > 50 ? `${target.text.slice(0, 50)}...` : target.text) : "Civic Report",
+        targetTrackingId: target?.id?.slice(-6) || id.slice(-6),
+      });
 
       // Trigger live notification on like ONLY if someone else's report is being liked (not user's own)
       const isSelfReport =
@@ -714,7 +718,12 @@ export default function App() {
       );
 
       // Firestore Database Sync
-      await toggleReReportInFirestore(id, userProfile.id, hasReReported);
+      await toggleReReportInFirestore(id, userProfile.id, hasReReported, {
+        actorName: userProfile.fullName,
+        actorUsername: userProfile.username,
+        targetTitle: target?.text ? (target.text.length > 50 ? `${target.text.slice(0, 50)}...` : target.text) : "Civic Grievance",
+        targetTrackingId: target?.id?.slice(-6) || id.slice(-6),
+      });
 
       try {
         await fetch(`/api/reports/${id}/rereport`, { method: "POST" });
@@ -831,7 +840,13 @@ export default function App() {
       );
 
       // Firestore Direct Sync
-      await addReplyInFirestore(id, replyObj);
+      const targetRepForReply = reports.find((r) => r.id === id);
+      await addReplyInFirestore(id, replyObj, {
+        actorName: userProfile.fullName,
+        actorUsername: userProfile.username,
+        targetTitle: targetRepForReply?.text ? (targetRepForReply.text.length > 50 ? `${targetRepForReply.text.slice(0, 50)}...` : targetRepForReply.text) : "Civic Grievance",
+        targetTrackingId: targetRepForReply?.id?.slice(-6) || id.slice(-6),
+      });
 
       // Trigger live notification ONLY if someone else's report is being replied to (not user's own)
       const targetRep = reports.find((r) => r.id === id);
@@ -1892,8 +1907,6 @@ export default function App() {
               onSearchQueryChange={setBookmarkSearchQuery}
             />
           )}
-
-          {currentView === "analytics" && <EnterpriseTelemetryView />}
 
           {currentView === "profile" && (
             <ProfileView

@@ -488,5 +488,85 @@ export interface HelpArticle {
   relatedArticleIds?: string[];
 }
 
+export interface DailyEngagementPoint {
+  date: string; // "YYYY-MM-DD"
+  dayName: string; // "Mon", "Tue", etc.
+  likes: number;
+  reShares: number;
+  replies: number;
+  trackedCases: number;
+}
+
+export interface EngagementOverviewDoc {
+  id?: string;
+  lastUpdated: number;
+  lastUpdatedIso?: string;
+  totalLikes: number;
+  totalReShares: number;
+  totalReplies: number;
+  totalTrackedCases: number;
+  last7DaysLikes: number;
+  last7DaysReShares: number;
+  last7DaysReplies: number;
+  last7DaysTrackedCases: number;
+  growthRates?: {
+    likesGrowth: number;
+    reSharesGrowth: number;
+    repliesGrowth: number;
+    casesGrowth: number;
+  };
+  dailyBreakdown: Record<string, {
+    likes: number;
+    reShares: number;
+    replies: number;
+    trackedCases: number;
+  }>;
+  recentActivityLogs?: Array<{
+    id: string;
+    actionType: "like" | "re_share" | "reply" | "case_logged" | "case_resolved";
+    actorName: string;
+    actorUsername: string;
+    targetId?: string;
+    targetTitle: string;
+    targetTrackingId?: string;
+    timestamp: number;
+    category?: string;
+  }>;
+}
+
+export interface OfficialCircular {
+  id: string;
+  circularNumber: string; // e.g. "OD/RMC/2026/048"
+  title: string;
+  department: string;
+  issuedBy: string;
+  issuedByUsername: string;
+  issueDate: string; // ISO / YYYY-MM-DD
+  effectiveDate?: string;
+  summary: string;
+  fullText?: string;
+  category: "Sanitation" | "Infrastructure" | "Water" | "Electricity" | "Public Safety" | "Administrative";
+  urgency: "Normal" | "High" | "Urgent";
+  status: "active" | "archived" | "draft";
+  attachmentUrl?: string;
+  viewsCount?: number;
+  acknowledgementsCount?: number;
+  createdAt: number;
+}
+
+export interface ModerationLog {
+  id: string;
+  actionType: "VERIFY_LEADER" | "FLAG_CONTENT" | "DELETE_REPORT" | "STATUS_TRANSITION" | "OFFICIAL_PIN" | "SYSTEM_AUDIT";
+  performedByAdminId: string;
+  performedByAdminName: string;
+  targetId: string;
+  targetType: "report" | "user" | "leader" | "circular";
+  targetTitle?: string;
+  notes?: string;
+  previousValue?: any;
+  newValue?: any;
+  timestamp: number;
+}
+
 export * from "./types/notification.ts";
 
