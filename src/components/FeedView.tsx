@@ -25,6 +25,7 @@ import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import { PwaInstallBanner } from "./PwaInstallBanner.tsx";
+import { ExpandablePostText } from "./ExpandablePostText.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -300,10 +301,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               </div>
 
-              {/* Text Description */}
-              <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
-                {cleanReportText(report.text)}
-              </p>
+              {/* Text Description with 3-line Clamp & Read More */}
+              <ExpandablePostText text={report.text} />
 
               {/* Structured Parameters Quick Badge Bar */}
               {report.structuredDetails && Object.keys(report.structuredDetails).length > 0 && (

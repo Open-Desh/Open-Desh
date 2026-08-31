@@ -47,6 +47,7 @@ import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
+import { ExpandablePostText } from "./ExpandablePostText.tsx";
 import {
   cleanReportText,
   getCleanAuthorUsername,
@@ -1168,10 +1169,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Text Description */}
-                    <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line">
-                      {cleanReportText(report.text)}
-                    </p>
+                    {/* Text Description with 3-line Clamp & Read More */}
+                    <ExpandablePostText text={report.text} />
 
                     {/* Structured Parameters Quick Badge Bar */}
                     {report.structuredDetails &&
@@ -1646,9 +1645,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         <span className="text-slate-400 font-medium">{formatReportTimestamp(report.createdAt || report.timestamp)}</span>
                       </div>
 
-                      <p className="text-sm sm:text-base text-slate-900 leading-relaxed font-normal">
-                        {cleanReportText(report.text)}
-                      </p>
+                      <ExpandablePostText text={report.text} />
 
                       {/* Media Section: 4:5 Aspect Ratio */}
                       {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (

@@ -40,6 +40,7 @@ import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
+import { ExpandablePostText } from "./ExpandablePostText.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -953,9 +954,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       </span>
                     </div>
 
-                    <p className="text-sm sm:text-base text-slate-900 font-normal leading-relaxed">
-                      {cleanReportText(report.text)}
-                    </p>
+                    <ExpandablePostText text={report.text} />
 
                     {/* Media Section: 4:5 Aspect Ratio */}
                     {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (
@@ -1215,9 +1214,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-sm sm:text-base text-slate-900 font-normal leading-relaxed">
-                    {cleanReportText(report.text)}
-                  </p>
+                  <ExpandablePostText text={report.text} />
 
                   {/* Media Section: 4:5 Aspect Ratio */}
                   {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (

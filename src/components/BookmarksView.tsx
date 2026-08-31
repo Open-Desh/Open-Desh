@@ -20,6 +20,7 @@ import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
+import { ExpandablePostText } from "./ExpandablePostText.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -366,10 +367,8 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                   </div>
                 </div>
 
-                {/* Grievance Post Content Text */}
-                <p className="text-slate-800 text-sm sm:text-base leading-relaxed break-words font-normal">
-                  {cleanReportText(report.text)}
-                </p>
+                {/* Grievance Post Content Text with 3-line Clamp & Read More */}
+                <ExpandablePostText text={report.text} />
 
                 {/* Structured Audit Parameters (if present) */}
                 {report.structuredDetails && (
