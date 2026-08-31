@@ -38,6 +38,7 @@ import { db } from "../firebase.ts";
 import { collection, getDocs, query as firestoreQuery, limit } from "firebase/firestore";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import {
   getCleanAuthorUsername,
@@ -956,14 +957,14 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       {cleanReportText(report.text)}
                     </p>
 
-                    {report.imageUrl && (
-                      <div className="rounded-2xl overflow-hidden border border-slate-200 max-h-72 bg-slate-900">
-                        <img
-                          src={report.imageUrl}
-                          alt="Civic Evidence"
-                          className="w-full h-full object-cover max-h-72"
-                        />
-                      </div>
+                    {/* Media Section: 4:5 Aspect Ratio */}
+                    {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (
+                      <MediaBeforeAfterViewer
+                        beforeImages={report.images && report.images.length > 0 ? report.images : report.imageUrl ? [report.imageUrl] : []}
+                        afterImage={report.resolvedImageUrl}
+                        reportId={report.id}
+                        isCompact={true}
+                      />
                     )}
 
                     {/* Action Bar */}
@@ -1218,14 +1219,14 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                     {cleanReportText(report.text)}
                   </p>
 
-                  {report.imageUrl && (
-                    <div className="rounded-2xl overflow-hidden border border-slate-200 max-h-72 bg-slate-900">
-                      <img
-                        src={report.imageUrl}
-                        alt="Civic Evidence"
-                        className="w-full h-full object-cover max-h-72"
-                      />
-                    </div>
+                  {/* Media Section: 4:5 Aspect Ratio */}
+                  {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (
+                    <MediaBeforeAfterViewer
+                      beforeImages={report.images && report.images.length > 0 ? report.images : report.imageUrl ? [report.imageUrl] : []}
+                      afterImage={report.resolvedImageUrl}
+                      reportId={report.id}
+                      isCompact={true}
+                    />
                   )}
 
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">

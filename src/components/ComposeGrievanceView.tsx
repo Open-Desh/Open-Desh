@@ -41,6 +41,7 @@ import {
   determineResponsibleAuthorities,
 } from "../lib/aiService.ts";
 import { cleanReportText } from "../utils/reportUtils.ts";
+import { processAndUploadReportImages } from "../utils/imageCompressor.ts";
 
 interface ComposeGrievanceViewProps {
   userProfile: UserProfile;
@@ -89,6 +90,12 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   // Multi-image state
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState<string>("");
+  const [imageCompressionStats, setImageCompressionStats] = useState<{
+    totalOriginalKb: number;
+    totalCompressedKb: number;
+    overallRatio: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -362,28 +369,54 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
     );
   };
 
-  // Image upload handling
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image upload handling with Cloudflare R2 and client-side adaptive compression
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsUploading(true);
-    const newImages: string[] = [];
-    const filesArray: File[] = Array.from(files);
+    const remainingSlots = Math.max(0, 6 - images.length);
+    if (remainingSlots === 0) return;
 
-    filesArray.forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          newImages.push(reader.result);
-          if (newImages.length === filesArray.length) {
-            setImages((prev) => [...prev, ...newImages].slice(0, 6)); // Max 6 images
-            setIsUploading(false);
-          }
+    const filesArray: File[] = Array.from(files).slice(0, remainingSlots);
+
+    try {
+      setIsUploading(true);
+      setUploadProgressText(`Compressing & Uploading 1 of ${filesArray.length}...`);
+
+      const result = await processAndUploadReportImages(
+        filesArray,
+        userProfile.id || "citizen",
+        (current, total) => {
+          setUploadProgressText(`Optimizing & Uploading ${current} of ${total}...`);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      );
+
+      setImages((prev) => [...prev, ...result.urls].slice(0, 6));
+
+      // Aggregate compression metrics
+      setImageCompressionStats((prev) => {
+        const totalOrig = (prev?.totalOriginalKb || 0) + result.stats.totalOriginalKb;
+        const totalComp = (prev?.totalCompressedKb || 0) + result.stats.totalCompressedKb;
+        const ratio =
+          totalOrig > 0
+            ? `${Math.round((1 - totalComp / totalOrig) * 100)}%`
+            : result.stats.overallRatio;
+        return {
+          totalOriginalKb: totalOrig,
+          totalCompressedKb: totalComp,
+          overallRatio: ratio,
+        };
+      });
+    } catch (err: any) {
+      console.error("Failed to upload evidence images to Cloudflare R2:", err);
+    } finally {
+      setIsUploading(false);
+      setUploadProgressText("");
+      // Reset input value so same files can be re-selected if needed
+      if (e.target) {
+        e.target.value = "";
+      }
+    }
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
@@ -629,10 +662,10 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           {/* Royal Blue Post Button */}
           <button
             onClick={handleFormSubmit}
-            disabled={isSubmitting || (!text.trim() && images.length === 0)}
+            disabled={isSubmitting || isUploading || (!text.trim() && images.length === 0)}
             id="compose-post-btn"
             className={`px-5 py-1.5 rounded-full text-sm font-bold text-white transition-all shadow-xs cursor-pointer flex items-center gap-1.5 ${
-              !text.trim() && images.length === 0
+              isSubmitting || isUploading || (!text.trim() && images.length === 0)
                 ? "bg-blue-300 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-md shadow-blue-600/20"
             }`}
@@ -641,6 +674,11 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Posting...</span>
+              </>
+            ) : isUploading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Uploading...</span>
               </>
             ) : (
               <span>Post</span>
@@ -866,11 +904,16 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           </div>
 
           {/* Attached Photos Preview Grid */}
-          {images.length > 0 && (
-            <div className="space-y-1.5 animate-fade-in">
+          {(images.length > 0 || isUploading) && (
+            <div className="space-y-2 animate-fade-in">
               <div className="flex items-center justify-between text-xs text-slate-500 font-bold px-0.5">
-                <span className="flex items-center gap-1 text-slate-700">
+                <span className="flex items-center gap-1.5 text-slate-700">
                   <ImageIcon className="w-3.5 h-3.5 text-blue-600" /> Attached Evidence ({images.length}/6)
+                  {isUploading && (
+                    <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md">
+                      <Loader2 className="w-3 h-3 animate-spin" /> {uploadProgressText || "Uploading..."}
+                    </span>
+                  )}
                 </span>
                 <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-emerald-200">
                   <ShieldCheck className="w-3 h-3" /> Geo-Stamped Proof
@@ -887,6 +930,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                       src={imgSrc}
                       alt={`Evidence ${idx + 1}`}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                     <button
                       type="button"
@@ -902,7 +946,16 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
                   </div>
                 ))}
 
-                {images.length < 6 && (
+                {/* Uploading Placeholder Card */}
+                {isUploading && (
+                  <div className="aspect-square rounded-xl border border-blue-300 bg-blue-50/70 flex flex-col items-center justify-center p-2 text-center text-blue-600 animate-pulse">
+                    <Loader2 className="w-5 h-5 animate-spin mb-1 text-blue-600" />
+                    <span className="text-[10px] font-bold text-blue-800">Compressing...</span>
+                    <span className="text-[9px] text-blue-600">Cloudflare R2</span>
+                  </div>
+                )}
+
+                {images.length < 6 && !isUploading && (
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -1039,12 +1092,13 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             id="toolbar-gallery-btn"
-            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+            disabled={isUploading || images.length >= 6}
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               images.length > 0 ? "bg-blue-100 text-blue-700" : "hover:bg-blue-50 text-blue-600"
             }`}
-            title="Add Evidence Photos from Gallery"
+            title={images.length >= 6 ? "Maximum 6 images attached" : "Add Evidence Photos from Gallery (Cloudflare R2)"}
           >
-            <ImageIcon className="w-5 h-5" />
+            {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <ImageIcon className="w-5 h-5" />}
           </button>
 
           {/* 2. Camera Snapshot */}
@@ -1052,8 +1106,9 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
             type="button"
             onClick={() => cameraInputRef.current?.click()}
             id="toolbar-camera-btn"
-            className="w-9 h-9 flex items-center justify-center hover:bg-blue-50 text-blue-600 rounded-full transition-colors cursor-pointer"
-            title="Take Evidence Photo with Camera"
+            disabled={isUploading || images.length >= 6}
+            className="w-9 h-9 flex items-center justify-center hover:bg-blue-50 text-blue-600 rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title={images.length >= 6 ? "Maximum 6 images attached" : "Take Evidence Photo with Camera (Cloudflare R2)"}
           >
             <Camera className="w-5 h-5" />
           </button>

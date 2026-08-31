@@ -46,6 +46,7 @@ import { ServicesMindMap } from "./ServicesMindMap.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
 import { EvaluationDetailView } from "./EvaluationDetailView.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
+import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import {
   cleanReportText,
   getCleanAuthorUsername,
@@ -1198,59 +1199,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         </div>
                       )}
 
-                    {/* Multi-Image Evidence Carousel */}
-                    {imageList.length > 0 && (
-                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
-                        <img
-                          src={imageList[currentSlide]}
-                          alt={`Evidence ${currentSlide + 1}`}
-                          className="w-full max-h-96 object-contain rounded-2xl"
-                          referrerPolicy="no-referrer"
-                        />
-
-                        {/* Multi-photo indicator badge */}
-                        {imageList.length > 1 && (
-                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                            {currentSlide + 1} / {imageList.length} Evidence
-                          </div>
-                        )}
-
-                        {/* Carousel Controls */}
-                        {imageList.length > 1 && (
-                          <>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveImageSlideIndex((prev) => ({
-                                  ...prev,
-                                  [report.id]:
-                                    currentSlide > 0
-                                      ? currentSlide - 1
-                                      : imageList.length - 1,
-                                }));
-                              }}
-                              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveImageSlideIndex((prev) => ({
-                                  ...prev,
-                                  [report.id]:
-                                    currentSlide < imageList.length - 1
-                                      ? currentSlide + 1
-                                      : 0,
-                                }));
-                              }}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
+                    {/* Media Section: Cloudflare R2 Multi-Image Carousel or Before/After/Compare Viewer */}
+                    {(imageList.length > 0 || report.resolvedImageUrl) && (
+                      <MediaBeforeAfterViewer
+                        beforeImages={imageList}
+                        afterImage={report.resolvedImageUrl}
+                        reportId={report.id}
+                        isCompact={true}
+                      />
                     )}
 
                     {/* Tagged Authorities Routing Chips */}
@@ -1324,8 +1280,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       </div>
                     )}
 
-                    {/* Official Department Action Progress Card */}
-                    <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                    {/* Official Department Action Progress Card - 100% Edge to Edge */}
+                    <div className="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3 bg-slate-50/90 border-y border-blue-200/80 rounded-none space-y-2.5 shadow-2xs">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
@@ -1414,7 +1370,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </div>
 
                     {/* Action Buttons Row (Twitter/X style) */}
-                    <div className="flex items-center justify-between pt-1 text-slate-500 text-xs border-t border-slate-100">
+                    <div className="flex items-center justify-between !mt-1.5 pt-0.5 text-slate-500 text-xs">
                       {/* Reply Button */}
                       <button
                         onClick={(e) => {
@@ -1694,14 +1650,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         {cleanReportText(report.text)}
                       </p>
 
-                      {report.imageUrl && (
-                        <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
-                          <img
-                            src={report.imageUrl}
-                            alt="Evidence"
-                            className="w-full h-auto object-contain rounded-2xl"
-                          />
-                        </div>
+                      {/* Media Section: 4:5 Aspect Ratio */}
+                      {(report.imageUrl || (report.images && report.images.length > 0) || report.resolvedImageUrl) && (
+                        <MediaBeforeAfterViewer
+                          beforeImages={report.images && report.images.length > 0 ? report.images : report.imageUrl ? [report.imageUrl] : []}
+                          afterImage={report.resolvedImageUrl}
+                          reportId={report.id}
+                          isCompact={true}
+                        />
                       )}
 
                       <div className="flex items-center justify-between pt-2 text-xs text-slate-500 font-semibold">

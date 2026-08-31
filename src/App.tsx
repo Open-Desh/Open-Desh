@@ -47,6 +47,8 @@ import {
   deleteReportInFirestore,
   togglePinReportInFirestore,
   claimOfficialProfileInFirestore,
+  recordEngagementActionInFirestore,
+  syncTrendingStatsInFirestore,
 } from "./lib/firestoreSync.ts";
 import {
   UserProfile,
@@ -544,6 +546,9 @@ export default function App() {
       const reportsList = await getReportsDirect();
       setReports(reportsList);
 
+      // Trigger background sync for system_stats/trending (topContent & topics)
+      syncTrendingStatsInFirestore(reportsList).catch(() => {});
+
       // 2. Fetch Leaders directly from Firestore
       const leadersList = await getLeadersDirect();
       setLeaders(leadersList);
@@ -619,6 +624,7 @@ export default function App() {
 
     // Save directly to Firestore Database
     await saveReportToFirestore(newReport);
+    syncTrendingStatsInFirestore([newReport, ...reports]).catch(() => {});
 
     // Optional backend proxy call if running
     try {
@@ -747,6 +753,13 @@ export default function App() {
       try {
         const uid = currentUser?.uid || userProfile.id;
         await setDoc(doc(db, "users", uid), { savedReports: newSaved }, { merge: true });
+
+        // Record real-time bookmark engagement in /analytics and /system_stats
+        recordEngagementActionInFirestore(isBookmarked ? "un_bookmark" : "bookmark", {
+          actorName: userProfile.fullName || "Citizen",
+          actorUsername: userProfile.username?.replace(/^@/, "") || "citizen",
+          targetTrackingId: id,
+        }).catch(() => {});
       } catch (err) {
         console.warn("Bookmark Firestore notice:", err);
       }
@@ -1363,6 +1376,19 @@ export default function App() {
   };
 
   // Inspect any user's profile dynamically
+  const openExternalProfile = (targetProfile: UserProfile) => {
+    setSelectedViewingProfile(targetProfile);
+    navigateTo("profile", false);
+
+    // Record real-time profile visit in /analytics/overview_7days and /system_stats/overview
+    recordEngagementActionInFirestore("profile_visit", {
+      actorName: userProfile.fullName || "Citizen",
+      actorUsername: userProfile.username?.replace(/^@/, "") || "citizen",
+      targetTitle: targetProfile.fullName || targetProfile.username,
+      category: targetProfile.category || "user",
+    }).catch(() => {});
+  };
+
   const handleSelectUserProfile = async (userId: string) => {
     const cleanId = (userId || "").trim();
     const cleanUsername = cleanId.replace(/^@/, "").toLowerCase();
@@ -1469,8 +1495,7 @@ export default function App() {
           isFollowing: isFollowed,
         } as UserProfile;
 
-        setSelectedViewingProfile(targetProfile);
-        navigateTo("profile", false);
+        openExternalProfile(targetProfile);
         return;
       }
     } catch (err) {
@@ -1529,8 +1554,7 @@ export default function App() {
           isFollowing: isFollowed,
         } as UserProfile;
 
-        setSelectedViewingProfile(targetProfile);
-        navigateTo("profile", false);
+        openExternalProfile(targetProfile);
         return;
       }
     } catch (err) {
@@ -1550,11 +1574,10 @@ export default function App() {
             )) ||
           targetProfile.isFollowing ||
           false;
-        setSelectedViewingProfile({
+        openExternalProfile({
           ...targetProfile,
           isFollowing: isFollowed,
         });
-        navigateTo("profile", false);
         return;
       }
     } catch (err) {
@@ -1605,8 +1628,7 @@ export default function App() {
         isFollowing: isFollowed,
       };
 
-      setSelectedViewingProfile(fallbackProfile);
-      navigateTo("profile", false);
+      openExternalProfile(fallbackProfile);
       return;
     }
   };
@@ -1671,8 +1693,7 @@ export default function App() {
       verified: true,
       isFollowing: isFollowed,
     };
-    setSelectedViewingProfile(leaderProfile);
-    navigateTo("profile", false);
+    openExternalProfile(leaderProfile);
   };
 
   const handleOpenCompose = () => {

@@ -30,6 +30,9 @@ import {
   DailyEngagementPoint,
   OfficialCircular,
   ModerationLog,
+  TrendingStatsDoc,
+  TrendingContentItem,
+  TrendingTopicItem,
 } from "../types";
 import { REAL_INDIAN_BUDGET_DATA } from "../data/realBudgetData";
 
@@ -411,6 +414,13 @@ export async function updateReportStatusInFirestore(
       updatePayload.claimedAt = "Just now";
     }
     await updateDoc(repDoc, updatePayload);
+
+    // Sync system status counters
+    if (level === 3 || status?.toLowerCase().includes("resolve")) {
+      recordEngagementActionInFirestore("case_resolved").catch(() => {});
+    } else if (level === 1 || level === 2 || status?.toLowerCase().includes("progress") || status?.toLowerCase().includes("claim")) {
+      recordEngagementActionInFirestore("case_in_progress").catch(() => {});
+    }
   } catch (err) {
     console.warn("Firestore status update notice:", err);
   }
@@ -823,11 +833,12 @@ export async function submitContentFlagInFirestore(flagData: {
 }
 
 // =========================================================================
-// 23. REAL-TIME ENGAGEMENT & 7-DAY ANALYTICS AGGREGATOR (Approach A)
-// Dedicated Collection: /analytics/overview_7days
+// 23. REAL-TIME ENGAGEMENT & SYSTEM STATS AGGREGATOR
+// Dedicated Collections: /system_stats/overview & /analytics/overview_7days
 // =========================================================================
 
 const ANALYTICS_DOC_ID = "overview_7days";
+const SYSTEM_STATS_DOC_ID = "overview";
 
 // Helper: Format Date string YYYY-MM-DD
 function getTodayDateString(offsetDays = 0): string {
@@ -835,9 +846,22 @@ function getTodayDateString(offsetDays = 0): string {
   return d.toISOString().split("T")[0];
 }
 
-// 23a. Record single engagement interaction in /analytics/overview_7days with Firestore increment()
+// 23a. Record single engagement interaction in /system_stats/overview and /analytics/overview_7days with Firestore increment()
 export async function recordEngagementActionInFirestore(
-  action: "like" | "unlike" | "re_share" | "un_re_share" | "reply" | "case_logged" | "case_resolved",
+  action:
+    | "like"
+    | "unlike"
+    | "re_share"
+    | "un_re_share"
+    | "reply"
+    | "case_logged"
+    | "case_resolved"
+    | "case_in_progress"
+    | "user_joined"
+    | "user_signup"
+    | "profile_visit"
+    | "bookmark"
+    | "un_bookmark",
   meta?: {
     actorName?: string;
     actorUsername?: string;
@@ -848,6 +872,7 @@ export async function recordEngagementActionInFirestore(
 ): Promise<void> {
   try {
     const analyticsDocRef = doc(db, "analytics", ANALYTICS_DOC_ID);
+    const systemStatsDocRef = doc(db, "system_stats", SYSTEM_STATS_DOC_ID);
     const dateKey = getTodayDateString();
 
     const updatePayload: Record<string, any> = {
@@ -855,30 +880,70 @@ export async function recordEngagementActionInFirestore(
       lastUpdatedIso: new Date().toISOString(),
     };
 
+    const systemStatsPayload: Record<string, any> = {
+      lastUpdated: Date.now(),
+    };
+
     if (action === "like") {
       updatePayload.totalLikes = increment(1);
       updatePayload.last7DaysLikes = increment(1);
       updatePayload[`dailyBreakdown.${dateKey}.likes`] = increment(1);
+      systemStatsPayload.totalLikes = increment(1);
     } else if (action === "unlike") {
       updatePayload.totalLikes = increment(-1);
       updatePayload.last7DaysLikes = increment(-1);
       updatePayload[`dailyBreakdown.${dateKey}.likes`] = increment(-1);
+      systemStatsPayload.totalLikes = increment(-1);
     } else if (action === "re_share") {
       updatePayload.totalReShares = increment(1);
       updatePayload.last7DaysReShares = increment(1);
       updatePayload[`dailyBreakdown.${dateKey}.reShares`] = increment(1);
+      systemStatsPayload.totalShares = increment(1);
     } else if (action === "un_re_share") {
       updatePayload.totalReShares = increment(-1);
       updatePayload.last7DaysReShares = increment(-1);
       updatePayload[`dailyBreakdown.${dateKey}.reShares`] = increment(-1);
+      systemStatsPayload.totalShares = increment(-1);
     } else if (action === "reply") {
       updatePayload.totalReplies = increment(1);
       updatePayload.last7DaysReplies = increment(1);
       updatePayload[`dailyBreakdown.${dateKey}.replies`] = increment(1);
+      systemStatsPayload.totalReplies = increment(1);
     } else if (action === "case_logged") {
       updatePayload.totalTrackedCases = increment(1);
       updatePayload.last7DaysTrackedCases = increment(1);
       updatePayload[`dailyBreakdown.${dateKey}.trackedCases`] = increment(1);
+      systemStatsPayload.totalReports = increment(1);
+      systemStatsPayload.openReports = increment(1);
+      systemStatsPayload.totalTracked = increment(1);
+    } else if (action === "case_resolved") {
+      systemStatsPayload.resolvedReports = increment(1);
+      systemStatsPayload.openReports = increment(-1);
+    } else if (action === "case_in_progress") {
+      systemStatsPayload.inProgressReports = increment(1);
+      systemStatsPayload.openReports = increment(-1);
+    } else if (action === "user_joined" || action === "user_signup") {
+      updatePayload.totalUsers = increment(1);
+      updatePayload.newSignupsToday = increment(1);
+      updatePayload.last7DaysSignups = increment(1);
+      updatePayload[`dailyBreakdown.${dateKey}.newSignups`] = increment(1);
+      systemStatsPayload.totalUsers = increment(1);
+      systemStatsPayload.newSignupsToday = increment(1);
+    } else if (action === "profile_visit") {
+      updatePayload.totalProfileVisits = increment(1);
+      updatePayload.last7DaysProfileVisits = increment(1);
+      updatePayload[`dailyBreakdown.${dateKey}.profileVisits`] = increment(1);
+      systemStatsPayload.totalProfileVisits = increment(1);
+    } else if (action === "bookmark") {
+      updatePayload.totalBookmarks = increment(1);
+      updatePayload.last7DaysBookmarks = increment(1);
+      updatePayload[`dailyBreakdown.${dateKey}.bookmarks`] = increment(1);
+      systemStatsPayload.totalBookmarks = increment(1);
+    } else if (action === "un_bookmark") {
+      updatePayload.totalBookmarks = increment(-1);
+      updatePayload.last7DaysBookmarks = increment(-1);
+      updatePayload[`dailyBreakdown.${dateKey}.bookmarks`] = increment(-1);
+      systemStatsPayload.totalBookmarks = increment(-1);
     }
 
     // Add to activity stream if metadata provided
@@ -896,9 +961,13 @@ export async function recordEngagementActionInFirestore(
       updatePayload.recentActivityLogs = arrayUnion(activityItem);
     }
 
-    await setDoc(analyticsDocRef, updatePayload, { merge: true });
+    // Parallel atomic updates to both /analytics/overview_7days and /system_stats/overview
+    await Promise.allSettled([
+      setDoc(analyticsDocRef, updatePayload, { merge: true }),
+      setDoc(systemStatsDocRef, systemStatsPayload, { merge: true }),
+    ]);
   } catch (err) {
-    console.warn("Engagement telemetry record notice:", err);
+    console.warn("Engagement and system stats telemetry record notice:", err);
   }
 }
 
@@ -1383,5 +1452,128 @@ function getFallbackModerationLogs(): ModerationLog[] {
     },
   ];
 }
+
+// =========================================================================
+// 27. TRENDING STATS & TOP CONTENT BY ENGAGEMENT (/system_stats/trending)
+// =========================================================================
+
+export async function syncTrendingStatsInFirestore(reportsList?: ReportIssue[]): Promise<TrendingStatsDoc> {
+  try {
+    const list = reportsList || (await getReportsDirect(100));
+    
+    // 1. Calculate Top Content by Engagement (Likes + Replies + ReShares)
+    const sortedContent = [...list].sort((a, b) => {
+      const scoreA = (a.likesCount || 0) + (a.repliesCount || (a.replies?.length || 0)) * 2 + (a.reReportsCount || 0) * 3;
+      const scoreB = (b.likesCount || 0) + (b.repliesCount || (b.replies?.length || 0)) * 2 + (b.reReportsCount || 0) * 3;
+      return scoreB - scoreA;
+    });
+
+    const topContent: TrendingContentItem[] = sortedContent.slice(0, 10).map((r) => {
+      const likes = r.likesCount || 0;
+      const replies = r.repliesCount || (r.replies ? r.replies.length : 0);
+      const shares = r.reReportsCount || 0;
+      return {
+        id: r.id,
+        trackingId: r.id,
+        title: (r.text || "Civic Grievance").slice(0, 80),
+        authorName: r.authorName || "Citizen",
+        authorUsername: r.authorUsername || "citizen",
+        authorAvatar: r.authorAvatar,
+        category: r.category || "General",
+        likesCount: likes,
+        repliesCount: replies,
+        reReportsCount: shares,
+        totalEngagement: likes + replies + shares,
+        createdAt: r.createdAt || r.timestamp || Date.now(),
+        verified: r.authorVerified || false,
+      };
+    });
+
+    // 2. Aggregate Topics / Hashtags
+    const categoryMap: Record<string, { activeCases: number; totalInteractions: number }> = {};
+    list.forEach((r) => {
+      const cat = r.category || "General";
+      if (!categoryMap[cat]) {
+        categoryMap[cat] = { activeCases: 0, totalInteractions: 0 };
+      }
+      categoryMap[cat].activeCases += r.status === "Resolved" ? 0 : 1;
+      categoryMap[cat].totalInteractions += (r.likesCount || 0) + (r.reReportsCount || 0);
+    });
+
+    const topics: TrendingTopicItem[] = Object.keys(categoryMap).map((cat, idx) => {
+      const item = categoryMap[cat];
+      return {
+        id: `topic_${idx}_${cat}`,
+        tag: `#${cat.replace(/\s+/g, "")}`,
+        category: cat,
+        activeCases: item.activeCases,
+        totalInteractions: item.totalInteractions,
+        trendScore: Math.min(100, item.activeCases * 10 + item.totalInteractions * 2),
+        urgencyScore: Math.min(100, item.activeCases * 15),
+        lastActive: "Just now",
+      };
+    }).sort((a, b) => b.trendScore - a.trendScore);
+
+    const payload: TrendingStatsDoc = {
+      lastCalculated: Date.now(),
+      topics: topics.length > 0 ? topics : [
+        {
+          id: "topic_0_Civic",
+          tag: "#CivicGovernance",
+          category: "Infrastructure",
+          activeCases: list.length,
+          totalInteractions: 50,
+          trendScore: 85,
+          urgencyScore: 80,
+          lastActive: "Just now",
+        }
+      ],
+      topContent,
+    };
+
+    const trendingDocRef = doc(db, "system_stats", "trending");
+    await setDoc(trendingDocRef, sanitizeData(payload), { merge: true });
+    return payload;
+  } catch (err) {
+    console.warn("Sync trending stats notice:", err);
+    return {
+      lastCalculated: Date.now(),
+      topics: [],
+      topContent: [],
+    };
+  }
+}
+
+export async function getTrendingStatsDirect(): Promise<TrendingStatsDoc | null> {
+  try {
+    const trendingDocRef = doc(db, "system_stats", "trending");
+    const snap = await getDoc(trendingDocRef);
+    if (snap.exists()) {
+      return snap.data() as TrendingStatsDoc;
+    }
+    return await syncTrendingStatsInFirestore();
+  } catch (err) {
+    console.warn("Get trending stats direct notice:", err);
+    return null;
+  }
+}
+
+export function listenTrendingStats(callback: (data: TrendingStatsDoc) => void): Unsubscribe {
+  const trendingDocRef = doc(db, "system_stats", "trending");
+  return onSnapshot(
+    trendingDocRef,
+    (snap) => {
+      if (snap.exists()) {
+        callback(snap.data() as TrendingStatsDoc);
+      } else {
+        syncTrendingStatsInFirestore().then((res) => callback(res));
+      }
+    },
+    (err) => {
+      console.warn("Trending stats listener fallback:", err);
+    }
+  );
+}
+
 
 

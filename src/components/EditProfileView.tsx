@@ -22,6 +22,7 @@ import {
 import { UserProfile, UserCategory, CivicService } from "../types.ts";
 import { getSmartDefaultServices } from "../utils/serviceTemplates.ts";
 import { checkUsernameAvailability } from "../lib/firestoreSync.ts";
+import { compressAvatarImage, uploadAvatarToR2 } from "../utils/imageCompressor.ts";
 
 interface EditProfileViewProps {
   userProfile: UserProfile;
@@ -286,6 +287,14 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
   const [saving, setSaving] = useState(false);
   const [showImageUrlInput, setShowImageUrlInput] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadStatus, setAvatarUploadStatus] = useState<{
+    originalSizeKb?: number;
+    compressedSizeKb?: number;
+    compressionRatio?: string;
+    isR2?: boolean;
+    error?: string;
+  } | null>(null);
 
   // Level change handler for representative to auto sync designation
   const handleRepLevelChange = (newLevel: RepresentativeLevel) => {
@@ -392,16 +401,39 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
     if (userProfile.services && userProfile.services.length > 0) setServicesList(userProfile.services);
   }, [userProfile.id]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          setAvatarUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    try {
+      setIsUploadingAvatar(true);
+      setAvatarUploadStatus(null);
+
+      // Step 1: Compress image on client-side (Square 1:1, max 512x512, adaptive WebP/JPEG)
+      const compressed = await compressAvatarImage(file, 512, 0.85);
+
+      // Step 2: Upload to Cloudflare R2 bucket `profile-dp`
+      const uploadResult = await uploadAvatarToR2(
+        compressed.dataUrl,
+        file.name || "avatar.webp",
+        userProfile.id || "user"
+      );
+
+      setAvatarUrl(uploadResult.url);
+      setAvatarUploadStatus({
+        originalSizeKb: compressed.originalSizeKb,
+        compressedSizeKb: compressed.compressedSizeKb,
+        compressionRatio: compressed.compressionRatio,
+        isR2: uploadResult.success && !uploadResult.error,
+        error: uploadResult.error,
+      });
+    } catch (err: any) {
+      console.error("Avatar upload failed:", err);
+      setAvatarUploadStatus({
+        error: err.message || "Upload failed. Please try again.",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -556,20 +588,32 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
               "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80"
             }
             alt="Avatar Preview"
-            className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-2 border-slate-200 shadow-sm bg-white"
+            className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-2 shadow-sm bg-white transition-all ${
+              isUploadingAvatar ? "opacity-50 blur-[1px] border-blue-400" : "border-slate-200"
+            }`}
             referrerPolicy="no-referrer"
           />
-          <label
-            htmlFor="avatar-file-input"
-            className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full cursor-pointer text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Upload photo"
-          >
-            <Camera className="w-6 h-6" />
-          </label>
+
+          {isUploadingAvatar ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 rounded-full text-white p-2">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+              <span className="text-[9px] font-bold text-center mt-1 leading-tight">Optimizing & Uploading...</span>
+            </div>
+          ) : (
+            <label
+              htmlFor="avatar-file-input"
+              className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full cursor-pointer text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Upload photo to Cloudflare R2"
+            >
+              <Camera className="w-6 h-6" />
+            </label>
+          )}
+
           <input
             id="avatar-file-input"
             type="file"
             accept="image/*"
+            disabled={isUploadingAvatar}
             className="hidden"
             onChange={handleFileUpload}
           />
@@ -578,9 +622,21 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         <div className="flex items-center gap-2 mt-3">
           <label
             htmlFor="avatar-file-input"
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3.5 py-1.5 rounded-full cursor-pointer transition-colors"
+            className={`text-xs font-bold text-blue-600 bg-blue-50 px-3.5 py-1.5 rounded-full cursor-pointer transition-colors flex items-center gap-1.5 ${
+              isUploadingAvatar ? "opacity-60 pointer-events-none" : "hover:bg-blue-100 hover:text-blue-700"
+            }`}
           >
-            Upload Photo
+            {isUploadingAvatar ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Compressing...</span>
+              </>
+            ) : (
+              <>
+                <Camera className="w-3.5 h-3.5" />
+                <span>Upload Photo</span>
+              </>
+            )}
           </label>
           <button
             type="button"
@@ -590,6 +646,31 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             Image URL
           </button>
         </div>
+
+        {/* Compression & Cloudflare R2 Status Badge */}
+        {avatarUploadStatus && (
+          <div
+            className={`mt-2.5 px-3 py-1.5 rounded-xl text-[11px] font-medium max-w-sm text-center transition-all ${
+              avatarUploadStatus.error
+                ? "bg-amber-50 text-amber-800 border border-amber-200"
+                : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+            }`}
+          >
+            {avatarUploadStatus.error ? (
+              <span>⚠️ {avatarUploadStatus.error}</span>
+            ) : (
+              <div className="space-y-0.5">
+                <p className="font-bold flex items-center justify-center gap-1">
+                  <Sparkles className="w-3 h-3 text-emerald-600" />
+                  <span>Cloudflare R2 Optimized</span>
+                </p>
+                <p className="text-[10px] text-emerald-700">
+                  {avatarUploadStatus.originalSizeKb}KB ➔ {avatarUploadStatus.compressedSizeKb}KB ({avatarUploadStatus.compressionRatio} saved) • Fast multi-device WebP
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {showImageUrlInput && (
           <div className="w-full max-w-sm mt-3">

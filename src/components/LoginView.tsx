@@ -30,7 +30,7 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
-import { checkUsernameAvailability } from "../lib/firestoreSync.ts";
+import { checkUsernameAvailability, recordEngagementActionInFirestore } from "../lib/firestoreSync.ts";
 import { WheelColumn, MONTHS } from "./DateWheelPicker.tsx";
 
 interface LoginViewProps {
@@ -355,6 +355,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
           },
           { merge: true }
         );
+
+        // Record signup in real-time analytics & system_stats
+        recordEngagementActionInFirestore("user_signup", {
+          actorName: signupName.trim() || cleanUname,
+          actorUsername: cleanUname,
+          category: "citizen",
+        }).catch(() => {});
       } catch (fsErr) {
         console.warn("Firestore profile save notice:", fsErr);
       }

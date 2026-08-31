@@ -495,6 +495,9 @@ export interface DailyEngagementPoint {
   reShares: number;
   replies: number;
   trackedCases: number;
+  profileVisits?: number;
+  newSignups?: number;
+  bookmarks?: number;
 }
 
 export interface EngagementOverviewDoc {
@@ -505,25 +508,37 @@ export interface EngagementOverviewDoc {
   totalReShares: number;
   totalReplies: number;
   totalTrackedCases: number;
+  totalProfileVisits?: number;
+  newSignupsToday?: number;
+  totalUsers?: number;
+  totalBookmarks?: number;
   last7DaysLikes: number;
   last7DaysReShares: number;
   last7DaysReplies: number;
   last7DaysTrackedCases: number;
+  last7DaysProfileVisits?: number;
+  last7DaysSignups?: number;
+  last7DaysBookmarks?: number;
   growthRates?: {
     likesGrowth: number;
     reSharesGrowth: number;
     repliesGrowth: number;
     casesGrowth: number;
+    profileVisitsGrowth?: number;
+    signupsGrowth?: number;
   };
   dailyBreakdown: Record<string, {
     likes: number;
     reShares: number;
     replies: number;
     trackedCases: number;
+    profileVisits?: number;
+    newSignups?: number;
+    bookmarks?: number;
   }>;
   recentActivityLogs?: Array<{
     id: string;
-    actionType: "like" | "re_share" | "reply" | "case_logged" | "case_resolved";
+    actionType: "like" | "re_share" | "reply" | "case_logged" | "case_resolved" | "profile_visit" | "user_signup" | "bookmark";
     actorName: string;
     actorUsername: string;
     targetId?: string;
@@ -532,6 +547,39 @@ export interface EngagementOverviewDoc {
     timestamp: number;
     category?: string;
   }>;
+}
+
+export interface TrendingTopicItem {
+  id: string;
+  tag: string;
+  category: string;
+  activeCases: number;
+  totalInteractions: number;
+  trendScore: number;
+  urgencyScore: number;
+  lastActive?: string;
+}
+
+export interface TrendingContentItem {
+  id: string;
+  trackingId: string;
+  title: string;
+  authorName: string;
+  authorUsername: string;
+  authorAvatar?: string;
+  category: string;
+  likesCount: number;
+  repliesCount: number;
+  reReportsCount: number;
+  totalEngagement: number;
+  createdAt: number | string;
+  verified?: boolean;
+}
+
+export interface TrendingStatsDoc {
+  lastCalculated: number;
+  topics: TrendingTopicItem[];
+  topContent: TrendingContentItem[];
 }
 
 export interface OfficialCircular {

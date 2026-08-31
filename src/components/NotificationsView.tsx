@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AppNotification, ReportIssue, UserProfile } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import {
   formatReportTimestamp,
   isReportAuthorVerified,
@@ -319,51 +320,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                   </div>
                 )}
 
-                {/* Multi-Image Carousel */}
-                {imageList.length > 0 && (
-                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group my-1">
-                    <img
-                      src={imageList[currentSlide]}
-                      alt={`Evidence ${currentSlide + 1}`}
-                      className="w-full max-h-96 object-contain rounded-2xl"
-                      referrerPolicy="no-referrer"
-                    />
-
-                    {imageList.length > 1 && (
-                      <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                        {currentSlide + 1} / {imageList.length} Evidence
-                      </div>
-                    )}
-
-                    {imageList.length > 1 && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveImageSlideIndex((prev) => ({
-                              ...prev,
-                              [report.id]: currentSlide > 0 ? currentSlide - 1 : imageList.length - 1,
-                            }));
-                          }}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveImageSlideIndex((prev) => ({
-                              ...prev,
-                              [report.id]: currentSlide < imageList.length - 1 ? currentSlide + 1 : 0,
-                            }));
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-1.5 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                {/* Media Section: Cloudflare R2 Multi-Image Carousel or Before/After/Compare Viewer */}
+                {(imageList.length > 0 || report.resolvedImageUrl) && (
+                  <MediaBeforeAfterViewer
+                    beforeImages={imageList}
+                    afterImage={report.resolvedImageUrl}
+                    reportId={report.id}
+                    isCompact={true}
+                  />
                 )}
 
                 {/* Tagged Authorities Routing Chips */}

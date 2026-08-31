@@ -79,5 +79,12 @@ service cloud.firestore {
       allow create, update: if isValidId(logId);
       allow delete: if false;
     }
+
+    // System Status & Statistics (Admin summary counts)
+    match /system_stats/{docId} {
+      allow read: if isValidId(docId);
+      allow create, update: if isValidId(docId);
+      allow delete: if false;
+    }
   }
 }

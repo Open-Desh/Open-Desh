@@ -391,8 +391,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 </div>
               )}
 
-              {/* Official Department Action Progress Card */}
-              <div className="bg-slate-50/90 border border-blue-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+              {/* Official Department Action Progress Card - 100% Edge to Edge */}
+              <div className="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3 bg-slate-50/90 border-y border-blue-200/80 rounded-none space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
@@ -463,7 +463,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               </div>
 
               {/* Action Buttons Row (Twitter/X style) */}
-              <div className="flex items-center justify-between pt-1 text-slate-500 text-xs border-t border-slate-100">
+              <div className="flex items-center justify-between !mt-1.5 pt-0.5 text-slate-500 text-xs">
                 {/* Reply Button (Opens dedicated post view) */}
                 <button
                   onClick={(e) => {

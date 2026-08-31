@@ -10,15 +10,16 @@ import {
   Send,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Flame,
   MoreVertical,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { ReportIssue, UserProfile, ThreadedReply } from "../types.ts";
 import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
+import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
@@ -69,7 +70,6 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const [activeReplyBoxReportId, setActiveReplyBoxReportId] = useState<string | null>(null);
   const [activeNestedReplyId, setActiveNestedReplyId] = useState<string | null>(null);
   const [expandedRepliesReportId, setExpandedRepliesReportId] = useState<Record<string, boolean>>({});
-  const [activeImageSlideIndex, setActiveImageSlideIndex] = useState<Record<string, number>>({});
 
   // Filter bookmarks directly by search query without category clutter
   const filteredBookmarks = bookmarkedReports.filter((r) => {
@@ -264,6 +264,13 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
             const isLiked = report.likedBy?.includes(userProfile.id);
             const isReReported = report.reReportedBy?.includes(userProfile.id);
             const isDeptUser = userProfile.category === "department";
+            const hasDeptClaimed = Boolean(
+              report.claimedByDept ||
+                report.claimedByOfficer ||
+                (report.departmentStatusLevel && report.departmentStatusLevel > 0)
+            );
+            const currentDeptLevel =
+              report.departmentStatusLevel ?? (hasDeptClaimed ? 1 : 0);
 
             // Multi-image list
             const imageList =
@@ -272,8 +279,6 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 : report.imageUrl
                 ? [report.imageUrl]
                 : [];
-            const currentImgIndex = activeImageSlideIndex[report.id] || 0;
-            const hasMultipleImages = imageList.length > 1;
 
             const isRepliesExpanded = expandedRepliesReportId[report.id] || false;
             const isReplyBoxOpen = activeReplyBoxReportId === report.id;
@@ -281,7 +286,8 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
             return (
               <article
                 key={report.id}
-                className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3 relative"
+                onClick={() => onSelectPost && onSelectPost(report.id)}
+                className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3 relative cursor-pointer"
               >
                 {/* Author Info & Status Ribbon */}
                 <div className="flex items-start justify-between gap-2">
@@ -377,53 +383,14 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                   </div>
                 )}
 
-                {/* Multi-Image Evidence Carousel / Natural Dimensions */}
-                {imageList.length > 0 && (
-                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center group shadow-xs">
-                    <img
-                      src={imageList[currentImgIndex]}
-                      alt="Civic Evidence"
-                      className="w-full h-auto object-contain rounded-2xl"
-                      referrerPolicy="no-referrer"
-                    />
-
-                    {/* Image Counter Badge */}
-                    <div className="absolute top-2.5 right-2.5 bg-black/60 backdrop-blur-md text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1.5">
-                      <span>
-                        {currentImgIndex + 1} / {imageList.length}
-                      </span>
-                    </div>
-
-                    {/* Left/Right Carousel Controls */}
-                    {hasMultipleImages && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveImageSlideIndex((prev) => ({
-                              ...prev,
-                              [report.id]: (currentImgIndex - 1 + imageList.length) % imageList.length,
-                            }));
-                          }}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
-                        >
-                          <ChevronLeft className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveImageSlideIndex((prev) => ({
-                              ...prev,
-                              [report.id]: (currentImgIndex + 1) % imageList.length,
-                            }));
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                {/* Media Section: Cloudflare R2 Multi-Image Carousel or Before/After/Compare Viewer */}
+                {(imageList.length > 0 || report.resolvedImageUrl) && (
+                  <MediaBeforeAfterViewer
+                    beforeImages={imageList}
+                    afterImage={report.resolvedImageUrl}
+                    reportId={report.id}
+                    isCompact={true}
+                  />
                 )}
 
                 {/* Location Geo-Tag Pin */}
@@ -459,33 +426,84 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                   </div>
                 )}
 
-                {/* Department Resolution Progress (Stage 0 to 3) */}
-                <div className="pt-2 pb-1 border-t border-slate-100">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
-                    <span>Municipal Department SLA Workflow</span>
-                    <span className="text-blue-700">Stage {report.departmentStatusLevel || 0} / 3</span>
+                {/* Official Department Action Progress Card - 100% Edge to Edge */}
+                <div className="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3 bg-slate-50/90 border-y border-blue-200/80 rounded-none space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                        <span>
+                          Official Action
+                          {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept)
+                            ? ":"
+                            : ""}
+                        </span>
+                        {hasDeptClaimed && (report.claimedByOfficer || report.claimedByDept) ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const target = report.claimedByOfficer || report.claimedByDept || "";
+                              const clean = getCleanAuthorUsername(target);
+                              if (onSelectUser && clean) onSelectUser(clean);
+                            }}
+                            className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-extrabold cursor-pointer normal-case"
+                          >
+                            <span>
+                              @{getCleanAuthorUsername(report.claimedByOfficer || report.claimedByDept || "")}
+                            </span>
+                            <ExternalLink className="w-3 h-3 text-blue-600" />
+                          </button>
+                        ) : null}
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                        hasDeptClaimed
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-amber-100 text-amber-800 border border-amber-200"
+                      }`}
+                    >
+                      {hasDeptClaimed
+                        ? `Stage ${currentDeptLevel}/3: ${report.status}`
+                        : "Waiting"}
+                    </span>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex gap-0.5">
-                    <div
-                      className={`h-full flex-1 rounded-l-full transition-all ${
-                        (report.departmentStatusLevel || 0) >= 1 ? "bg-amber-500" : "bg-slate-200"
-                      }`}
-                    />
-                    <div
-                      className={`h-full flex-1 transition-all ${
-                        (report.departmentStatusLevel || 0) >= 2 ? "bg-blue-500" : "bg-slate-200"
-                      }`}
-                    />
-                    <div
-                      className={`h-full flex-1 rounded-r-full transition-all ${
-                        (report.departmentStatusLevel || 0) >= 3 ? "bg-emerald-500" : "bg-slate-200"
-                      }`}
-                    />
+
+                  {/* 4-Stage Progress Timeline */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                    {[
+                      { level: 0, label: "Triaged" },
+                      { level: 1, label: "Inspection" },
+                      { level: 2, label: "Field Work" },
+                      { level: 3, label: "Resolved" },
+                    ].map((step) => {
+                      const isComplete = currentDeptLevel >= step.level && hasDeptClaimed;
+                      const isCurrent = currentDeptLevel === step.level && hasDeptClaimed;
+                      return (
+                        <div
+                          key={step.level}
+                          className={`flex flex-col items-center text-center p-1.5 rounded-xl border transition-all ${
+                            isCurrent
+                              ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-black"
+                              : isComplete
+                              ? "bg-blue-50 text-blue-900 border-blue-200 font-bold"
+                              : "bg-white text-slate-400 border-slate-200 font-medium"
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase tracking-tighter block leading-tight">
+                            {step.label}
+                          </span>
+                          <span className="text-[9px] mt-0.5">
+                            {isComplete ? "✓" : `Step ${step.level + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Interactive Twitter/X Toolbar */}
-                <div className="flex items-center justify-between text-slate-500 pt-2 border-t border-slate-100 text-xs font-semibold">
+                <div className="flex items-center justify-between text-slate-500 !mt-1.5 pt-0.5 text-xs font-semibold">
                   {/* Reply Button (Opens dedicated post view) */}
                   <button
                     onClick={() => {

@@ -65,12 +65,12 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
 
   return (
     <div
-      className="space-y-2 pt-0.5 my-1.5 select-none w-full"
+      className="space-y-2 pt-0.5 my-1 select-none -mx-2 sm:-mx-3 w-[calc(100%+1rem)] sm:w-[calc(100%+1.5rem)]"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Before / After Toggle Bar - Centered */}
       {afterImage && cleanBeforeList.length > 0 && (
-        <div className="flex items-center justify-center w-full pb-1">
+        <div className="flex items-center justify-center w-full pb-1 px-2 sm:px-3">
           <div className="inline-flex items-center justify-center gap-1.5 p-1 bg-slate-100/95 rounded-full border border-slate-200 shadow-2xs">
             {/* Before Tab */}
             <button
@@ -113,13 +113,13 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
         </div>
       )}
 
-      {/* 4:5 Fixed Aspect Ratio Feed Card (Instagram Portrait Layout) */}
+      {/* 4:5 Fixed Aspect Ratio Feed Card (Instagram Portrait Layout) - Completely Borderless & Light Neutral Background */}
       {activeTab === "before" || !afterImage ? (
         /* BEFORE VIEW / CAROUSEL */
         <div
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
-          className="relative isolate w-full aspect-[4/5] rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/80 bg-slate-900 shadow-2xs group flex items-center justify-center"
+          className="relative isolate w-full aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0"
         >
           {/* Main 4:5 Portrait Cropped Image */}
           <img
@@ -130,16 +130,16 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
             referrerPolicy="no-referrer"
           />
 
-          {/* Top Left: Minimalist Before Badge */}
-          <div className="absolute top-3 left-3 z-[2] bg-black/60 backdrop-blur-md text-white text-[10px] font-black tracking-wide px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1.5 border border-white/15 pointer-events-none">
+          {/* Top Left: Minimalist Before Badge (Clean Glass) */}
+          <div className="absolute top-3 left-3 z-[2] bg-white/90 backdrop-blur-md text-slate-800 text-[10px] font-black tracking-wide px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1.5 border border-slate-200/80 pointer-events-none">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
             <span>Before</span>
           </div>
 
-          {/* Top Right: Instagram Style Count Indicator (e.g. 1/3) & Fullscreen button */}
+          {/* Top Right: Count Indicator (e.g. 1/3) & Fullscreen button (Clean Glass) */}
           <div className="absolute top-3 right-3 z-[2] flex items-center gap-1.5">
             {hasMultipleBefore && (
-              <div className="bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs border border-white/15">
+              <div className="bg-white/90 backdrop-blur-md text-slate-800 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs border border-slate-200/80">
                 {activeSlide + 1}/{cleanBeforeList.length}
               </div>
             )}
@@ -149,7 +149,7 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
                 e.stopPropagation();
                 setFullscreenImage(currentBeforeImage);
               }}
-              className="bg-black/60 hover:bg-black/85 backdrop-blur-md text-white p-2 rounded-full shadow-xs border border-white/15 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
+              className="bg-white/90 hover:bg-white backdrop-blur-md text-slate-700 p-2 rounded-full shadow-xs border border-slate-200/80 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
               title="View full original image"
               aria-label="View full original image"
             >
@@ -157,7 +157,7 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
             </button>
           </div>
 
-          {/* Left / Right Carousel Arrow Buttons */}
+          {/* Left / Right Carousel Arrow Buttons (Clean Glass) */}
           {hasMultipleBefore && (
             <>
               <button
@@ -168,10 +168,10 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
                     prev > 0 ? prev - 1 : cleanBeforeList.length - 1
                   );
                 }}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 z-[2] bg-black/60 hover:bg-black/85 text-white p-2 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100 backdrop-blur-sm active:scale-95"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 z-[2] bg-white/90 hover:bg-white text-slate-800 p-2 rounded-full shadow-md border border-slate-200/80 cursor-pointer transition-all opacity-90 group-hover:opacity-100 backdrop-blur-sm active:scale-95"
                 aria-label="Previous photo"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 text-slate-800" />
               </button>
               <button
                 type="button"
@@ -181,17 +181,17 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
                     prev < cleanBeforeList.length - 1 ? prev + 1 : 0
                   );
                 }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 z-[2] bg-black/60 hover:bg-black/85 text-white p-2 rounded-full cursor-pointer transition-all opacity-90 group-hover:opacity-100 backdrop-blur-sm active:scale-95"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 z-[2] bg-white/90 hover:bg-white text-slate-800 p-2 rounded-full shadow-md border border-slate-200/80 cursor-pointer transition-all opacity-90 group-hover:opacity-100 backdrop-blur-sm active:scale-95"
                 aria-label="Next photo"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 text-slate-800" />
               </button>
             </>
           )}
 
-          {/* Bottom Center: Instagram Style Pagination Dots */}
+          {/* Bottom Center: Pagination Dots (Clean Glass) */}
           {hasMultipleBefore && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15">
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-xs">
               {cleanBeforeList.map((_, idx) => (
                 <button
                   key={idx}
@@ -202,8 +202,8 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
                   }}
                   className={`transition-all duration-300 rounded-full cursor-pointer ${
                     activeSlide === idx
-                      ? "w-4 h-1.5 bg-white shadow-xs"
-                      : "w-1.5 h-1.5 bg-white/45 hover:bg-white/75"
+                      ? "w-4 h-1.5 bg-blue-600 shadow-xs"
+                      : "w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400"
                   }`}
                   aria-label={`Slide ${idx + 1}`}
                 />
@@ -212,8 +212,8 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
           )}
         </div>
       ) : (
-        /* AFTER RESOLUTION PHOTO - 4:5 Aspect Ratio */
-        <div className="relative isolate w-full aspect-[4/5] rounded-2xl sm:rounded-3xl overflow-hidden border border-emerald-200/80 bg-slate-900 shadow-2xs group flex items-center justify-center">
+        /* AFTER RESOLUTION PHOTO - 4:5 Aspect Ratio Borderless Light */
+        <div className="relative isolate w-full aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0">
           <img
             src={afterImage}
             alt="After Resolution Work"
@@ -223,8 +223,8 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
           />
 
           {/* Top Left: Minimalist After Badge */}
-          <div className="absolute top-3 left-3 z-[2] bg-emerald-700/90 backdrop-blur-md text-white text-[10px] font-black tracking-wide px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1.5 border border-emerald-400/30 pointer-events-none">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300"></span>
+          <div className="absolute top-3 left-3 z-[2] bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-black tracking-wide px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1.5 border border-emerald-400/30 pointer-events-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-200"></span>
             <span>After (Resolved)</span>
           </div>
 
@@ -235,7 +235,7 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
               e.stopPropagation();
               setFullscreenImage(afterImage);
             }}
-            className="absolute top-3 right-3 z-[2] bg-black/60 hover:bg-black/85 backdrop-blur-md text-white p-2 rounded-full shadow-xs border border-white/15 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
+            className="absolute top-3 right-3 z-[2] bg-white/90 hover:bg-white backdrop-blur-md text-slate-700 p-2 rounded-full shadow-xs border border-slate-200/80 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
             title="View full original image"
             aria-label="View full original image"
           >
