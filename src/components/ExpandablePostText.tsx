@@ -1,10 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import { cleanReportText } from "../utils/reportUtils.ts";
-import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface ExpandablePostTextProps {
   text?: string;
-  maxLines?: number;
   className?: string;
   readMoreLabel?: string;
   showLessLabel?: string;
@@ -13,61 +11,53 @@ interface ExpandablePostTextProps {
 
 export const ExpandablePostText: React.FC<ExpandablePostTextProps> = ({
   text = "",
-  maxLines = 3,
   className = "text-sm sm:text-base text-slate-900 leading-relaxed font-normal whitespace-pre-line",
-  readMoreLabel = "Read more",
-  showLessLabel = "Show less",
-  charLimit = 110,
+  readMoreLabel = "read more",
+  showLessLabel = "show less",
+  charLimit = 72,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isClamped, setIsClamped] = useState(false);
-  const textRef = useRef<HTMLParagraphElement>(null);
 
   const cleaned = cleanReportText(text);
-
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-
-    // Line breaks count & length threshold
-    const lineBreaks = (cleaned.match(/\n/g) || []).length;
-    const hasMultipleLines = lineBreaks >= 2;
-    const isTextLong = cleaned.length > charLimit;
-    const isOverflowing = el.scrollHeight > el.clientHeight + 2;
-
-    setIsClamped(isOverflowing || hasMultipleLines || isTextLong);
-  }, [cleaned, maxLines, charLimit]);
-
   if (!cleaned) return null;
 
-  return (
-    <div className="space-y-1">
-      <p
-        ref={textRef}
-        className={`${className} ${!isExpanded ? "line-clamp-3" : ""}`}
-      >
-        {cleaned}
-      </p>
+  // Check if text exceeds ~2 lines or has 2+ newlines
+  const lines = cleaned.split("\n");
+  const hasMultipleLineBreaks = lines.length > 2;
+  const isLong = cleaned.length > (charLimit + 12) || hasMultipleLineBreaks;
 
-      {isClamped && (
-        <div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded((prev) => !prev);
-            }}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer inline-flex items-center gap-1 transition-colors py-0.5 focus:outline-none"
-          >
-            <span>{isExpanded ? showLessLabel : `... ${readMoreLabel}`}</span>
-            {isExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5 text-blue-600" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5 text-blue-600" />
-            )}
-          </button>
-        </div>
-      )}
-    </div>
+  if (!isLong) {
+    return <p className={className}>{cleaned}</p>;
+  }
+
+  // Calculate 2-line truncated snippet with guaranteed space for inline "read more"
+  let truncatedSnippet = cleaned;
+  if (!isExpanded) {
+    if (hasMultipleLineBreaks && lines[0].length < charLimit) {
+      truncatedSnippet = lines[0].trim();
+    } else {
+      // Cut around charLimit and back off to nearest word boundary
+      const rawSlice = cleaned.slice(0, charLimit);
+      const lastSpaceIdx = rawSlice.lastIndexOf(" ");
+      const cutIdx = lastSpaceIdx > 40 ? lastSpaceIdx : charLimit;
+      truncatedSnippet = rawSlice.slice(0, cutIdx).trim().replace(/[,.:;!?-]+$/, "");
+    }
+  }
+
+  return (
+    <p className={className}>
+      <span>{isExpanded ? cleaned : `${truncatedSnippet}...`}</span>
+      {" "}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded((prev) => !prev);
+        }}
+        className="inline font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer transition-colors focus:outline-none select-none whitespace-nowrap"
+      >
+        {isExpanded ? showLessLabel : readMoreLabel}
+      </button>
+    </p>
   );
 };
