@@ -22,7 +22,7 @@ import {
 import { UserProfile, UserCategory, CivicService } from "../types.ts";
 import { getSmartDefaultServices } from "../utils/serviceTemplates.ts";
 import { checkUsernameAvailability } from "../lib/firestoreSync.ts";
-import { compressAvatarImage, uploadAvatarToR2 } from "../utils/imageCompressor.ts";
+import { compressAvatarImage, uploadAvatarToR2, deleteAvatarFromR2 } from "../utils/imageCompressor.ts";
 
 interface EditProfileViewProps {
   userProfile: UserProfile;
@@ -400,6 +400,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
     try {
       setIsUploadingAvatar(true);
+      const previousAvatar = avatarUrl || userProfile.avatarUrl;
 
       // Step 1: Compress image on client-side (Square 1:1, max 512x512, adaptive WebP/JPEG)
       const compressed = await compressAvatarImage(file, 512, 0.85);
@@ -413,11 +414,39 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
       if (uploadResult.url) {
         setAvatarUrl(uploadResult.url);
+        // Step 3: If previous avatar was an R2 upload, clean up old file from R2
+        if (
+          previousAvatar &&
+          (previousAvatar.includes("/avatars/") ||
+            previousAvatar.includes("/api/r2/image/") ||
+            previousAvatar.includes("avatars/"))
+        ) {
+          deleteAvatarFromR2(previousAvatar).catch((err) =>
+            console.warn("Old avatar R2 cleanup notice:", err)
+          );
+        }
       }
     } catch (err: any) {
       console.error("Avatar upload failed:", err);
     } finally {
       setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    const previousAvatar = avatarUrl || userProfile.avatarUrl;
+    setAvatarUrl("");
+    if (
+      previousAvatar &&
+      (previousAvatar.includes("/avatars/") ||
+        previousAvatar.includes("/api/r2/image/") ||
+        previousAvatar.includes("avatars/"))
+    ) {
+      try {
+        await deleteAvatarFromR2(previousAvatar);
+      } catch (err) {
+        console.warn("Remove avatar R2 cleanup notice:", err);
+      }
     }
   };
 
@@ -629,6 +658,17 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
           >
             Image URL
           </button>
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemoveAvatar}
+              className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full cursor-pointer transition-colors flex items-center gap-1"
+              title="Remove DP & delete from Cloudflare R2"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Remove</span>
+            </button>
+          )}
         </div>
 
         {showImageUrlInput && (

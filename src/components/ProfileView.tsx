@@ -633,11 +633,56 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     return `Citizen (${(userProfile.id || "resident").slice(0, 6)})`;
   })();
 
-  const handleCopyProfileLink = () => {
+  const profileCanonicalUrl = (() => {
+    const rawUname = userProfile.username ? userProfile.username.replace(/^@+/, "").trim() : "";
+    const cleanId = userProfile.id ? userProfile.id.replace(/^@+/, "").trim() : "";
+    const identifier = rawUname || cleanId || "citizen";
+    if (typeof window !== "undefined" && window.location.origin) {
+      return `${window.location.origin}/u/${identifier}`;
+    }
+    return `https://open-desh.opendesh.workers.dev/u/${identifier}`;
+  })();
+
+  const handleShareProfile = async () => {
+    const shareData = {
+      title: `${profileFullName} (@${headerUsername}) on Open Desh`,
+      text: `Check out @${headerUsername}'s verified civic profile and grievance reports on Open Desh!`,
+      url: profileCanonicalUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.warn("Share API notice:", err);
+        }
+      }
+    }
+
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-      setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 2000);
+      try {
+        await navigator.clipboard.writeText(profileCanonicalUrl);
+        setCopyFeedback(true);
+        showToast("Profile link copied to clipboard!");
+        setTimeout(() => setCopyFeedback(false), 2000);
+      } catch (err) {
+        console.warn("Clipboard write failed:", err);
+      }
+    }
+  };
+
+  const handleCopyProfileLink = async () => {
+    if (navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(profileCanonicalUrl);
+        setCopyFeedback(true);
+        showToast("Profile link copied to clipboard!");
+        setTimeout(() => setCopyFeedback(false), 2000);
+      } catch (err) {
+        console.warn("Clipboard write failed:", err);
+      }
     }
   };
 
@@ -742,8 +787,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* 3-Dots Action Button (Opens Modern Bottom Action Sheet) */}
-        <div>
+        {/* Header Action Buttons: Direct Share & 3-Dots Menu */}
+        <div className="flex items-center gap-0.5 sm:gap-1">
+          <button
+            id="profile-direct-share-btn"
+            onClick={handleShareProfile}
+            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+            title="Share Profile"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
           <button
             id="profile-action-sheet-trigger"
             onClick={() => setIsMenuOpen(true)}
@@ -1060,7 +1113,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <span>Edit Profile</span>
             </button>
             <button
-              onClick={handleCopyProfileLink}
+              onClick={handleShareProfile}
               className="py-2.5 px-5 rounded-full border border-slate-300 text-slate-900 text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
             >
               <Share2 className="w-4 h-4 text-slate-600" />
@@ -2011,7 +2064,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
               {/* Action List */}
               <div className="space-y-2">
-                {/* 1. Copy Profile Link */}
+                {/* 1. Share Profile (Native / WhatsApp / Socials) */}
+                <button
+                  id="action-sheet-share-profile"
+                  onClick={() => {
+                    handleShareProfile();
+                    setTimeout(() => setIsMenuOpen(false), 600);
+                  }}
+                  className="w-full p-3.5 bg-blue-50/70 hover:bg-blue-100/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-blue-200/80"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-extrabold text-blue-950 flex items-center gap-2">
+                      <span>Share Profile</span>
+                    </h4>
+                    <p className="text-xs text-blue-700/90 font-medium truncate">
+                      Share via WhatsApp, Telegram, X, or other apps
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. Copy Profile Link */}
                 <button
                   id="action-sheet-copy-link"
                   onClick={() => {
@@ -2020,7 +2095,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   }}
                   className="w-full p-3.5 bg-slate-50 hover:bg-blue-50/80 rounded-2xl flex items-center gap-3.5 transition-all text-left group cursor-pointer border border-slate-200/80 hover:border-blue-200"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                     {copyFeedback ? (
                       <Check className="w-5 h-5 text-emerald-600" />
                     ) : (
@@ -2037,7 +2112,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       )}
                     </h4>
                     <p className="text-xs text-slate-500 font-medium truncate">
-                      {window.location.origin}/?user={cleanProfileUsername || cleanProfileId}
+                      {profileCanonicalUrl}
                     </p>
                   </div>
                 </button>

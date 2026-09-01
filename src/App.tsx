@@ -62,6 +62,7 @@ import {
   AppNotification,
 } from "./types.ts";
 import { updateSeo, buildProfileSeo, buildReportSeo } from "./lib/seo.ts";
+import { deleteImagesFromR2 } from "./utils/imageCompressor.ts";
 
 const defaultGuestProfile: UserProfile = {
   id: "guest_citizen",
@@ -262,16 +263,59 @@ export default function App() {
         setCurrentView("post_detail");
         return;
       }
+
+      // Handle user profile URLs: /u/:username, /@:username, /user/:username, /profile/:username
+      if (
+        fullPath.startsWith("u/") ||
+        fullPath.startsWith("@") ||
+        fullPath.startsWith("user/") ||
+        (fullPath.startsWith("profile/") && fullPath !== "profile/edit" && fullPath !== "profile/verify")
+      ) {
+        const rawParam = fullPath.startsWith("u/")
+          ? fullPath.replace("u/", "")
+          : fullPath.startsWith("@")
+          ? fullPath.replace("@", "")
+          : fullPath.startsWith("user/")
+          ? fullPath.replace("user/", "")
+          : fullPath.replace("profile/", "");
+
+        const cleanParam = decodeURIComponent(rawParam).trim();
+        if (cleanParam) {
+          handleSelectUserProfile(cleanParam);
+          setCurrentView("profile");
+          return;
+        }
+      }
+
+      // Query param support: ?user=username, ?u=username, ?profile=username
+      const urlParams = new URLSearchParams(window.location.search);
+      const userParam = urlParams.get("user") || urlParams.get("u") || urlParams.get("profile");
+      if (userParam) {
+        handleSelectUserProfile(userParam.trim());
+        setCurrentView("profile");
+        return;
+      }
+
       if ((fullPath === "compose" || fullPath === "report") && !isLoggedIn && !isAuthLoading) {
         setAuthActionReason("Sign in with your verified account to post a civic grievance report.");
         setCurrentView("login");
         window.history.replaceState(null, "", "/login");
         return;
       }
-      if (fullPath === "profile" && !isLoggedIn && !selectedViewingProfile && !isAuthLoading) {
-        setAuthActionReason("Sign in to access your personal verified profile and settings.");
-        setCurrentView("login");
-        window.history.replaceState(null, "", "/login");
+      if (fullPath === "profile") {
+        if (!isLoggedIn && !selectedViewingProfile && !isAuthLoading) {
+          setAuthActionReason("Sign in to access your personal verified profile and settings.");
+          setCurrentView("login");
+          window.history.replaceState(null, "", "/login");
+          return;
+        }
+        if (isLoggedIn && userProfile.username) {
+          const cleanUname = userProfile.username.replace(/^@/, "").trim();
+          if (cleanUname) {
+            window.history.replaceState(null, "", `/u/${cleanUname}`);
+          }
+        }
+        setCurrentView("profile");
         return;
       }
 
@@ -292,6 +336,16 @@ export default function App() {
           setSelectedPostId(pid);
           setCurrentView("post_detail");
           return;
+        }
+        if (hashView.startsWith("u/") || hashView.startsWith("@")) {
+          const uname = hashView.startsWith("u/") ? hashView.replace("u/", "") : hashView.replace("@", "");
+          const cleanU = decodeURIComponent(uname).trim();
+          if (cleanU) {
+            window.history.replaceState(null, "", `/u/${cleanU}`);
+            handleSelectUserProfile(cleanU);
+            setCurrentView("profile");
+            return;
+          }
         }
         if (hashView) {
           setCurrentView(hashView);
@@ -314,7 +368,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [isLoggedIn, selectedViewingProfile, isAuthLoading]);
+  }, [isLoggedIn, selectedViewingProfile, isAuthLoading, userProfile.username]);
 
   // Scroll detection to hide/show top category bar and bottom navigation bar
   const [isNavVisible, setIsNavVisible] = useState(true);
@@ -347,6 +401,22 @@ export default function App() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Synchronize browser address bar with user profile URL: /u/:username
+  useEffect(() => {
+    if (currentView === "profile") {
+      const activeProfile = selectedViewingProfile || (isLoggedIn && userProfile.id !== "guest_citizen" ? userProfile : null);
+      if (activeProfile) {
+        const uname = (activeProfile.username || "").replace(/^@/, "").trim() || activeProfile.id;
+        if (uname && uname !== "guest_citizen") {
+          const expectedPath = `/u/${uname}`;
+          if (window.location.pathname !== expectedPath && !window.location.pathname.startsWith("/post/") && !window.location.pathname.startsWith("/profile/edit")) {
+            window.history.replaceState(null, "", expectedPath);
+          }
+        }
+      }
+    }
+  }, [currentView, selectedViewingProfile, userProfile.username, userProfile.id, isLoggedIn]);
 
   // Dynamic Google Search & Social Media SEO Engine (Real-Time Synchronizer)
   useEffect(() => {
@@ -588,6 +658,21 @@ export default function App() {
       newPath = "/";
     } else if (view === "profile_edit") {
       newPath = "/profile/edit";
+    } else if (view === "profile") {
+      if (resetProfile) {
+        setSelectedViewingProfile(null);
+        const myUname = (userProfile.username || "").replace(/^@/, "").trim();
+        newPath = myUname ? `/u/${myUname}` : (userProfile.id && userProfile.id !== "guest_citizen" ? `/u/${userProfile.id}` : `/profile`);
+      } else if (selectedViewingProfile) {
+        const targetUname = (selectedViewingProfile.username || "").replace(/^@/, "").trim() || selectedViewingProfile.id;
+        newPath = targetUname ? `/u/${targetUname}` : `/profile`;
+      } else {
+        const myUname = (userProfile.username || "").replace(/^@/, "").trim();
+        newPath = myUname ? `/u/${myUname}` : (userProfile.id && userProfile.id !== "guest_citizen" ? `/u/${userProfile.id}` : `/profile`);
+      }
+    } else if (view.startsWith("u/")) {
+      targetView = "profile";
+      newPath = `/${view}`;
     } else if (view.startsWith("post/")) {
       const pid = view.replace("post/", "");
       setSelectedPostId(pid);
@@ -1477,13 +1562,32 @@ export default function App() {
   };
 
   const handleDeleteReport = async (reportId: string) => {
+    // Extract images to delete from R2 before removing from state
+    const targetReport = reports.find((r) => r.id === reportId);
+    const imagesToDelete: string[] = [];
+    if (targetReport) {
+      if (targetReport.imageUrl) imagesToDelete.push(targetReport.imageUrl);
+      if (targetReport.images && Array.isArray(targetReport.images)) {
+        imagesToDelete.push(...targetReport.images);
+      }
+    }
+
     // 1. Optimistic removal from state
     setReports((prev) => prev.filter((r) => r.id !== reportId));
     // 2. Delete from Firestore
     await deleteReportInFirestore(reportId);
-    // 3. Delete from backend server
+    // 3. Delete from backend server & purge from Cloudflare R2
     try {
-      await fetch(`/api/reports/${reportId}`, { method: "DELETE" });
+      await fetch(`/api/reports/${reportId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: imagesToDelete }),
+      });
+      if (imagesToDelete.length > 0) {
+        deleteImagesFromR2(imagesToDelete).catch((err) =>
+          console.warn("R2 image purge notice:", err)
+        );
+      }
     } catch (e) {
       console.warn("Delete API notice:", e);
     }
@@ -1580,7 +1684,12 @@ export default function App() {
   // Inspect any user's profile dynamically
   const openExternalProfile = (targetProfile: UserProfile) => {
     setSelectedViewingProfile(targetProfile);
-    navigateTo("profile", false);
+    const targetUname = (targetProfile.username || "").replace(/^@/, "").trim() || targetProfile.id;
+    if (targetUname && targetUname !== "guest_citizen") {
+      navigateTo(`u/${targetUname}`, false);
+    } else {
+      navigateTo("profile", false);
+    }
 
     // Record real-time profile visit in /analytics/overview_7days and /system_stats/overview
     recordEngagementActionInFirestore("profile_visit", {
@@ -1607,7 +1716,8 @@ export default function App() {
 
     if (isSelf) {
       setSelectedViewingProfile(null);
-      navigateTo("profile", true);
+      const myUname = (userProfile.username || "").replace(/^@/, "").trim();
+      navigateTo(myUname ? `u/${myUname}` : "profile", true);
       return;
     }
 
@@ -1849,7 +1959,8 @@ export default function App() {
 
     if (isLeaderSelf) {
       setSelectedViewingProfile(null);
-      navigateTo("profile", true);
+      const myUname = (userProfile.username || "").replace(/^@/, "").trim();
+      navigateTo(myUname ? `u/${myUname}` : "profile", true);
       return;
     }
 

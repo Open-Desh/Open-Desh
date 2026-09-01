@@ -633,3 +633,68 @@ export async function uploadVerificationDocToR2(
     throw err;
   }
 }
+
+/**
+ * Permanently delete multiple evidence/report images from Cloudflare R2
+ */
+export async function deleteImagesFromR2(
+  imageUrlsOrKeys: string[],
+  bucket: string = "report-post"
+): Promise<{ success: boolean; deleted: number }> {
+  try {
+    const validItems = imageUrlsOrKeys.filter(
+      (item) => item && typeof item === "string" && !item.startsWith("data:image/") && !item.startsWith("blob:")
+    );
+    if (validItems.length === 0) {
+      return { success: true, deleted: 0 };
+    }
+
+    const response = await fetch("/api/r2/delete-images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ images: validItems, bucket }),
+    });
+
+    if (!response.ok) {
+      console.warn("R2 Delete API status:", response.status);
+      return { success: false, deleted: 0 };
+    }
+
+    const data = await response.json();
+    return { success: data.success ?? true, deleted: data.deleted ?? 0 };
+  } catch (err) {
+    console.warn("deleteImagesFromR2 network notice:", err);
+    return { success: false, deleted: 0 };
+  }
+}
+
+/**
+ * Permanently delete user avatar DP from Cloudflare R2 bucket `profile-dp`
+ */
+export async function deleteAvatarFromR2(
+  avatarUrlOrKey: string
+): Promise<{ success: boolean; deleted: number }> {
+  try {
+    if (!avatarUrlOrKey || typeof avatarUrlOrKey !== "string" || avatarUrlOrKey.startsWith("data:image/")) {
+      return { success: true, deleted: 0 };
+    }
+
+    const response = await fetch("/api/r2/delete-avatar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avatarUrl: avatarUrlOrKey }),
+    });
+
+    if (!response.ok) {
+      console.warn("R2 Avatar Delete API status:", response.status);
+      return { success: false, deleted: 0 };
+    }
+
+    const data = await response.json();
+    return { success: data.success ?? true, deleted: data.deleted ?? 0 };
+  } catch (err) {
+    console.warn("deleteAvatarFromR2 network notice:", err);
+    return { success: false, deleted: 0 };
+  }
+}
+

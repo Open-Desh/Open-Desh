@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import {
   UserProfile,
   ReportIssue,
@@ -37,6 +37,103 @@ function getR2Client(): S3Client {
     });
   }
   return s3R2Client;
+}
+
+// Helper to extract Cloudflare R2 object key and appropriate bucket name
+function extractR2KeyAndBucket(urlOrKey: string, explicitBucket?: string): { key: string; bucket: string } | null {
+  if (!urlOrKey || typeof urlOrKey !== "string") return null;
+  // Ignore base64 data URLs, blob URLs, or standard public CDNs like unsplash
+  if (urlOrKey.startsWith("data:image/") || urlOrKey.startsWith("blob:")) return null;
+  if (urlOrKey.includes("images.unsplash.com") || urlOrKey.includes("logo.png") || urlOrKey.includes("logo.svg")) return null;
+
+  let clean = urlOrKey.trim().split("?")[0];
+  let key = "";
+  let bucket = explicitBucket || "";
+
+  if (clean.includes("/api/r2/image/")) {
+    key = clean.split("/api/r2/image/")[1];
+    bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+  } else if (clean.includes("/api/r2/report/")) {
+    key = clean.split("/api/r2/report/")[1];
+    bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+  } else if (clean.includes("/api/r2/resolution/")) {
+    key = clean.split("/api/r2/resolution/")[1];
+    bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+  } else if (clean.includes("/api/r2/verification/")) {
+    key = clean.split("/api/r2/verification/")[1];
+    bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+  } else if (clean.startsWith("reports/") || clean.includes("/reports/")) {
+    key = clean.includes("/reports/") ? "reports/" + clean.split("/reports/")[1] : clean;
+    bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+  } else if (clean.startsWith("avatars/") || clean.includes("/avatars/")) {
+    key = clean.includes("/avatars/") ? "avatars/" + clean.split("/avatars/")[1] : clean;
+    bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+  } else if (clean.startsWith("resolutions/") || clean.includes("/resolutions/")) {
+    key = clean.includes("/resolutions/") ? "resolutions/" + clean.split("/resolutions/")[1] : clean;
+    bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+  } else if (clean.startsWith("verifications/") || clean.includes("/verifications/")) {
+    key = clean.includes("/verifications/") ? "verifications/" + clean.split("/verifications/")[1] : clean;
+    bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+  } else if (clean.startsWith("http://") || clean.startsWith("https://")) {
+    try {
+      const urlObj = new URL(clean);
+      const pathname = urlObj.pathname.replace(/^\/+/, "");
+      if (pathname.startsWith("reports/")) {
+        key = pathname;
+        bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+      } else if (pathname.startsWith("avatars/")) {
+        key = pathname;
+        bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+      } else if (pathname.startsWith("resolutions/")) {
+        key = pathname;
+        bucket = bucket || process.env.CLOUDFLARE_R2_REPORT_BUCKET_NAME || "report-post";
+      } else if (pathname.startsWith("verifications/")) {
+        key = pathname;
+        bucket = bucket || process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+      } else if (pathname && (clean.includes("r2.dev") || clean.includes("opendesh"))) {
+        key = pathname;
+        bucket = bucket || (pathname.includes("report") ? "report-post" : "profile-dp");
+      }
+    } catch {
+      // Ignore URL parse errors
+    }
+  }
+
+  if (!key) return null;
+  return { key, bucket: bucket || "report-post" };
+}
+
+// Delete objects from Cloudflare R2
+async function deleteR2Images(items: string[], fallbackBucket?: string): Promise<{ deleted: number; errors: number }> {
+  let deleted = 0;
+  let errors = 0;
+  if (!items || items.length === 0) return { deleted: 0, errors: 0 };
+
+  try {
+    const r2 = getR2Client();
+    const uniqueItems = Array.from(new Set(items.filter(Boolean)));
+
+    for (const item of uniqueItems) {
+      const parsed = extractR2KeyAndBucket(item, fallbackBucket);
+      if (!parsed || !parsed.key) continue;
+
+      try {
+        await r2.send(
+          new DeleteObjectCommand({
+            Bucket: parsed.bucket,
+            Key: parsed.key,
+          })
+        );
+        deleted++;
+      } catch (err: any) {
+        console.warn(`R2 Delete notice for ${parsed.key} in ${parsed.bucket}:`, err?.message || err);
+        errors++;
+      }
+    }
+  } catch (clientErr: any) {
+    console.warn("R2 Client init notice during delete operation:", clientErr?.message || clientErr);
+  }
+  return { deleted, errors };
 }
 
 // Deterministic Civic & Statutory Rule Engine for Triage
@@ -411,14 +508,55 @@ async function startServer() {
     res.json({ status: "ok", isPinned: report.isPinned });
   });
 
-  // Delete Report
-  app.delete("/api/reports/:id", (req, res) => {
-    const idx = reportsDatabase.findIndex((r) => r.id === req.params.id);
+  // Delete Report & Associated Cloudflare R2 Evidence Images
+  app.delete("/api/reports/:id", async (req, res) => {
+    const reportId = req.params.id;
+    const idx = reportsDatabase.findIndex((r) => r.id === reportId);
+    let imagesToDelete: string[] = [];
+
     if (idx >= 0) {
+      const report = reportsDatabase[idx];
+      if (report.imageUrl) imagesToDelete.push(report.imageUrl);
+      if (report.images && Array.isArray(report.images)) {
+        imagesToDelete.push(...report.images);
+      }
       reportsDatabase.splice(idx, 1);
-      return res.json({ status: "ok" });
     }
-    res.status(404).json({ error: "Report not found" });
+
+    // Also check if client passed images list in request body
+    if (req.body?.images && Array.isArray(req.body.images)) {
+      imagesToDelete.push(...req.body.images);
+    }
+
+    // If report wasn't in memory, check Firestore to find and delete its R2 images
+    if (imagesToDelete.length === 0) {
+      try {
+        const firestoreResp = await fetch(
+          `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents/reports/${reportId}`
+        );
+        if (firestoreResp.ok) {
+          const docData = await firestoreResp.json();
+          if (docData?.fields) {
+            const f = docData.fields;
+            if (f.imageUrl?.stringValue) imagesToDelete.push(f.imageUrl.stringValue);
+            if (f.images?.arrayValue?.values?.length) {
+              for (const v of f.images.arrayValue.values) {
+                if (v?.stringValue) imagesToDelete.push(v.stringValue);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Firestore lookup error during report deletion:", err);
+      }
+    }
+
+    // Permanently purge from Cloudflare R2 bucket
+    if (imagesToDelete.length > 0) {
+      await deleteR2Images(imagesToDelete);
+    }
+
+    res.json({ status: "ok", deletedImagesCount: imagesToDelete.length });
   });
 
   // 3. Civic Reports Feed
@@ -1151,6 +1289,58 @@ async function startServer() {
     }
   });
 
+  // 13. Cloudflare R2 Permanent Image & Avatar Deletion Endpoints
+  app.post("/api/r2/delete-images", async (req, res) => {
+    try {
+      const { images, urls, keys, bucket } = req.body;
+      const targetItems: string[] = [
+        ...(Array.isArray(images) ? images : []),
+        ...(Array.isArray(urls) ? urls : []),
+        ...(Array.isArray(keys) ? keys : []),
+      ];
+
+      if (targetItems.length === 0) {
+        return res.json({ success: true, deleted: 0, message: "No items provided for deletion" });
+      }
+
+      const result = await deleteR2Images(targetItems, bucket);
+      return res.json({
+        success: true,
+        deleted: result.deleted,
+        errors: result.errors,
+      });
+    } catch (err: any) {
+      console.error("R2 Batch Delete API processing error:", err?.message || err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to delete images from R2",
+      });
+    }
+  });
+
+  app.post("/api/r2/delete-avatar", async (req, res) => {
+    try {
+      const { avatarUrl, key } = req.body;
+      const item = avatarUrl || key;
+      if (!item) {
+        return res.json({ success: true, deleted: 0, message: "No avatar provided" });
+      }
+
+      const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME || "profile-dp";
+      const result = await deleteR2Images([item], bucketName);
+      return res.json({
+        success: true,
+        deleted: result.deleted,
+      });
+    } catch (err: any) {
+      console.error("R2 Avatar Delete API processing error:", err?.message || err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to delete avatar from R2",
+      });
+    }
+  });
+
   // Telemetry Endpoint
   app.get("/api/metrics/telemetry", (req, res) => {
     res.json({
@@ -1319,7 +1509,7 @@ async function startServer() {
   });
 
   // SSR Open Graph & Twitter Card Pre-Renderer for Social Media Crawlers (WhatsApp, Facebook, Twitter/X, Telegram, LinkedIn, Discord)
-  app.get(["/post/:id", "/leader/:id", "/u/:username", "/help/:slug"], async (req, res, next) => {
+  app.get(["/post/:id", "/leader/:id", "/u/:username", "/profile/:username", "/@:username", "/help/:slug"], async (req, res, next) => {
     const userAgent = (req.headers["user-agent"] || "").toLowerCase();
     const isCrawler = /whatsapp|facebookexternalhit|twitterbot|telegrambot|linkedinbot|discordbot|slackbot|googlebot|bingbot|applebot|meta-externalagent/i.test(
       userAgent
@@ -1454,15 +1644,91 @@ async function startServer() {
         }
       }
 
-      // 3. User Profile Preview
-      if (req.originalUrl.startsWith("/u/")) {
-        const username = req.params.username;
-        const user = Object.values(usersDatabase).find((u) => u.username?.toLowerCase() === username?.toLowerCase());
+      // 3. User Profile Preview (/u/:username, /profile/:username, /@:username)
+      if (req.originalUrl.startsWith("/u/") || req.originalUrl.startsWith("/profile/") || req.originalUrl.startsWith("/@")) {
+        const rawUsername = (req.params.username || "").replace(/^@/, "").toLowerCase();
+        let user = Object.values(usersDatabase).find(
+          (u) =>
+            u.username?.toLowerCase().replace(/^@/, "") === rawUsername ||
+            u.id?.toLowerCase() === rawUsername
+        );
+
+        if (!user && rawUsername) {
+          // 1. Try fetching by user document ID from Firestore
+          try {
+            const firestoreResp = await fetch(
+              `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents/users/${rawUsername}`
+            );
+            if (firestoreResp.ok) {
+              const docData = await firestoreResp.json();
+              if (docData?.fields) {
+                const f = docData.fields;
+                user = {
+                  id: rawUsername,
+                  fullName: f.fullName?.stringValue || rawUsername,
+                  username: f.username?.stringValue || rawUsername,
+                  bio: f.bio?.stringValue || "",
+                  avatarUrl: f.avatarUrl?.stringValue || "",
+                } as any;
+              }
+            }
+          } catch (err) {
+            console.warn("Firestore user fetch error in SSR:", err);
+          }
+
+          // 2. If still not found, try Firestore structured query by username
+          if (!user) {
+            try {
+              const queryResp = await fetch(
+                `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents:runQuery`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    structuredQuery: {
+                      from: [{ collectionId: "users" }],
+                      where: {
+                        fieldFilter: {
+                          field: { fieldPath: "username" },
+                          op: "EQUAL",
+                          value: { stringValue: rawUsername },
+                        },
+                      },
+                      limit: 1,
+                    },
+                  }),
+                }
+              );
+              if (queryResp.ok) {
+                const results = await queryResp.json();
+                if (Array.isArray(results) && results[0]?.document?.fields) {
+                  const f = results[0].document.fields;
+                  const docName = results[0].document.name || "";
+                  const docId = docName.split("/").pop() || rawUsername;
+                  user = {
+                    id: docId,
+                    fullName: f.fullName?.stringValue || rawUsername,
+                    username: f.username?.stringValue || rawUsername,
+                    bio: f.bio?.stringValue || "",
+                    avatarUrl: f.avatarUrl?.stringValue || "",
+                  } as any;
+                }
+              }
+            } catch (err) {
+              console.warn("Firestore user structuredQuery error in SSR:", err);
+            }
+          }
+        }
+
         if (user) {
-          metaTitle = `${user.fullName} (@${user.username}) — Verified Profile`;
-          metaDesc = user.bio || `View civic reports and activity by ${user.fullName} on Open Desh.`;
+          const displayUname = user.username ? user.username.replace(/^@/, "") : rawUsername;
+          const displayFullName = user.fullName || displayUname;
+          metaTitle = `${displayFullName} (@${displayUname}) — Verified Civic Profile`;
+          metaDesc = user.bio || `View verified civic grievance reports, resolutions, and governance scorecard by ${displayFullName} (@${displayUname}) on Open Desh.`;
           if (user.avatarUrl) {
-            metaImage = user.avatarUrl.startsWith("http") ? user.avatarUrl : `${protocol}://${host}${user.avatarUrl.startsWith("/") ? "" : "/"}${user.avatarUrl}`;
+            metaImage = user.avatarUrl.startsWith("http")
+              ? user.avatarUrl
+              : `${protocol}://${host}${user.avatarUrl.startsWith("/") ? "" : "/"}${user.avatarUrl}`;
           } else {
             metaImage = `${protocol}://${host}/logo.png`;
           }
