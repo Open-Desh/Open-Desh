@@ -55,6 +55,73 @@ interface FeedViewProps {
   onOpenInstallModal?: () => void;
 }
 
+export const FeedSkeletonList: React.FC = () => (
+  <div className="divide-y divide-slate-100 animate-pulse">
+    {[1, 2, 3, 4].map((item) => (
+      <div key={item} className="p-4 sm:p-5 space-y-3">
+        {/* Header simulation */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-slate-200 shrink-0" />
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-3.5 bg-slate-200 rounded" />
+                <div className="w-16 h-3 bg-slate-100 rounded" />
+              </div>
+              <div className="w-28 h-2.5 bg-slate-100 rounded" />
+            </div>
+          </div>
+          <div className="w-14 h-5 bg-slate-100 rounded-full shrink-0" />
+        </div>
+
+        {/* Post Text simulation lines */}
+        <div className="space-y-2 pt-1">
+          <div className="w-full h-3.5 bg-slate-200 rounded" />
+          <div className="w-[85%] h-3.5 bg-slate-200 rounded" />
+          <div className="w-[60%] h-3.5 bg-slate-100 rounded" />
+        </div>
+
+        {/* Media box simulation */}
+        {item % 2 !== 0 && (
+          <div className="w-full h-48 sm:h-56 bg-slate-200 rounded-xl" />
+        )}
+
+        {/* Department SLA tracker simulation */}
+        <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-32 h-3 bg-slate-200 rounded" />
+            <div className="w-16 h-3 bg-slate-200 rounded" />
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            <div className="h-6 bg-slate-200/80 rounded" />
+            <div className="h-6 bg-slate-100 rounded" />
+            <div className="h-6 bg-slate-100 rounded" />
+            <div className="h-6 bg-slate-100 rounded" />
+          </div>
+        </div>
+
+        {/* Interaction Toolbar simulation */}
+        <div className="flex items-center justify-between pt-1 text-slate-200 px-1">
+          <div className="flex items-center gap-1">
+            <div className="w-5 h-5 rounded-full bg-slate-100" />
+            <div className="w-6 h-2.5 bg-slate-100 rounded" />
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-5 h-5 rounded-full bg-slate-100" />
+            <div className="w-6 h-2.5 bg-slate-100 rounded" />
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-5 h-5 rounded-full bg-slate-100" />
+            <div className="w-6 h-2.5 bg-slate-100 rounded" />
+          </div>
+          <div className="w-5 h-5 rounded-full bg-slate-100" />
+          <div className="w-5 h-5 rounded-full bg-slate-100" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 export const FeedView: React.FC<FeedViewProps> = ({
   reports,
   userProfile,
@@ -152,10 +219,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
       {/* Reports Feed Container */}
       <div className="divide-y divide-slate-100">
         {loading ? (
-          <div className="py-20 text-center text-slate-400 font-medium animate-pulse flex flex-col items-center justify-center gap-3">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-semibold text-slate-500">Loading verified reports...</p>
-          </div>
+          <FeedSkeletonList />
         ) : filteredReports.length === 0 ? (
           <div className="py-24 text-center px-4">
             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">

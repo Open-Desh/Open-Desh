@@ -61,6 +61,7 @@ import {
   ThreadedReply,
   AppNotification,
 } from "./types.ts";
+import { updateSeo, buildProfileSeo, buildReportSeo } from "./lib/seo.ts";
 
 const defaultGuestProfile: UserProfile = {
   id: "guest_citizen",
@@ -261,6 +262,12 @@ export default function App() {
         setCurrentView("post_detail");
         return;
       }
+      if ((fullPath === "compose" || fullPath === "report") && !isLoggedIn && !isAuthLoading) {
+        setAuthActionReason("Sign in with your verified account to post a civic grievance report.");
+        setCurrentView("login");
+        window.history.replaceState(null, "", "/login");
+        return;
+      }
       if (fullPath === "profile" && !isLoggedIn && !selectedViewingProfile && !isAuthLoading) {
         setAuthActionReason("Sign in to access your personal verified profile and settings.");
         setCurrentView("login");
@@ -340,6 +347,73 @@ export default function App() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Dynamic Google Search & Social Media SEO Engine (Real-Time Synchronizer)
+  useEffect(() => {
+    if (currentView === "post_detail") {
+      const activeReport = singleReportOverride || reports.find((r) => r.id === selectedPostId);
+      if (activeReport) {
+        updateSeo(buildReportSeo(activeReport));
+        return;
+      }
+    }
+
+    if (currentView === "profile") {
+      const activeProfile = selectedViewingProfile || userProfile;
+      if (activeProfile && activeProfile.id !== "guest_citizen") {
+        updateSeo(buildProfileSeo(activeProfile));
+        return;
+      }
+    }
+
+    if (currentView === "search") {
+      updateSeo({
+        title: "Search & Discovery Hub — Verified Complaints, Leaders & Works",
+        description: "Search live civic grievances, elected MLA/MP profiles, municipal departments, and audited public infrastructure across India on Open Desh.",
+        keywords: ["Search Civic Issues", "Find MLA", "Government Departments", "Municipal Works Search"]
+      });
+      return;
+    }
+
+    if (currentView === "connect") {
+      updateSeo({
+        title: "Elected Leaders & Municipal Department Directory",
+        description: "Explore 100% verified MLAs, MPs, Mayors, and Government Departments with real 5-pillar mathematical performance scores and citizen ratings.",
+        keywords: ["Elected Leaders", "MLA Scorecard", "MP Performance", "Jharkhand Leaders", "RMC", "PWD"]
+      });
+      return;
+    }
+
+    if (currentView === "budget") {
+      updateSeo({
+        title: "Public Budget Analyzer — Union, State & Per-Capita Expenditure",
+        description: "Transparent interactive breakdown of India's Union Budget and 28 State Budgets. See exactly where your tax money is spent per citizen.",
+        keywords: ["Public Budget India", "Tax Money Tracker", "State Budgets", "Per Capita Budget", "Government Spending"]
+      });
+      return;
+    }
+
+    if (currentView === "verification") {
+      updateSeo({
+        title: "Get Verified Official Badge — Leaders & Departments Portal",
+        description: "Apply for official verified status on Open Desh. Open to elected representatives, government departments, certified journalists, and civic activists.",
+        keywords: ["Open Desh Verification", "Official Badge", "MLA Verification", "Government Portal"]
+      });
+      return;
+    }
+
+    if (currentView === "aitutor") {
+      updateSeo({
+        title: "AI Civic Legal Tutor & Statutory Triage",
+        description: "Instant AI legal guidance referencing RTI Act 2005, CPGRAMS, Citizen Charters, and Indian municipal SLA standards.",
+        keywords: ["AI Legal Tutor", "RTI AI Assistant", "Civic Legal Help", "Government Complaint Laws"]
+      });
+      return;
+    }
+
+    // Default Home Feed SEO
+    updateSeo();
+  }, [currentView, selectedViewingProfile, singleReportOverride, selectedPostId, reports, userProfile]);
 
   // Ref to hold the active Firestore user snapshot unsubscribe function
   const [profileUnsub, setProfileUnsub] = useState<Unsubscribe | null>(null);
@@ -521,9 +595,9 @@ export default function App() {
       newPath = `/${view}`;
     }
 
-    // Protection: If unauthenticated guest tries to visit own profile or edit profile, redirect to login
-    if (!isLoggedIn && (view === "profile" || view === "profile_edit" || view === "settings") && resetProfile) {
-      setAuthActionReason("Sign in to access your personal verified profile and settings.");
+    // Protection: If unauthenticated guest tries to visit own profile, edit profile, or compose, redirect to login
+    if (!isLoggedIn && (view === "compose" || view === "report" || view === "profile" || view === "profile_edit" || view === "settings") && resetProfile) {
+      setAuthActionReason("Sign in with your verified account to post a civic grievance report or access profile settings.");
       targetView = "login";
       newPath = "/login";
     }
@@ -627,6 +701,12 @@ export default function App() {
       address?: string;
     };
   }) => {
+    if (!isLoggedIn || !currentUser || userProfile.id === "guest_citizen") {
+      setAuthActionReason("Please sign in with your verified account to post a civic grievance report.");
+      navigateTo("login");
+      return;
+    }
+
     const reportId = `rep_${Date.now()}`;
     const newReport: ReportIssue = {
       id: reportId,
@@ -1424,11 +1504,13 @@ export default function App() {
   };
 
   const handleMentionProfile = (targetProfile: UserProfile) => {
-    const rawUsername = targetProfile.username
-      ? targetProfile.username.replace(/^@+/, "").trim()
-      : targetProfile.fullName.toLowerCase().replace(/\s+/g, "_");
-    setComposeInitialMention(`@${rawUsername}`);
-    navigateTo("compose");
+    requireAuth(() => {
+      const rawUsername = targetProfile.username
+        ? targetProfile.username.replace(/^@+/, "").trim()
+        : targetProfile.fullName.toLowerCase().replace(/\s+/g, "_");
+      setComposeInitialMention(`@${rawUsername}`);
+      navigateTo("compose");
+    }, `mention @${targetProfile.username || targetProfile.fullName} and file a civic grievance report`);
   };
 
   const handleClaimProfile = async (
@@ -1974,20 +2056,28 @@ export default function App() {
           )}
 
           {currentView === "compose" && (
-            <ComposeGrievanceView
-              userProfile={userProfile}
-              leaders={leaders}
-              initialMention={composeInitialMention || undefined}
-              onCancel={() => {
-                setComposeInitialMention(null);
-                navigateTo("dashboard");
-              }}
-              onSubmit={async (data) => {
-                await handleCreateReport(data);
-                setComposeInitialMention(null);
-                navigateTo("dashboard");
-              }}
-            />
+            !isLoggedIn ? (
+              <LoginView
+                onSuccess={handleLoginSuccess}
+                onCancel={() => navigateTo("dashboard")}
+                actionReason="Sign in with your verified account to file and post a civic grievance report."
+              />
+            ) : (
+              <ComposeGrievanceView
+                userProfile={userProfile}
+                leaders={leaders}
+                initialMention={composeInitialMention || undefined}
+                onCancel={() => {
+                  setComposeInitialMention(null);
+                  navigateTo("dashboard");
+                }}
+                onSubmit={async (data) => {
+                  await handleCreateReport(data);
+                  setComposeInitialMention(null);
+                  navigateTo("dashboard");
+                }}
+              />
+            )
           )}
 
           {currentView === "aitutor" && <HelpView />}
@@ -2146,8 +2236,10 @@ export default function App() {
             <BudgetView
               onBack={() => navigateTo("dashboard")}
               onOpenCompose={(mention, defaultText) => {
-                setComposeInitialMention(mention || null);
-                navigateTo("compose");
+                requireAuth(() => {
+                  setComposeInitialMention(mention || null);
+                  navigateTo("compose");
+                }, "file a civic grievance report");
               }}
             />
           )}

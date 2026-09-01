@@ -57,6 +57,7 @@ import { HelpArticle, HelpCategoryId, UserCategory } from "../types.ts";
 import { db, handleFirestoreError, OperationType } from "../firebase.ts";
 import { doc, setDoc } from "firebase/firestore";
 import { useLanguage } from "../context/LanguageContext.tsx";
+import { updateSeo, buildHelpArticleSeo } from "../lib/seo.ts";
 
 export const HelpView: React.FC = () => {
   const { language } = useLanguage();
@@ -260,37 +261,20 @@ export const HelpView: React.FC = () => {
     }
   };
 
-  // On initial mount, dynamically inject JSON-LD FAQ/Article Structured Data for SEO
+  // Dynamic SEO update for Help Center and active article modal
   useEffect(() => {
-    try {
-      const scriptId = "opendesh-help-jsonld-schema";
-      let existing = document.getElementById(scriptId);
-      if (!existing) {
-        existing = document.createElement("script");
-        existing.id = scriptId;
-        existing.setAttribute("type", "application/ld+json");
-        document.head.appendChild(existing);
-      }
-
-      const schemaData = {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: HELP_ARTICLES.slice(0, 15).map((art) => ({
-          "@type": "Question",
-          name: isHindi ? art.title : art.englishTitle || art.title,
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: `${getArticleSummary(art)} ${getArticleKeyPoints(art).join(" ")}`,
-          },
-        })),
-      };
-
-      existing.textContent = JSON.stringify(schemaData);
-      syncArticlesToFirestore();
-    } catch (e) {
-      console.warn("SEO Schema insertion notice:", e);
+    if (activeModalArticle) {
+      updateSeo(buildHelpArticleSeo(activeModalArticle));
+    } else {
+      updateSeo({
+        title: isHindi ? "नागरिक सहायता केंद्र व कानूनी RTI गाइड" : "Help Center & Legal RTI Guides",
+        description: isHindi
+          ? "Open Desh सहायता केंद्र: शिकायत दर्ज करने, RTI आवेदन, नगर निगम SLA और नागरिक अधिकारों की संपूर्ण जानकारी।"
+          : "Open Desh Help Center: Comprehensive guides for civic grievance reporting, RTI Act 2005 filing, and municipal SLA timelines.",
+        keywords: ["Open Desh Help", "Civic Rights", "RTI Guide", "Grievance Redressal SLA", "Municipal Standards"]
+      });
     }
-  }, [isHindi]);
+  }, [activeModalArticle, isHindi]);
 
   return (
     <div

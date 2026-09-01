@@ -10,6 +10,7 @@ import {
   ThreadedReply,
   UserReview,
 } from "./src/types.ts";
+import { HELP_ARTICLES } from "./src/data/helpCenterData.ts";
 
 // Lazy S3 client for Cloudflare R2
 let s3R2Client: S3Client | null = null;
@@ -1161,6 +1162,72 @@ async function startServer() {
 
   // Serve static assets directory
   app.use("/assets", express.static(path.join(process.cwd(), "assets")));
+
+  // Dynamic XML Sitemap for Google & Bing Indexing
+  app.get("/sitemap.xml", (req, res) => {
+    const baseUrl = "https://opendesh.in";
+    const now = new Date().toISOString().split("T")[0];
+
+    const staticRoutes = [
+      { loc: `${baseUrl}/`, priority: "1.0", changefreq: "hourly" },
+      { loc: `${baseUrl}/search`, priority: "0.9", changefreq: "daily" },
+      { loc: `${baseUrl}/connect`, priority: "0.9", changefreq: "daily" },
+      { loc: `${baseUrl}/budget`, priority: "0.8", changefreq: "weekly" },
+      { loc: `${baseUrl}/help`, priority: "0.9", changefreq: "weekly" },
+      { loc: `${baseUrl}/aitutor`, priority: "0.7", changefreq: "monthly" },
+    ];
+
+    const helpRoutes = HELP_ARTICLES.map((art) => ({
+      loc: `${baseUrl}/help/${art.slug}`,
+      priority: "0.8",
+      changefreq: "monthly",
+    }));
+
+    const leaderRoutes = leadersDatabase.map((leader) => ({
+      loc: `${baseUrl}/leader/${leader.id}`,
+      priority: "0.9",
+      changefreq: "daily",
+    }));
+
+    const userRoutes = Object.values(usersDatabase)
+      .filter((u) => u.id !== "guest_citizen" && u.username)
+      .map((u) => ({
+        loc: `${baseUrl}/u/${u.username}`,
+        priority: "0.8",
+        changefreq: "daily",
+      }));
+
+    const reportRoutes = reportsDatabase
+      .filter((r) => r.authorId !== "guest_citizen")
+      .map((r) => ({
+        loc: `${baseUrl}/post/${r.id}`,
+        priority: "0.8",
+        changefreq: "daily",
+      }));
+
+    const allRoutes = [
+      ...staticRoutes,
+      ...helpRoutes,
+      ...leaderRoutes,
+      ...userRoutes,
+      ...reportRoutes,
+    ];
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+    allRoutes.forEach((route) => {
+      xml += `  <url>\n`;
+      xml += `    <loc>${route.loc}</loc>\n`;
+      xml += `    <lastmod>${now}</lastmod>\n`;
+      xml += `    <changefreq>${route.changefreq}</changefreq>\n`;
+      xml += `    <priority>${route.priority}</priority>\n`;
+      xml += `  </url>\n`;
+    });
+    xml += `</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  });
 
   // Vite middleware for development & static serving for production
   if (process.env.NODE_ENV !== "production") {

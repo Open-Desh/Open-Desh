@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /u/
+Allow: /leader/
+Allow: /post/
+Allow: /help/
+Allow: /budget/
+Allow: /search
+Disallow: /api/
+Disallow: /settings
+Disallow: /profile_edit
+
+Sitemap: https://opendesh.in/sitemap.xml

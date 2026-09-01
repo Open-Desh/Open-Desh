@@ -473,11 +473,23 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
       {/* 3. Feed List: Real Database Profiles Only */}
       <div className="divide-y divide-slate-100">
         {loading ? (
-          <div className="p-16 text-center space-y-3">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-slate-500 font-semibold">
-              Loading verified profiles from database...
-            </p>
+          <div className="divide-y divide-slate-100 animate-pulse">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="p-4 sm:p-5 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                  <div className="w-12 h-12 rounded-full bg-slate-200 shrink-0" />
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 h-4 bg-slate-200 rounded" />
+                      <div className="w-14 h-4 bg-slate-100 rounded-full" />
+                    </div>
+                    <div className="w-24 h-3 bg-slate-100 rounded" />
+                    <div className="w-[80%] h-3 bg-slate-100 rounded" />
+                  </div>
+                </div>
+                <div className="w-20 h-8 bg-slate-200 rounded-full shrink-0" />
+              </div>
+            ))}
           </div>
         ) : activeTab === "leader" ? (
           /* ================= LEADER TAB (REPRESENTATIVES & DEPARTMENTS) ================= */

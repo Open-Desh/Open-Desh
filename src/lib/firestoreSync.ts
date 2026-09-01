@@ -51,7 +51,19 @@ export async function getReportsDirect(maxLimit = 100): Promise<ReportIssue[]> {
     if (!snapshot.empty) {
       const reports: ReportIssue[] = [];
       snapshot.forEach((docSnap) => {
-        reports.push(docSnap.data() as ReportIssue);
+        const data = docSnap.data() as ReportIssue;
+        // Strict Integrity: Never display unauthorized or guest_citizen reports
+        if (
+          data.authorId &&
+          data.authorId !== "guest_citizen" &&
+          data.authorUsername !== "guest_citizen" &&
+          data.authorName !== "Guest Citizen"
+        ) {
+          reports.push(data);
+        } else {
+          // Clean up invalid anonymous doc from database
+          deleteDoc(docSnap.ref).catch(() => {});
+        }
       });
       return reports.sort((a, b) => {
         const timeA = typeof a.createdAt === "number" ? a.createdAt : new Date(a.createdAt || a.timestamp).getTime() || 0;

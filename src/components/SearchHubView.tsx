@@ -696,11 +696,46 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
       {/* 5. Main Search Results & Dynamic Feeds */}
       <div>
         {loading ? (
-          <div className="p-16 text-center space-y-3">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-slate-500 font-semibold">
-              Indexing verified database records...
-            </p>
+          <div className="divide-y divide-slate-100 animate-pulse">
+            {/* Top area departments shimmer cards */}
+            <div className="p-4 bg-slate-50/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="w-36 h-4 bg-slate-200 rounded" />
+                <div className="w-16 h-3 bg-slate-200 rounded" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {[1, 2].map((i) => (
+                  <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 shrink-0" />
+                      <div className="space-y-1.5 flex-1">
+                        <div className="w-28 h-3.5 bg-slate-200 rounded" />
+                        <div className="w-20 h-2.5 bg-slate-100 rounded" />
+                      </div>
+                    </div>
+                    <div className="w-full h-3 bg-slate-100 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Simulated search results feed items */}
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="p-4 sm:p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-200 shrink-0" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="w-24 h-3.5 bg-slate-200 rounded" />
+                    <div className="w-16 h-2.5 bg-slate-100 rounded" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="w-full h-3.5 bg-slate-200 rounded" />
+                  <div className="w-3/4 h-3.5 bg-slate-200 rounded" />
+                </div>
+                <div className="w-full h-44 bg-slate-100 rounded-xl" />
+              </div>
+            ))}
           </div>
         ) : activeTab === "all" ? (
           /* ================= TAB 1: ALL / TOP (AREA-PRIORITIZED DEPARTMENTS & LEADERS) ================= */

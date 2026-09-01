@@ -478,6 +478,11 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
   // 5. Submit Form with Real Verified DB Routing
   const handleFormSubmit = async () => {
+    if (userProfile.id === "guest_citizen") {
+      onCancel();
+      return;
+    }
+
     if (!text.trim() && Object.values(structuredFields).every((v) => !String(v).trim()) && images.length === 0) {
       return;
     }
