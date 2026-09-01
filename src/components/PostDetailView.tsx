@@ -34,6 +34,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   getReportAuthorVerifiedCategory,
+  getReportAuthorAvatar,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -349,7 +350,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             >
               <div className="flex items-start gap-3">
                 <img
-                  src={reply.authorAvatar}
+                  src={getReportAuthorAvatar(reply, userProfile)}
                   alt={reply.authorName}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -529,7 +530,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <img
-              src={report.authorAvatar}
+              src={getReportAuthorAvatar(report, userProfile)}
               alt={report.authorName}
               onClick={() => onSelectUser && onSelectUser(report.authorId)}
               className="w-10 h-10 rounded-full object-cover border border-slate-200 cursor-pointer shadow-2xs shrink-0 hover:opacity-85"
@@ -647,6 +648,75 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             beforeImages={imageList}
             afterImage={resolvedAfterImage}
             reportId={report.id}
+            actionCardSlot={
+              <div className="flex items-center justify-between text-slate-300 text-xs w-full">
+                {/* Reply Button */}
+                <button
+                  onClick={() => {
+                    if (currentFocusedReply) {
+                      setFocusedReplyIdStack([]);
+                    }
+                    setIsInputExpanded(true);
+                    setTimeout(() => textareaRef.current?.focus(), 50);
+                  }}
+                  className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4 text-blue-400" />
+                  <span className="font-bold text-white">
+                    {topLevelReplies.length} Reply
+                  </span>
+                </button>
+
+                {/* Re-Report / Repost */}
+                <button
+                  onClick={() => onReReport(report.id)}
+                  className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                    isReReported
+                      ? "text-emerald-400 font-extrabold"
+                      : "hover:text-white"
+                  }`}
+                >
+                  <Repeat2 className="w-4 h-4" />
+                  <span className="font-bold">{report.reReportsCount || 0}</span>
+                </button>
+
+                {/* Like / Endorse */}
+                <button
+                  onClick={() => onLike(report.id)}
+                  className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                    isLiked ? "text-rose-500 font-extrabold" : "hover:text-white"
+                  }`}
+                >
+                  <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                  <span className="font-bold">{report.likesCount || 0}</span>
+                </button>
+
+                {/* Bookmark */}
+                <button
+                  onClick={() => onBookmark(report.id)}
+                  className={`flex items-center gap-2 transition-colors cursor-pointer hover:text-white ${
+                    isSaved ? "text-blue-400 font-extrabold" : ""
+                  }`}
+                >
+                  <Bookmark
+                    className={`w-4 h-4 ${isSaved ? "fill-blue-400 text-blue-400" : ""}`}
+                  />
+                </button>
+
+                {/* Share */}
+                <button
+                  onClick={(e) => handleShare(e, report)}
+                  className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
+                  title="Share"
+                >
+                  {copiedId === report.id ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Share2 className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            }
           />
         )}
 

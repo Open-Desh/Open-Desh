@@ -288,13 +288,6 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
   const [saving, setSaving] = useState(false);
   const [showImageUrlInput, setShowImageUrlInput] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [avatarUploadStatus, setAvatarUploadStatus] = useState<{
-    originalSizeKb?: number;
-    compressedSizeKb?: number;
-    compressionRatio?: string;
-    isR2?: boolean;
-    error?: string;
-  } | null>(null);
 
   // Level change handler for representative to auto sync designation
   const handleRepLevelChange = (newLevel: RepresentativeLevel) => {
@@ -407,7 +400,6 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
 
     try {
       setIsUploadingAvatar(true);
-      setAvatarUploadStatus(null);
 
       // Step 1: Compress image on client-side (Square 1:1, max 512x512, adaptive WebP/JPEG)
       const compressed = await compressAvatarImage(file, 512, 0.85);
@@ -419,19 +411,11 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
         userProfile.id || "user"
       );
 
-      setAvatarUrl(uploadResult.url);
-      setAvatarUploadStatus({
-        originalSizeKb: compressed.originalSizeKb,
-        compressedSizeKb: compressed.compressedSizeKb,
-        compressionRatio: compressed.compressionRatio,
-        isR2: uploadResult.success && !uploadResult.error,
-        error: uploadResult.error,
-      });
+      if (uploadResult.url) {
+        setAvatarUrl(uploadResult.url);
+      }
     } catch (err: any) {
       console.error("Avatar upload failed:", err);
-      setAvatarUploadStatus({
-        error: err.message || "Upload failed. Please try again.",
-      });
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -629,7 +613,7 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             {isUploadingAvatar ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Compressing...</span>
+                <span>Uploading...</span>
               </>
             ) : (
               <>
@@ -646,31 +630,6 @@ export const EditProfileView: React.FC<EditProfileViewProps> = ({
             Image URL
           </button>
         </div>
-
-        {/* Compression & Cloudflare R2 Status Badge */}
-        {avatarUploadStatus && (
-          <div
-            className={`mt-2.5 px-3 py-1.5 rounded-xl text-[11px] font-medium max-w-sm text-center transition-all ${
-              avatarUploadStatus.error
-                ? "bg-amber-50 text-amber-800 border border-amber-200"
-                : "bg-emerald-50 text-emerald-800 border border-emerald-200"
-            }`}
-          >
-            {avatarUploadStatus.error ? (
-              <span>⚠️ {avatarUploadStatus.error}</span>
-            ) : (
-              <div className="space-y-0.5">
-                <p className="font-bold flex items-center justify-center gap-1">
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                  <span>Cloudflare R2 Optimized</span>
-                </p>
-                <p className="text-[10px] text-emerald-700">
-                  {avatarUploadStatus.originalSizeKb}KB ➔ {avatarUploadStatus.compressedSizeKb}KB ({avatarUploadStatus.compressionRatio} saved) • Fast multi-device WebP
-                </p>
-              </div>
-            )}
-          </div>
-        )}
 
         {showImageUrlInput && (
           <div className="w-full max-w-sm mt-3">

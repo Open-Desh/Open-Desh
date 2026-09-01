@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight, X, Maximize2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface MediaBeforeAfterViewerProps {
   beforeImages: string[];
   afterImage?: string;
   reportId?: string;
   isCompact?: boolean;
+  actionCardSlot?: React.ReactNode;
 }
 
 export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
@@ -13,19 +14,75 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
   afterImage,
   reportId,
   isCompact = false,
+  actionCardSlot,
 }) => {
   const [activeTab, setActiveTab] = useState<"before" | "after">("before");
   const [activeSlide, setActiveSlide] = useState(0);
-  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
+  const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
   const touchStartX = useRef<number | null>(null);
+  const modalTouchStartX = useRef<number | null>(null);
 
   const cleanBeforeList = beforeImages.filter(Boolean);
   const hasMultipleBefore = cleanBeforeList.length > 1;
 
-  const currentBeforeImage =
-    cleanBeforeList[activeSlide] ||
-    cleanBeforeList[0] ||
-    "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80";
+  // Active full images list for the active tab
+  const activeMediaList = activeTab === "before" ? cleanBeforeList : afterImage ? [afterImage] : [];
+  const currentActiveImage =
+    activeTab === "before"
+      ? cleanBeforeList[activeSlide] ||
+        cleanBeforeList[0] ||
+        "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80"
+      : afterImage || "";
+
+  // Pre-load natural image dimensions for zero-layout-shift adaptive aspect ratios
+  useEffect(() => {
+    const urls = [...cleanBeforeList, afterImage].filter(Boolean) as string[];
+    urls.forEach((url) => {
+      if (!aspectRatios[url]) {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => {
+          if (img.naturalWidth && img.naturalHeight) {
+            const ratio = img.naturalWidth / img.naturalHeight;
+            setAspectRatios((prev) => ({
+              ...prev,
+              [url]: ratio,
+            }));
+          }
+        };
+      }
+    });
+  }, [cleanBeforeList.join(","), afterImage]);
+
+  const handleImageLoad = (
+    url: string,
+    e: React.SyntheticEvent<HTMLImageElement>
+  ) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    if (naturalWidth && naturalHeight) {
+      const ratio = naturalWidth / naturalHeight;
+      setAspectRatios((prev) => {
+        if (prev[url] === ratio) return prev;
+        return { ...prev, [url]: ratio };
+      });
+    }
+  };
+
+  // Helper to compute adaptive aspect ratio
+  const getContainerStyle = (imgUrl: string): React.CSSProperties => {
+    const ratio = aspectRatios[imgUrl];
+    if (ratio) {
+      if (ratio < 0.8) {
+        // Taller than 4:5 -> Cap at 4:5 portrait
+        return { aspectRatio: "4 / 5", maxHeight: "560px" };
+      }
+      // Shorter/wider than 4:5 -> Keep natural aspect ratio & original height
+      return { aspectRatio: `${ratio}`, maxHeight: "560px" };
+    }
+    // Fallback while loading
+    return { minHeight: "180px", maxHeight: "560px" };
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -48,9 +105,56 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
     touchStartX.current = null;
   };
 
-  // Lock body scroll when fullscreen is open
+  // Touch swipe support in Fullscreen modal
+  const handleModalTouchStart = (e: React.TouchEvent) => {
+    modalTouchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleModalTouchEnd = (e: React.TouchEvent) => {
+    if (modalTouchStartX.current === null || fullscreenIndex === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = modalTouchStartX.current - touchEndX;
+
+    if (Math.abs(diff) > 40 && activeMediaList.length > 1) {
+      if (diff > 0) {
+        // Swiped left -> next image
+        const nextIdx = (fullscreenIndex + 1) % activeMediaList.length;
+        setFullscreenIndex(nextIdx);
+        if (activeTab === "before") setActiveSlide(nextIdx);
+      } else {
+        // Swiped right -> previous image
+        const prevIdx = (fullscreenIndex - 1 + activeMediaList.length) % activeMediaList.length;
+        setFullscreenIndex(prevIdx);
+        if (activeTab === "before") setActiveSlide(prevIdx);
+      }
+    }
+    modalTouchStartX.current = null;
+  };
+
+  // Keyboard navigation for fullscreen lightbox (Arrow keys + Esc)
   useEffect(() => {
-    if (fullscreenImage) {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (fullscreenIndex === null) return;
+      if (e.key === "Escape") {
+        setFullscreenIndex(null);
+      } else if (e.key === "ArrowRight" && activeMediaList.length > 1) {
+        const nextIdx = (fullscreenIndex + 1) % activeMediaList.length;
+        setFullscreenIndex(nextIdx);
+        if (activeTab === "before") setActiveSlide(nextIdx);
+      } else if (e.key === "ArrowLeft" && activeMediaList.length > 1) {
+        const prevIdx = (fullscreenIndex - 1 + activeMediaList.length) % activeMediaList.length;
+        setFullscreenIndex(prevIdx);
+        if (activeTab === "before") setActiveSlide(prevIdx);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [fullscreenIndex, activeMediaList.length, activeTab]);
+
+  // Lock body scroll when fullscreen modal is open
+  useEffect(() => {
+    if (fullscreenIndex !== null) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -58,7 +162,7 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
     return () => {
       document.body.style.overflow = "";
     };
-  }, [fullscreenImage]);
+  }, [fullscreenIndex]);
 
   // If no images are available
   if (cleanBeforeList.length === 0 && !afterImage) return null;
@@ -113,19 +217,24 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
         </div>
       )}
 
-      {/* 4:5 Fixed Aspect Ratio Feed Card (Instagram Portrait Layout) - Completely Borderless & Light Neutral Background */}
+      {/* Adaptive Aspect Ratio Feed Card */}
       {activeTab === "before" || !afterImage ? (
         /* BEFORE VIEW / CAROUSEL */
         <div
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
-          className="relative isolate w-full aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0"
+          style={getContainerStyle(currentActiveImage)}
+          className="relative isolate w-full rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0 transition-all duration-200"
         >
-          {/* Main 4:5 Portrait Cropped Image */}
+          {/* Normal Click to open original size view (no overlay icon) */}
           <img
-            src={currentBeforeImage}
+            src={currentActiveImage}
             alt={`Reported Evidence ${activeSlide + 1}`}
-            onClick={() => setFullscreenImage(currentBeforeImage)}
+            onLoad={(e) => handleImageLoad(currentActiveImage, e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFullscreenIndex(activeSlide);
+            }}
             className="w-full h-full object-cover cursor-pointer active:scale-[0.99] transition-transform duration-200"
             referrerPolicy="no-referrer"
           />
@@ -136,28 +245,14 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
             <span>Before</span>
           </div>
 
-          {/* Top Right: Count Indicator (e.g. 1/3) & Fullscreen button (Clean Glass) */}
-          <div className="absolute top-3 right-3 z-[2] flex items-center gap-1.5">
-            {hasMultipleBefore && (
-              <div className="bg-white/90 backdrop-blur-md text-slate-800 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs border border-slate-200/80">
-                {activeSlide + 1}/{cleanBeforeList.length}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullscreenImage(currentBeforeImage);
-              }}
-              className="bg-white/90 hover:bg-white backdrop-blur-md text-slate-700 p-2 rounded-full shadow-xs border border-slate-200/80 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
-              title="View full original image"
-              aria-label="View full original image"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {/* Top Right: Count Indicator (e.g. 1/3) */}
+          {hasMultipleBefore && (
+            <div className="absolute top-3 right-3 z-[2] bg-white/90 backdrop-blur-md text-slate-800 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs border border-slate-200/80 pointer-events-none">
+              {activeSlide + 1}/{cleanBeforeList.length}
+            </div>
+          )}
 
-          {/* Left / Right Carousel Arrow Buttons (Clean Glass) */}
+          {/* Left / Right Carousel Arrow Buttons */}
           {hasMultipleBefore && (
             <>
               <button
@@ -189,7 +284,7 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
             </>
           )}
 
-          {/* Bottom Center: Pagination Dots (Clean Glass) */}
+          {/* Bottom Center: Pagination Dots */}
           {hasMultipleBefore && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-xs">
               {cleanBeforeList.map((_, idx) => (
@@ -212,12 +307,20 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
           )}
         </div>
       ) : (
-        /* AFTER RESOLUTION PHOTO - 4:5 Aspect Ratio Borderless Light */
-        <div className="relative isolate w-full aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0">
+        /* AFTER RESOLUTION PHOTO */
+        <div
+          style={getContainerStyle(afterImage || "")}
+          className="relative isolate w-full rounded-xl sm:rounded-2xl overflow-hidden bg-slate-100/60 shadow-xs group flex items-center justify-center border-0 ring-0 transition-all duration-200"
+        >
+          {/* Normal Click to open original size view (no overlay icon) */}
           <img
             src={afterImage}
             alt="After Resolution Work"
-            onClick={() => setFullscreenImage(afterImage)}
+            onLoad={(e) => afterImage && handleImageLoad(afterImage, e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFullscreenIndex(0);
+            }}
             className="w-full h-full object-cover cursor-pointer active:scale-[0.99] transition-transform duration-200"
             referrerPolicy="no-referrer"
           />
@@ -227,60 +330,115 @@ export const MediaBeforeAfterViewer: React.FC<MediaBeforeAfterViewerProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-200"></span>
             <span>After (Resolved)</span>
           </div>
-
-          {/* Top Right: Fullscreen expand button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setFullscreenImage(afterImage);
-            }}
-            className="absolute top-3 right-3 z-[2] bg-white/90 hover:bg-white backdrop-blur-md text-slate-700 p-2 rounded-full shadow-xs border border-slate-200/80 cursor-pointer transition-transform active:scale-95 flex items-center justify-center"
-            title="View full original image"
-            aria-label="View full original image"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       )}
 
-      {/* Full-Screen HD Lightbox Modal (Covers entire screen with z-[99999] so bottom nav is completely hidden) */}
-      {fullscreenImage && (
+      {/* Full-Screen HD Lightbox Modal with Carousel and Bottom Interaction Card */}
+      {fullscreenIndex !== null && (
         <div
-          className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 select-none animate-fadeIn"
-          onClick={() => setFullscreenImage(null)}
+          className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-5 select-none animate-fadeIn"
+          onClick={() => setFullscreenIndex(null)}
+          onTouchStart={handleModalTouchStart}
+          onTouchEnd={handleModalTouchEnd}
         >
-          {/* Top Bar with Title & Close Icon */}
-          <div className="absolute top-4 left-4 right-4 z-[100000] flex items-center justify-between pointer-events-auto">
-            <span className="text-white/80 text-xs font-bold bg-black/50 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
-              Original High-Resolution View
-            </span>
+          {/* Top Bar with Counter & Close Button (No 'Original High-Resolution View' text) */}
+          <div
+            className="w-full flex items-center justify-between pointer-events-auto z-[100001]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Left Counter or Tag */}
+            <div>
+              {activeMediaList.length > 1 ? (
+                <span className="text-white/90 text-xs font-black bg-white/15 px-3.5 py-1.5 rounded-full border border-white/20 backdrop-blur-md">
+                  {fullscreenIndex + 1} / {activeMediaList.length}
+                </span>
+              ) : (
+                <span className="text-white/90 text-xs font-black bg-white/15 px-3.5 py-1.5 rounded-full border border-white/20 backdrop-blur-md">
+                  {activeTab === "before" ? "Evidence Photo" : "After Resolution"}
+                </span>
+              )}
+            </div>
+
+            {/* Right Close Button */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setFullscreenImage(null);
+                setFullscreenIndex(null);
               }}
               className="p-2.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-all cursor-pointer border border-white/20 active:scale-95 shadow-xl"
               title="Close Full Screen"
               aria-label="Close"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Full Original Image (No Cropping in Full Screen View) */}
+          {/* Central Image View with Left/Right Navigation */}
           <div
-            className="relative max-w-full max-h-[88vh] flex items-center justify-center"
+            className="relative flex-1 w-full flex items-center justify-center min-h-0 py-2 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Previous Arrow in Fullscreen */}
+            {activeMediaList.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const prevIdx =
+                    (fullscreenIndex - 1 + activeMediaList.length) %
+                    activeMediaList.length;
+                  setFullscreenIndex(prevIdx);
+                  if (activeTab === "before") setActiveSlide(prevIdx);
+                }}
+                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-[100002] p-3 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer active:scale-90 shadow-2xl"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+
+            {/* High-Resolution Image */}
             <img
-              src={fullscreenImage}
-              alt="Full Original Resolution"
-              className="max-w-full max-h-[88vh] object-contain rounded-2xl shadow-2xl"
+              key={activeMediaList[fullscreenIndex] || "fs-img"}
+              src={
+                activeMediaList[fullscreenIndex] ||
+                cleanBeforeList[0] ||
+                afterImage ||
+                ""
+              }
+              alt={`Full size view ${fullscreenIndex + 1}`}
+              className="max-w-full max-h-[70vh] sm:max-h-[74vh] object-contain rounded-2xl shadow-2xl transition-all duration-200 animate-fadeIn"
               referrerPolicy="no-referrer"
             />
+
+            {/* Next Arrow in Fullscreen */}
+            {activeMediaList.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nextIdx = (fullscreenIndex + 1) % activeMediaList.length;
+                  setFullscreenIndex(nextIdx);
+                  if (activeTab === "before") setActiveSlide(nextIdx);
+                }}
+                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-[100002] p-3 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer active:scale-90 shadow-2xl"
+                aria-label="Next image"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            )}
           </div>
+
+          {/* Bottom Card: Like, Share, Reply and Action Slot */}
+          {actionCardSlot && (
+            <div
+              className="w-full max-w-xl mx-auto bg-slate-900/90 text-white border border-white/15 rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-md pointer-events-auto z-[100001] animate-slideUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {actionCardSlot}
+            </div>
+          )}
         </div>
       )}
     </div>

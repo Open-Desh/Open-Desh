@@ -53,6 +53,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   getReportAuthorVerifiedCategory,
+  getReportAuthorAvatar,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
 import {
@@ -1074,7 +1075,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <img
-                          src={report.authorAvatar || userProfile.avatarUrl}
+                          src={getReportAuthorAvatar(report, activeUser || userProfile)}
                           alt={report.authorName}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1205,6 +1206,75 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         afterImage={report.resolvedImageUrl}
                         reportId={report.id}
                         isCompact={true}
+                        actionCardSlot={
+                          <div className="flex items-center justify-between text-slate-300 text-xs w-full">
+                            {/* Reply Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onSelectPost) onSelectPost(report.id);
+                              }}
+                              className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer"
+                            >
+                              <MessageCircle className="w-4 h-4 text-blue-400" />
+                              <span className="font-bold text-white">
+                                {report.replies?.length || report.repliesCount || 0} Reply
+                              </span>
+                            </button>
+
+                            {/* Re-Report / Amplify */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onReReport) onReReport(report.id);
+                              }}
+                              className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                                isReReported ? "text-emerald-400 font-extrabold" : "hover:text-white"
+                              }`}
+                            >
+                              <Repeat2 className="w-4 h-4" />
+                              <span className="font-bold">{report.reReportsCount || 0}</span>
+                            </button>
+
+                            {/* Like / Endorse */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onLike) onLike(report.id);
+                              }}
+                              className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                                isLiked ? "text-rose-500 font-extrabold" : "hover:text-white"
+                              }`}
+                            >
+                              <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                              <span className="font-bold">{report.likesCount || 0}</span>
+                            </button>
+
+                            {/* Bookmark */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onBookmark) onBookmark(report.id);
+                              }}
+                              className={`flex items-center gap-2 transition-colors cursor-pointer hover:text-white ${
+                                isSaved ? "text-blue-400 font-extrabold" : ""
+                              }`}
+                            >
+                              <Bookmark
+                                className={`w-4 h-4 ${isSaved ? "fill-blue-400 text-blue-400" : ""}`}
+                              />
+                            </button>
+
+                            {/* Share */}
+                            <button
+                              onClick={(e) => handleShare(e, report)}
+                              className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
+                              title="Share"
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        }
                       />
                     )}
 

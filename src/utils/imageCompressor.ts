@@ -192,7 +192,7 @@ export async function uploadReportImageToR2(
     const result = await response.json();
     return {
       success: true,
-      url: result.url,
+      url: result.url || (typeof dataUrlOrBlob === "string" ? dataUrlOrBlob : ""),
       r2Key: result.r2Key,
       bucket: result.bucket || "report-post",
       sizeKb: result.sizeKb,
@@ -244,45 +244,37 @@ export async function processAndUploadReportImages(
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    try {
-      // 1. Proportional Adaptive Compression
-      const compressed = await compressReportImage(file, 1600, 0.82);
-      totalOriginalKb += compressed.originalSizeKb;
-      totalCompressedKb += compressed.compressedSizeKb;
+    // 1. Proportional Adaptive Compression
+    const compressed = await compressReportImage(file, 1600, 0.82);
+    totalOriginalKb += compressed.originalSizeKb;
+    totalCompressedKb += compressed.compressedSizeKb;
 
-      // 2. Upload to Cloudflare R2 `report-post` bucket
-      const uploadRes = await uploadReportImageToR2(
-        compressed.dataUrl,
-        file.name || `evidence_${i + 1}.webp`,
-        userId
-      );
+    // 2. Upload to Cloudflare R2 `report-post` bucket
+    const uploadRes = await uploadReportImageToR2(
+      compressed.dataUrl,
+      file.name || `evidence_${i + 1}.webp`,
+      userId
+    );
 
-      const finalUrl = uploadRes.url || compressed.dataUrl;
-      urls.push(finalUrl);
+    if (!uploadRes.url) {
+      throw new Error(`Failed to upload ${file.name} to Cloudflare R2`);
+    }
 
-      items.push({
+    urls.push(uploadRes.url);
+
+    items.push({
+      originalKb: compressed.originalSizeKb,
+      compressedKb: compressed.compressedSizeKb,
+      ratio: compressed.compressionRatio,
+      url: uploadRes.url,
+    });
+
+    if (onProgress) {
+      onProgress(i + 1, files.length, {
         originalKb: compressed.originalSizeKb,
         compressedKb: compressed.compressedSizeKb,
         ratio: compressed.compressionRatio,
-        url: finalUrl,
       });
-
-      if (onProgress) {
-        onProgress(i + 1, files.length, {
-          originalKb: compressed.originalSizeKb,
-          compressedKb: compressed.compressedSizeKb,
-          ratio: compressed.compressionRatio,
-        });
-      }
-    } catch (err) {
-      console.warn(`Error processing evidence image ${file.name}:`, err);
-      // Direct reader fallback
-      const fallbackDataUrl = await new Promise<string>((res) => {
-        const reader = new FileReader();
-        reader.onloadend = () => res(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      urls.push(fallbackDataUrl);
     }
   }
 
@@ -457,14 +449,13 @@ export async function uploadAvatarToR2(
     const result = await response.json();
     return {
       success: true,
-      url: result.url,
+      url: result.url || (typeof dataUrlOrBlob === "string" ? dataUrlOrBlob : ""),
       thumbnailUrl: result.thumbnailUrl,
       r2Key: result.r2Key,
       sizeKb: result.sizeKb,
     };
   } catch (err: any) {
-    console.warn("Cloudflare R2 Upload notice:", err);
-    // Fallback to dataUrl directly so user experience is never blocked
+    console.warn("Cloudflare R2 Profile Avatar upload notice:", err);
     if (typeof dataUrlOrBlob === "string") {
       return {
         success: true,

@@ -25,6 +25,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   getReportAuthorVerifiedCategory,
+  getReportAuthorAvatar,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -135,7 +136,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
             <div key={reply.id} className="space-y-1.5 text-xs">
               <div className="flex items-start gap-2 sm:gap-2.5">
                 <img
-                  src={reply.authorAvatar}
+                  src={getReportAuthorAvatar(reply, userProfile)}
                   alt={reply.authorName}
                   className="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover shrink-0 border border-slate-200 cursor-pointer hover:opacity-85"
                   onClick={() => onSelectUser && onSelectUser(reply.authorId)}
@@ -294,7 +295,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src={report.authorAvatar}
+                      src={getReportAuthorAvatar(report, userProfile)}
                       alt={report.authorName}
                       className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200 cursor-pointer hover:opacity-85 shadow-xs"
                       onClick={() => onSelectUser && onSelectUser(report.authorId)}
@@ -389,6 +390,82 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     afterImage={report.resolvedImageUrl}
                     reportId={report.id}
                     isCompact={true}
+                    actionCardSlot={
+                      <div className="flex items-center justify-between text-slate-300 text-xs w-full">
+                        {/* Reply */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectPost) onSelectPost(report.id);
+                          }}
+                          className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="w-4 h-4 text-blue-400" />
+                          <span className="font-bold text-white">
+                            {report.repliesCount || 0} Reply
+                          </span>
+                        </button>
+
+                        {/* Re-Report */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onReReport(report.id);
+                          }}
+                          className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                            isReReported ? "text-emerald-400 font-extrabold" : "hover:text-white"
+                          }`}
+                        >
+                          <Repeat2 className="w-4 h-4" />
+                          <span className="font-bold">{report.reReportsCount || 0}</span>
+                        </button>
+
+                        {/* Like */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLike(report.id);
+                          }}
+                          className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                            isLiked ? "text-rose-500 font-extrabold" : "hover:text-white"
+                          }`}
+                        >
+                          <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                          <span className="font-bold">{report.likesCount || 0}</span>
+                        </button>
+
+                        {/* Bookmark */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onBookmark(report.id);
+                          }}
+                          className="flex items-center gap-2 transition-colors cursor-pointer text-blue-400 font-bold"
+                        >
+                          <Bookmark className="w-4 h-4 fill-blue-400 text-blue-400" />
+                        </button>
+
+                        {/* Share */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (navigator.share) {
+                              navigator.share({
+                                title: `Open Desh - Grievance #${report.id}`,
+                                text: report.text,
+                                url: window.location.href,
+                              });
+                            } else {
+                              navigator.clipboard.writeText(window.location.href);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
+                          title="Share"
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    }
                   />
                 )}
 

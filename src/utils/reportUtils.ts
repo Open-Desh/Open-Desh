@@ -90,6 +90,52 @@ export const isReportAuthorVerified = (
 };
 
 /**
+ * Resolves the real-time author avatar for a post or reply.
+ * If the post belongs to the active logged-in user or viewing profile, it returns their latest updated avatarUrl.
+ */
+export const getReportAuthorAvatar = (
+  item?: {
+    authorId?: string;
+    authorUsername?: string;
+    authorAvatar?: string;
+  } | null,
+  activeUser?: {
+    id?: string;
+    username?: string;
+    avatarUrl?: string;
+  } | null,
+  viewingProfile?: {
+    id?: string;
+    username?: string;
+    avatarUrl?: string;
+  } | null
+): string => {
+  const fallback = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80";
+  if (!item) return fallback;
+
+  const itemUname = item.authorUsername ? item.authorUsername.replace(/^@+/, "").trim().toLowerCase() : "";
+  const itemId = item.authorId ? item.authorId.trim().toLowerCase() : "";
+
+  if (activeUser && activeUser.avatarUrl) {
+    const activeUname = activeUser.username ? activeUser.username.replace(/^@+/, "").trim().toLowerCase() : "";
+    const activeId = activeUser.id ? activeUser.id.trim().toLowerCase() : "";
+    if ((itemId && activeId && itemId === activeId) || (itemUname && activeUname && itemUname === activeUname)) {
+      return activeUser.avatarUrl;
+    }
+  }
+
+  if (viewingProfile && viewingProfile.avatarUrl) {
+    const viewUname = viewingProfile.username ? viewingProfile.username.replace(/^@+/, "").trim().toLowerCase() : "";
+    const viewId = viewingProfile.id ? viewingProfile.id.trim().toLowerCase() : "";
+    if ((itemId && viewId && itemId === viewId) || (itemUname && viewUname && itemUname === viewUname)) {
+      return viewingProfile.avatarUrl;
+    }
+  }
+
+  return item.authorAvatar || fallback;
+};
+
+/**
  * Resolves the genuine verified category approved by document verification.
  * If a user was verified for 'citizen' but edits profile to 'business' or 'representative',
  * their verified badge category stays strictly the document-verified one ('citizen')

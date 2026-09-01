@@ -1066,6 +1066,78 @@ export default function App() {
     };
     setUserProfile(updatedProfile);
 
+    // Also update selectedViewingProfile if user was viewing their own profile
+    if (
+      selectedViewingProfile &&
+      (selectedViewingProfile.id === userProfile.id ||
+        (selectedViewingProfile.username &&
+          userProfile.username &&
+          selectedViewingProfile.username.replace(/^@/, "").toLowerCase() ===
+            userProfile.username.replace(/^@/, "").toLowerCase()))
+    ) {
+      setSelectedViewingProfile(updatedProfile);
+    }
+
+    // Also immediately update reports state in memory so all user's reports & comments sync everywhere
+    const uid = currentUser?.uid || userProfile.id;
+    const oldUname = (userProfile.username || "").replace(/^@/, "").toLowerCase();
+    const newUname = (updated.username || oldUname).replace(/^@/, "").toLowerCase();
+
+    setReports((prevReports) =>
+      prevReports.map((r) => {
+        const rAuthorId = (r.authorId || "").toLowerCase();
+        const rAuthorUname = (r.authorUsername || "").replace(/^@/, "").toLowerCase();
+        const isUserReport =
+          (uid && rAuthorId && (rAuthorId === uid.toLowerCase() || rAuthorId === userProfile.id.toLowerCase())) ||
+          (oldUname && rAuthorUname === oldUname) ||
+          (newUname && rAuthorUname === newUname);
+
+        const updateReplyRecursively = (reply: ThreadedReply): ThreadedReply => {
+          const repAuthorId = (reply.authorId || "").toLowerCase();
+          const repAuthorUname = (reply.authorUsername || "").replace(/^@/, "").toLowerCase();
+          const isUserReply =
+            (uid && repAuthorId && (repAuthorId === uid.toLowerCase() || repAuthorId === userProfile.id.toLowerCase())) ||
+            (oldUname && repAuthorUname === oldUname) ||
+            (newUname && repAuthorUname === newUname);
+
+          const nextRep = isUserReply
+            ? {
+                ...reply,
+                authorAvatar: updated.avatarUrl !== undefined ? updated.avatarUrl : reply.authorAvatar,
+                authorName: updated.fullName !== undefined ? updated.fullName : reply.authorName,
+                authorUsername: updated.username !== undefined ? updated.username : reply.authorUsername,
+              }
+            : reply;
+
+          if (nextRep.replies && nextRep.replies.length > 0) {
+            return {
+              ...nextRep,
+              replies: nextRep.replies.map(updateReplyRecursively),
+            };
+          }
+          return nextRep;
+        };
+
+        const updatedReplies = r.replies?.map(updateReplyRecursively);
+
+        if (isUserReport) {
+          return {
+            ...r,
+            authorAvatar: updated.avatarUrl !== undefined ? updated.avatarUrl : r.authorAvatar,
+            authorName: updated.fullName !== undefined ? updated.fullName : r.authorName,
+            authorUsername: updated.username !== undefined ? updated.username : r.authorUsername,
+            replies: updatedReplies || r.replies,
+          };
+        } else if (updatedReplies) {
+          return {
+            ...r,
+            replies: updatedReplies,
+          };
+        }
+        return r;
+      })
+    );
+
     // Sync to backend and Firestore
     try {
       await fetch("/api/user/profile", {
@@ -1074,7 +1146,6 @@ export default function App() {
         body: JSON.stringify(updated),
       });
 
-      const uid = currentUser?.uid || userProfile.id;
       await saveUserProfileToFirestore(uid, updatedProfile);
     } catch (err) {
       console.warn("Profile Firestore sync notice:", err);

@@ -45,6 +45,7 @@ import {
   getCleanAuthorUsername,
   isReportAuthorVerified,
   getReportAuthorVerifiedCategory,
+  getReportAuthorAvatar,
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
@@ -1177,10 +1178,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       className="flex items-center gap-2 cursor-pointer group"
                     >
                       <img
-                        src={
-                          report.authorAvatar ||
-                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80"
-                        }
+                        src={getReportAuthorAvatar(report, userProfile)}
                         alt={report.authorName}
                         className="w-8 h-8 rounded-full object-cover border border-slate-200"
                       />
@@ -1223,6 +1221,62 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                       afterImage={report.resolvedImageUrl}
                       reportId={report.id}
                       isCompact={true}
+                      actionCardSlot={
+                        <div className="flex items-center justify-between text-slate-300 text-xs w-full">
+                          {/* Reply Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onSelectPost) onSelectPost(report.id);
+                            }}
+                            className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer"
+                          >
+                            <MessageCircle className="w-4 h-4 text-blue-400" />
+                            <span className="font-bold text-white">
+                              {report.replies?.length || report.repliesCount || 0} Reply
+                            </span>
+                          </button>
+
+                          {/* Re-Report / Amplify */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onReReport) onReReport(report.id);
+                            }}
+                            className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                              report.reReportedBy?.includes(userProfile.id) ? "text-emerald-400 font-extrabold" : "hover:text-white"
+                            }`}
+                          >
+                            <Repeat2 className="w-4 h-4" />
+                            <span className="font-bold">{report.reReportsCount || 0}</span>
+                          </button>
+
+                          {/* Like / Endorse */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onLike) onLike(report.id);
+                            }}
+                            className={`flex items-center gap-2 transition-colors cursor-pointer ${
+                              report.likedBy?.includes(userProfile.id) ? "text-rose-500 font-extrabold" : "hover:text-white"
+                            }`}
+                          >
+                            <Heart className={`w-4 h-4 ${report.likedBy?.includes(userProfile.id) ? "fill-rose-500 text-rose-500" : ""}`} />
+                            <span className="font-bold">{report.likesCount || 0}</span>
+                          </button>
+
+                          {/* Bookmark */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onBookmark) onBookmark(report.id);
+                            }}
+                            className="flex items-center gap-2 transition-colors cursor-pointer hover:text-white"
+                          >
+                            <Bookmark className="w-4 h-4" />
+                          </button>
+                        </div>
+                      }
                     />
                   )}
 

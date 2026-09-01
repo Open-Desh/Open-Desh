@@ -29,6 +29,7 @@ import {
   Bot,
   Search,
   Users,
+  AlertCircle,
 } from "lucide-react";
 import { IssueCategory, LocationGeo, UserProfile, Leader } from "../types.ts";
 import { LocationPickerMap } from "./LocationPickerMap.tsx";
@@ -91,6 +92,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState<string>("");
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
   const [imageCompressionStats, setImageCompressionStats] = useState<{
     totalOriginalKb: number;
     totalCompressedKb: number;
@@ -381,6 +383,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
 
     try {
       setIsUploading(true);
+      setUploadErrorMessage(null);
       setUploadProgressText(`Compressing & Uploading 1 of ${filesArray.length}...`);
 
       const result = await processAndUploadReportImages(
@@ -409,6 +412,7 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
       });
     } catch (err: any) {
       console.error("Failed to upload evidence images to Cloudflare R2:", err);
+      setUploadErrorMessage(err.message || "Failed to upload image to Cloudflare R2 (bucket: report-post).");
     } finally {
       setIsUploading(false);
       setUploadProgressText("");
@@ -904,6 +908,22 @@ export const ComposeGrievanceView: React.FC<ComposeGrievanceViewProps> = ({
           </div>
 
           {/* Attached Photos Preview Grid */}
+          {uploadErrorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-center justify-between gap-2 animate-fade-in">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="truncate">{uploadErrorMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadErrorMessage(null)}
+                className="text-rose-500 hover:text-rose-700 p-0.5 cursor-pointer shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {(images.length > 0 || isUploading) && (
             <div className="space-y-2 animate-fade-in">
               <div className="flex items-center justify-between text-xs text-slate-500 font-bold px-0.5">
