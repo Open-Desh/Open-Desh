@@ -24,7 +24,6 @@ import { CategoryVerifiedTick } from "./CategoryBadge.tsx";
 import { MediaBeforeAfterViewer } from "./MediaBeforeAfterViewer.tsx";
 import { PostActionSheet } from "./PostActionSheet.tsx";
 import { AnimatedLikeButton } from "./AnimatedLikeButton.tsx";
-import { PwaInstallBanner } from "./PwaInstallBanner.tsx";
 import { ExpandablePostText } from "./ExpandablePostText.tsx";
 import {
   getCleanAuthorUsername,
@@ -150,9 +149,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-xl mx-auto pb-24 md:pb-12 animate-fadeIn bg-white border-x border-slate-200 min-h-screen">
-      {/* PWA Install Banner */}
-      <PwaInstallBanner onOpenModal={onOpenInstallModal || (() => {})} />
-
       {/* Reports Feed Container */}
       <div className="divide-y divide-slate-100">
         {loading ? (

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { UserProfile, UserCategory } from "../types.ts";
 import { getCategoryBadgeConfig, CategoryVerifiedTick } from "./CategoryBadge.tsx";
+import { uploadVerificationDocToR2 } from "../utils/imageCompressor.ts";
 
 interface VerificationViewProps {
   userProfile: UserProfile;
@@ -318,11 +319,44 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
       }
     };
 
-    reader.onload = () => {
-      setTimeout(() => {
-        setUploadProgress(100);
-        const resultStr = typeof reader.result === "string" ? reader.result : null;
+    reader.onload = async () => {
+      const resultStr = typeof reader.result === "string" ? reader.result : null;
+      if (!resultStr) {
+        setIsUploadingToR2(false);
+        return;
+      }
 
+      try {
+        setUploadProgress(70);
+        // Upload to Cloudflare R2 under systematic /verification/{category}/{userId}/ storage prefix
+        const uploadRes = await uploadVerificationDocToR2(
+          resultStr,
+          file.name,
+          userProfile.id || "anonymous",
+          type
+        );
+        const finalUrl = uploadRes.url || resultStr;
+        setUploadProgress(100);
+
+        if (type === "citizen") {
+          setCitizenDocFileName(file.name);
+          setCitizenDocFileSize(formattedSize);
+          setCitizenDocPreview(finalUrl);
+        } else if (type === "business") {
+          setBusinessDocFileName(file.name);
+          setBusinessDocFileSize(formattedSize);
+          setBusinessDocPreview(finalUrl);
+        } else if (type === "department") {
+          setDeptDocFileName(file.name);
+          setDeptDocFileSize(formattedSize);
+          setDeptDocPreview(finalUrl);
+        } else if (type === "representative") {
+          setRepDocFileName(file.name);
+          setRepDocFileSize(formattedSize);
+          setRepDocPreview(finalUrl);
+        }
+      } catch (uploadErr) {
+        console.warn("Verification R2 upload fallback:", uploadErr);
         if (type === "citizen") {
           setCitizenDocFileName(file.name);
           setCitizenDocFileSize(formattedSize);
@@ -340,8 +374,9 @@ export const VerificationView: React.FC<VerificationViewProps> = ({
           setRepDocFileSize(formattedSize);
           setRepDocPreview(resultStr);
         }
+      } finally {
         setIsUploadingToR2(false);
-      }, 500);
+      }
     };
 
     reader.onerror = () => {

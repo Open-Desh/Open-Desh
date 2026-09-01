@@ -32,6 +32,7 @@ import {
 } from "firebase/firestore";
 import {
   getReportsDirect,
+  getReportByIdDirect,
   getLeadersDirect,
   getInfrastructureDirect,
   saveReportToFirestore,
@@ -87,11 +88,14 @@ export default function App() {
   // Authentication States
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authActionReason, setAuthActionReason] = useState<string | null>(null);
 
   // Active viewing profile for dynamic profile inspection (Leader or Citizen or Dept)
   const [selectedViewingProfile, setSelectedViewingProfile] = useState<UserProfile | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [singleReportOverride, setSingleReportOverride] = useState<ReportIssue | null>(null);
+  const [isLoadingSinglePost, setIsLoadingSinglePost] = useState(false);
   const [bookmarkSearchQuery, setBookmarkSearchQuery] = useState("");
   const [composeInitialMention, setComposeInitialMention] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -215,6 +219,30 @@ export default function App() {
   const unreadNotificationsCount = userNotifications.filter((n) => !n.read).length;
 
 
+  // Single report fetcher for direct URLs or deep links
+  useEffect(() => {
+    if (!selectedPostId) {
+      setSingleReportOverride(null);
+      return;
+    }
+    const found = reports.find((r) => r.id === selectedPostId);
+    if (found) {
+      setSingleReportOverride(found);
+      setIsLoadingSinglePost(false);
+    } else {
+      setIsLoadingSinglePost(true);
+      getReportByIdDirect(selectedPostId)
+        .then((fetched) => {
+          if (fetched) {
+            setSingleReportOverride(fetched);
+          }
+        })
+        .finally(() => {
+          setIsLoadingSinglePost(false);
+        });
+    }
+  }, [selectedPostId, reports]);
+
   // Clean Path route synchronization (no '#' in URLs)
   useEffect(() => {
     const parseCurrentPath = () => {
@@ -231,6 +259,12 @@ export default function App() {
         const pid = fullPath.replace("post/", "");
         setSelectedPostId(pid);
         setCurrentView("post_detail");
+        return;
+      }
+      if (fullPath === "profile" && !isLoggedIn && !selectedViewingProfile && !isAuthLoading) {
+        setAuthActionReason("Sign in to access your personal verified profile and settings.");
+        setCurrentView("login");
+        window.history.replaceState(null, "", "/login");
         return;
       }
 
@@ -273,7 +307,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [isLoggedIn, selectedViewingProfile, isAuthLoading]);
 
   // Scroll detection to hide/show top category bar and bottom navigation bar
   const [isNavVisible, setIsNavVisible] = useState(true);
@@ -440,6 +474,7 @@ export default function App() {
   // Firebase Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsAuthLoading(false);
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
         setIsLoggedIn(true);
@@ -452,6 +487,14 @@ export default function App() {
         setCurrentUser(null);
         setIsLoggedIn(false);
         setUserProfile(defaultGuestProfile);
+
+        // Check if user is currently on an unauthorized personal view without a selected public profile
+        const currentPath = window.location.pathname.replace(/^\/+/, "");
+        if ((currentPath === "profile" || currentPath === "profile/edit" || currentPath === "settings") && !selectedViewingProfile) {
+          setAuthActionReason("Sign in to access your personal verified profile and settings.");
+          setCurrentView("login");
+          window.history.replaceState(null, "", "/login");
+        }
       }
     });
 
@@ -461,7 +504,7 @@ export default function App() {
         profileUnsub();
       }
     };
-  }, []);
+  }, [selectedViewingProfile]);
 
   const navigateTo = (view: string, resetProfile = true) => {
     let targetView = view;
@@ -1877,25 +1920,11 @@ export default function App() {
           {/* DEDICATED POST DETAILS & THREAD VIEW (Twitter/X Style) */}
           {(currentView === "post_detail" || currentView === "post") && (
             <PostDetailView
+              loading={isLoadingSinglePost || (loadingReports && !singleReportOverride && !reports.some(r => r.id === selectedPostId))}
               report={
+                singleReportOverride ||
                 reports.find((r) => r.id === selectedPostId) ||
-                reports[0] || {
-                  id: "unknown",
-                  authorId: "unknown",
-                  authorName: "Citizen",
-                  authorUsername: "citizen",
-                  authorAvatar: userProfile.avatarUrl,
-                  authorCategory: "citizen",
-                  category: "Infrastructure",
-                  text: "Post not found or has been moved.",
-                  location: { lat: 23.3441, lng: 85.3096, city: "Jharkhand" },
-                  timestamp: "Recently",
-                  status: "Open",
-                  departmentStatusLevel: 0,
-                  likesCount: 0,
-                  reReportsCount: 0,
-                  repliesCount: 0,
-                }
+                null
               }
               userProfile={userProfile}
               onBack={() => navigateTo("dashboard")}
@@ -2003,6 +2032,7 @@ export default function App() {
           {currentView === "profile" && (
             <ProfileView
               key={activeProfileToRender.id}
+              loading={isAuthLoading || (loadingReports && reports.length === 0 && !selectedViewingProfile)}
               userProfile={activeProfileToRender}
               activeUser={userProfile}
               isLoggedIn={isLoggedIn}

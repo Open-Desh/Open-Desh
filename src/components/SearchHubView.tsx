@@ -26,6 +26,8 @@ import {
   Briefcase,
   AlertTriangle,
   MoreVertical,
+  Bookmark,
+  Share2,
 } from "lucide-react";
 import {
   ReportIssue,
@@ -1255,7 +1257,7 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (onLike) onLike(report.id);
+                              if (onLikeReport) onLikeReport(report.id);
                             }}
                             className={`flex items-center gap-2 transition-colors cursor-pointer ${
                               report.likedBy?.includes(userProfile.id) ? "text-rose-500 font-extrabold" : "hover:text-white"
@@ -1271,9 +1273,28 @@ export const SearchHubView: React.FC<SearchHubViewProps> = ({
                               e.stopPropagation();
                               if (onBookmark) onBookmark(report.id);
                             }}
-                            className="flex items-center gap-2 transition-colors cursor-pointer hover:text-white"
+                            className={`flex items-center gap-2 transition-colors cursor-pointer hover:text-white ${
+                              userProfile.savedReports?.includes(report.id) ? "text-blue-400 font-extrabold" : ""
+                            }`}
                           >
-                            <Bookmark className="w-4 h-4" />
+                            <Bookmark
+                              className={`w-4 h-4 ${
+                                userProfile.savedReports?.includes(report.id) ? "fill-blue-400 text-blue-400" : ""
+                              }`}
+                            />
+                          </button>
+
+                          {/* Share */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const url = `${window.location.origin}/post/${report.id}`;
+                              navigator.clipboard?.writeText(url);
+                            }}
+                            className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
+                            title="Share"
+                          >
+                            <Share2 className="w-4 h-4" />
                           </button>
                         </div>
                       }

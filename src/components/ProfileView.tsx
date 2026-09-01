@@ -87,6 +87,7 @@ interface ProfileViewProps {
   onMuteUser?: (authorUsername: string, authorId?: string) => void;
   mutedUsers?: string[];
   onSelectUser?: (userId: string) => void;
+  loading?: boolean;
   onClaimProfile?: (
     profileId: string,
     credentials: {
@@ -99,12 +100,100 @@ interface ProfileViewProps {
   ) => Promise<void>;
 }
 
+export const ProfileViewSkeleton: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
+  <div className="max-w-xl mx-auto pb-24 bg-white border-x border-slate-200 min-h-screen animate-pulse">
+    {/* Top Header Simulation */}
+    <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        {onBack ? (
+          <button onClick={onBack} className="p-1 rounded-full text-slate-700 hover:bg-slate-100">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-slate-200" />
+        )}
+        <div className="space-y-1">
+          <div className="w-28 h-4 bg-slate-200 rounded" />
+          <div className="w-14 h-2.5 bg-slate-100 rounded" />
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded-full bg-slate-100" />
+    </div>
+
+    {/* Profile Card Simulation */}
+    <div className="p-4 space-y-4">
+      <div className="flex items-start justify-between">
+        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-slate-200 ring-4 ring-white" />
+        <div className="w-28 h-9 bg-slate-200 rounded-full" />
+      </div>
+
+      <div className="space-y-1.5 pt-1">
+        <div className="w-40 h-5 bg-slate-200 rounded" />
+        <div className="w-28 h-3.5 bg-slate-100 rounded" />
+      </div>
+
+      {/* Bio lines */}
+      <div className="space-y-2 pt-1">
+        <div className="w-full h-3.5 bg-slate-100 rounded" />
+        <div className="w-[75%] h-3.5 bg-slate-100 rounded" />
+      </div>
+
+      {/* Meta Location / Date */}
+      <div className="flex items-center gap-4 pt-1">
+        <div className="w-28 h-3 bg-slate-100 rounded" />
+        <div className="w-32 h-3 bg-slate-100 rounded" />
+      </div>
+
+      {/* Stats Counter Row */}
+      <div className="flex items-center gap-6 pt-2 pb-2">
+        <div className="w-16 h-4 bg-slate-200 rounded" />
+        <div className="w-20 h-4 bg-slate-200 rounded" />
+        <div className="w-20 h-4 bg-slate-200 rounded" />
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-100 pt-2">
+        <div className="w-1/3 py-3 flex justify-center">
+          <div className="w-16 h-4 bg-slate-200 rounded" />
+        </div>
+        <div className="w-1/3 py-3 flex justify-center">
+          <div className="w-16 h-4 bg-slate-100 rounded" />
+        </div>
+        <div className="w-1/3 py-3 flex justify-center">
+          <div className="w-16 h-4 bg-slate-100 rounded" />
+        </div>
+      </div>
+
+      {/* Feed items skeleton simulation */}
+      <div className="space-y-4 pt-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="p-3 border-b border-slate-100 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-slate-200" />
+              <div className="space-y-1">
+                <div className="w-28 h-3.5 bg-slate-200 rounded" />
+                <div className="w-16 h-2.5 bg-slate-100 rounded" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="w-full h-3.5 bg-slate-100 rounded" />
+              <div className="w-3/4 h-3.5 bg-slate-100 rounded" />
+            </div>
+            <div className="w-full h-36 bg-slate-100 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 export const ProfileView: React.FC<ProfileViewProps> = ({
   userProfile,
   activeUser,
   userReports,
   allReports = [],
   isLoggedIn = false,
+  loading = false,
   onBack,
   onNavigateToEditProfile,
   onNavigateToVerification,
@@ -596,6 +685,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
+  if (loading) {
+    return <ProfileViewSkeleton onBack={onBack} />;
+  }
+
   // If user clicked System Score, Public Rating, or Reviews, render the dedicated EvaluationDetailView page
   if (evaluationViewTab) {
     return (
@@ -1048,11 +1141,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 const currentDeptLevel =
                   report.departmentStatusLevel ?? (hasDeptClaimed ? 1 : 0);
                 const isLiked =
-                  report.likedBy?.includes(activeUser?.id) || false;
+                  report.likedBy?.includes(userProfile?.id) || false;
                 const isReReported =
-                  report.reReportedBy?.includes(activeUser?.id) || false;
+                  report.reReportedBy?.includes(userProfile?.id) || false;
                 const isBookmarked =
-                  activeUser?.savedReports?.includes(report.id) || false;
+                  userProfile?.savedReports?.includes(report.id) || false;
+                const isSaved = isBookmarked;
 
                 return (
                   <article
@@ -1212,7 +1306,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (onSelectPost) onSelectPost(report.id);
+                                if (onNavigateToPost) onNavigateToPost(report.id);
                               }}
                               className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer"
                             >
@@ -1240,7 +1334,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (onLike) onLike(report.id);
+                                if (onLikeReport) onLikeReport(report.id);
                               }}
                               className={`flex items-center gap-2 transition-colors cursor-pointer ${
                                 isLiked ? "text-rose-500 font-extrabold" : "hover:text-white"
@@ -1257,17 +1351,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                                 if (onBookmark) onBookmark(report.id);
                               }}
                               className={`flex items-center gap-2 transition-colors cursor-pointer hover:text-white ${
-                                isSaved ? "text-blue-400 font-extrabold" : ""
+                                isBookmarked ? "text-blue-400 font-extrabold" : ""
                               }`}
                             >
                               <Bookmark
-                                className={`w-4 h-4 ${isSaved ? "fill-blue-400 text-blue-400" : ""}`}
+                                className={`w-4 h-4 ${isBookmarked ? "fill-blue-400 text-blue-400" : ""}`}
                               />
                             </button>
 
                             {/* Share */}
                             <button
-                              onClick={(e) => handleShare(e, report)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const url = `${window.location.origin}/post/${report.id}`;
+                                navigator.clipboard?.writeText(url);
+                                showToast("Post link copied to clipboard!");
+                              }}
                               className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
                               title="Share"
                             >

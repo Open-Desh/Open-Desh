@@ -466,3 +466,170 @@ export async function uploadAvatarToR2(
     throw err;
   }
 }
+
+/**
+ * Compresses an official department resolution proof / after-fix photo
+ */
+export async function compressResolutionProofImage(
+  file: File,
+  maxDimension = 1600,
+  quality = 0.84
+): Promise<CompressedImageResult> {
+  return compressReportImage(file, maxDimension, quality);
+}
+
+export interface UploadResolutionImageResponse {
+  success: boolean;
+  url: string;
+  r2Key?: string;
+  bucket?: string;
+  sizeKb?: number;
+  error?: string;
+}
+
+/**
+ * Uploads an official resolution proof image to Cloudflare R2 `resolutions/` folder
+ */
+export async function uploadResolutionImageToR2(
+  dataUrlOrBlob: string | Blob,
+  fileName = "resolution.webp",
+  deptId = "department",
+  reportId = "rep"
+): Promise<UploadResolutionImageResponse> {
+  try {
+    let base64Data: string;
+    let contentType = "image/webp";
+
+    if (typeof dataUrlOrBlob === "string") {
+      base64Data = dataUrlOrBlob;
+      const match = dataUrlOrBlob.match(/^data:([^;]+);base64,/);
+      if (match) {
+        contentType = match[1];
+      }
+    } else {
+      base64Data = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onloadend = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(dataUrlOrBlob);
+      });
+      contentType = dataUrlOrBlob.type || "image/webp";
+    }
+
+    const response = await fetch("/api/upload-resolution-image", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image: base64Data,
+        fileName,
+        deptId,
+        reportId,
+        contentType,
+      }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server responded with ${response.status}`);
+    }
+
+    const result = await response.json();
+    return {
+      success: true,
+      url: result.url || (typeof dataUrlOrBlob === "string" ? dataUrlOrBlob : ""),
+      r2Key: result.r2Key,
+      bucket: result.bucket || "report-post",
+      sizeKb: result.sizeKb,
+    };
+  } catch (err: any) {
+    console.warn("Cloudflare R2 Resolution upload notice:", err);
+    if (typeof dataUrlOrBlob === "string") {
+      return {
+        success: true,
+        url: dataUrlOrBlob,
+        error: err.message,
+      };
+    }
+    throw err;
+  }
+}
+
+export interface UploadVerificationDocResponse {
+  success: boolean;
+  url: string;
+  r2Key?: string;
+  bucket?: string;
+  sizeKb?: number;
+  error?: string;
+}
+
+/**
+ * Uploads a verification identity document / KYC proof to Cloudflare R2 `verifications/` folder
+ */
+export async function uploadVerificationDocToR2(
+  dataUrlOrBlob: string | Blob,
+  fileName = "document.webp",
+  userId = "user",
+  docType = "doc"
+): Promise<UploadVerificationDocResponse> {
+  try {
+    let base64Data: string;
+    let contentType = "image/webp";
+
+    if (typeof dataUrlOrBlob === "string") {
+      base64Data = dataUrlOrBlob;
+      const match = dataUrlOrBlob.match(/^data:([^;]+);base64,/);
+      if (match) {
+        contentType = match[1];
+      }
+    } else {
+      base64Data = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onloadend = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(dataUrlOrBlob);
+      });
+      contentType = dataUrlOrBlob.type || "image/webp";
+    }
+
+    const response = await fetch("/api/upload-verification-doc", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image: base64Data,
+        fileName,
+        userId,
+        docType,
+        contentType,
+      }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.error || `Server responded with ${response.status}`);
+    }
+
+    const result = await response.json();
+    return {
+      success: true,
+      url: result.url || (typeof dataUrlOrBlob === "string" ? dataUrlOrBlob : ""),
+      r2Key: result.r2Key,
+      bucket: result.bucket || "profile-dp",
+      sizeKb: result.sizeKb,
+    };
+  } catch (err: any) {
+    console.warn("Cloudflare R2 Verification doc upload notice:", err);
+    if (typeof dataUrlOrBlob === "string") {
+      return {
+        success: true,
+        url: dataUrlOrBlob,
+        error: err.message,
+      };
+    }
+    throw err;
+  }
+}

@@ -153,13 +153,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         icon: Shield,
       },
       {
-        id: "install_app",
-        title: "Install Open Desh App (PWA)",
-        description:
-          "Install the progressive web app for 1-click home screen launch, push notifications, and offline mode.",
-        icon: Download,
-      },
-      {
         id: "legal_notices",
         title: "Legal notices & Indian compliance",
         description:
@@ -224,13 +217,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               return (
                 <button
                   key={section.id}
-                  onClick={() => {
-                    if (section.id === "install_app") {
-                      if (onOpenInstallModal) onOpenInstallModal();
-                      return;
-                    }
-                    setCurrentScreen(section.id);
-                  }}
+                  onClick={() => setCurrentScreen(section.id)}
                   className="w-full p-4 sm:p-5 flex items-start justify-between gap-3 text-left hover:bg-slate-50/80 transition-colors group cursor-pointer"
                 >
                   <div className="flex items-start gap-4 min-w-0">

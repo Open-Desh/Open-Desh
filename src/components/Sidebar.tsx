@@ -12,7 +12,6 @@ import {
   LogIn,
   LogOut,
   Languages,
-  Download,
 } from "lucide-react";
 import { UserProfile } from "../types.ts";
 import { useLanguage } from "../context/LanguageContext.tsx";
@@ -84,13 +83,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "budget", label: t("nav.budget", "Budget"), icon: IndianRupee },
     { id: "bookmark", label: t("nav.bookmark", "Bookmark"), icon: Bookmark },
     { id: "settings", label: t("nav.settings", "Setting & Privacy"), icon: Settings },
-    {
-      id: "install",
-      label: "Install App",
-      icon: Download,
-      isAction: true,
-      badge: "PWA",
-    },
     {
       id: "language",
       label: `${t("nav.language", "Language")} (${currentLanguageInfo.nativeName})`,
@@ -257,11 +249,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 id={`nav-item-${item.id}`}
                 onClick={() => {
-                  if (item.id === "install") {
-                    if (onOpenInstallModal) onOpenInstallModal();
-                    onCloseMobile();
-                    return;
-                  }
                   if (item.id === "language") {
                     openLanguageModal();
                     onCloseMobile();

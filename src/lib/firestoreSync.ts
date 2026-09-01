@@ -66,6 +66,22 @@ export async function getReportsDirect(maxLimit = 100): Promise<ReportIssue[]> {
   }
 }
 
+// 1b. Fetch Single Report by ID directly from Firestore
+export async function getReportByIdDirect(reportId: string): Promise<ReportIssue | null> {
+  if (!reportId) return null;
+  try {
+    const docRef = doc(db, "reports", reportId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as ReportIssue;
+    }
+    return null;
+  } catch (err) {
+    console.warn("Firestore single report fetch notice:", err);
+    return null;
+  }
+}
+
 // 2. Fetch Leaders directly from Firestore
 export async function getLeadersDirect(maxLimit = 100): Promise<Leader[]> {
   try {

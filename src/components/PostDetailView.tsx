@@ -38,9 +38,14 @@ import {
   cleanReportText,
   formatReportTimestamp,
 } from "../utils/reportUtils.ts";
+import {
+  compressResolutionProofImage,
+  uploadResolutionImageToR2,
+} from "../utils/imageCompressor.ts";
 
 interface PostDetailViewProps {
-  report: ReportIssue;
+  report?: ReportIssue | null;
+  loading?: boolean;
   userProfile: UserProfile;
   onBack: () => void;
   onLike: (id: string) => Promise<void>;
@@ -68,8 +73,99 @@ interface PostDetailViewProps {
   mutedUsers?: string[];
 }
 
+export const PostDetailSkeleton: React.FC<{ onBack?: () => void }> = ({ onBack }) => (
+  <div className="max-w-xl mx-auto pb-24 bg-white border-x border-slate-200 min-h-screen animate-pulse">
+    {/* Header */}
+    <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        {onBack ? (
+          <button onClick={onBack} className="p-1 rounded-full text-slate-700 hover:bg-slate-100">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-slate-200" />
+        )}
+        <div className="w-20 h-5 bg-slate-200 rounded-md" />
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-full bg-slate-100" />
+        <div className="w-8 h-8 rounded-full bg-slate-100" />
+      </div>
+    </div>
+
+    {/* Post Content Skeleton */}
+    <div className="p-4 space-y-4">
+      {/* Author info */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-full bg-slate-200" />
+          <div className="space-y-1.5">
+            <div className="w-28 h-4 bg-slate-200 rounded" />
+            <div className="w-20 h-3 bg-slate-100 rounded" />
+          </div>
+        </div>
+        <div className="w-16 h-6 bg-slate-100 rounded-full" />
+      </div>
+
+      {/* Post Text shimmer lines */}
+      <div className="space-y-2 pt-1">
+        <div className="w-full h-4 bg-slate-200 rounded" />
+        <div className="w-[90%] h-4 bg-slate-200 rounded" />
+        <div className="w-[60%] h-4 bg-slate-100 rounded" />
+      </div>
+
+      {/* Media Box shimmer */}
+      <div className="w-full h-56 bg-slate-200 rounded-xl" />
+
+      {/* Location / Tags */}
+      <div className="flex items-center gap-2 pt-1">
+        <div className="w-32 h-6 bg-slate-100 rounded-md" />
+        <div className="w-24 h-6 bg-slate-100 rounded-md" />
+      </div>
+
+      {/* SLA / Action tracker card */}
+      <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/70 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="w-36 h-4 bg-slate-200 rounded" />
+          <div className="w-16 h-4 bg-slate-200 rounded-full" />
+        </div>
+        <div className="grid grid-cols-4 gap-2 pt-1">
+          <div className="h-10 bg-slate-200/80 rounded-lg" />
+          <div className="h-10 bg-slate-100 rounded-lg" />
+          <div className="h-10 bg-slate-100 rounded-lg" />
+          <div className="h-10 bg-slate-100 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Action Bar */}
+      <div className="flex items-center justify-around py-3 border-y border-slate-100 text-slate-300">
+        <div className="w-6 h-6 bg-slate-100 rounded-full" />
+        <div className="w-6 h-6 bg-slate-100 rounded-full" />
+        <div className="w-6 h-6 bg-slate-100 rounded-full" />
+        <div className="w-6 h-6 bg-slate-100 rounded-full" />
+      </div>
+
+      {/* Replies Thread Skeleton */}
+      <div className="pt-2 space-y-4">
+        <div className="w-24 h-4 bg-slate-200 rounded" />
+        {[1, 2].map((idx) => (
+          <div key={idx} className="flex gap-3 pt-2">
+            <div className="w-9 h-9 rounded-full bg-slate-200 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="w-28 h-3.5 bg-slate-200 rounded" />
+              <div className="w-[85%] h-3 bg-slate-100 rounded" />
+              <div className="w-[50%] h-3 bg-slate-100 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 export const PostDetailView: React.FC<PostDetailViewProps> = ({
   report,
+  loading = false,
   userProfile,
   onBack,
   onLike,
@@ -86,6 +182,45 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   onMuteUser,
   mutedUsers = [],
 }) => {
+  if (loading) {
+    return <PostDetailSkeleton onBack={onBack} />;
+  }
+
+  if (!report || report.id === "unknown" || report.text === "Post not found or has been moved.") {
+    return (
+      <div className="max-w-xl mx-auto pb-24 bg-white border-x border-slate-200 min-h-screen flex flex-col">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="p-2 -ml-1 rounded-full text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-base font-bold text-slate-900 tracking-tight">Report</h1>
+        </div>
+
+        {/* Clean Post Not Found Message */}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto">
+          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
+            <MessageCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Post Unavailable</h2>
+          <p className="text-sm text-slate-500 max-w-xs mb-6">
+            This grievance report may have been resolved, removed, or the link may be incorrect.
+          </p>
+          <button
+            onClick={onBack}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-full shadow-sm transition-all cursor-pointer"
+          >
+            Explore Public Feed
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const [replyText, setReplyText] = useState("");
   const [replyImage, setReplyImage] = useState<string | null>(null);
   const [focusedReplyIdStack, setFocusedReplyIdStack] = useState<string[]>([]);
@@ -94,6 +229,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
   const [copiedToast, setCopiedToast] = useState(false);
   const [statusUpdateNotes, setStatusUpdateNotes] = useState("");
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -705,11 +841,11 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
 
                 {/* Share */}
                 <button
-                  onClick={(e) => handleShare(e, report)}
+                  onClick={handleShare}
                   className="flex items-center gap-1.5 transition-colors cursor-pointer hover:text-white"
                   title="Share"
                 >
-                  {copiedId === report.id ? (
+                  {copiedToast ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   ) : (
                     <Share2 className="w-4 h-4" />
@@ -905,9 +1041,15 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                             alt="Proof preview"
                             className="w-full h-28 object-cover"
                           />
-                          <span className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded">
-                            Proof Attached
+                          <span className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Proof Attached (R2 Ready)
                           </span>
+                        </div>
+                      ) : isUploadingProof ? (
+                        <div className="w-full py-3 bg-blue-50/80 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2">
+                          <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          <span>Compressing & uploading to Cloudflare R2...</span>
                         </div>
                       ) : (
                         <button
@@ -916,7 +1058,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                           className="w-full py-2 bg-slate-50 hover:bg-blue-50 text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
                           <ImageIcon className="w-4 h-4" />
-                          <span>Select After-Fix Photo</span>
+                          <span>Select After-Fix Photo (Uploads to R2)</span>
                         </button>
                       )}
 
@@ -925,14 +1067,29 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setProofImage(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              setIsUploadingProof(true);
+                              const compressed = await compressResolutionProofImage(file, 1600, 0.84);
+                              const res = await uploadResolutionImageToR2(
+                                compressed.dataUrl,
+                                file.name || "resolution_proof.webp",
+                                userProfile.departmentDetails?.name || userProfile.id,
+                                report.id
+                              );
+                              setProofImage(res.url || compressed.dataUrl);
+                            } catch (uploadErr) {
+                              console.warn("Proof R2 upload fallback:", uploadErr);
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setProofImage(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            } finally {
+                              setIsUploadingProof(false);
+                            }
                           }
                         }}
                       />
