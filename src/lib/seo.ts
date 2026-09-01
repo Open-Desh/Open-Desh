@@ -48,7 +48,11 @@ export function updateSeo(config: SeoConfig = {}): void {
   const title = config.title ? `${config.title} | Open Desh` : DEFAULT_SEO.title;
   const description = config.description || DEFAULT_SEO.description;
   const keywords = config.keywords && config.keywords.length > 0 ? config.keywords.join(", ") : DEFAULT_SEO.keywords.join(", ");
-  const image = config.image || DEFAULT_SEO.image;
+  let image = config.image || (typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "https://opendesh.in/logo.png");
+  if (image && !image.startsWith("http://") && !image.startsWith("https://")) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://opendesh.in";
+    image = `${origin}${image.startsWith("/") ? "" : "/"}${image}`;
+  }
   const url = config.url || (typeof window !== "undefined" ? window.location.href : DEFAULT_SEO.url);
   const type = config.type || DEFAULT_SEO.type;
   const author = config.author || DEFAULT_SEO.author;
@@ -217,6 +221,7 @@ export function buildReportSeo(report: {
   authorName: string;
   authorUsername: string;
   location?: { address?: string };
+  imageUrl?: string;
   images?: string[];
   createdAt?: string | number;
   status?: string;
@@ -227,7 +232,8 @@ export function buildReportSeo(report: {
   const title = `[${report.category}] ${shortText} — ${address}`;
   const description = `Civic Grievance Report #${report.id}: "${report.text}" reported by @${report.authorUsername} at ${address}. Status: ${report.status || "OPEN"}. Track official department response on Open Desh.`;
 
-  const imageUrl = report.images && report.images.length > 0 ? report.images[0] : DEFAULT_SEO.image;
+  const fallbackLogo = typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "https://opendesh.in/logo.png";
+  const imageUrl = (report.images && report.images.length > 0 ? report.images[0] : report.imageUrl) || fallbackLogo;
 
   const structuredData: Record<string, any> = {
     "@context": "https://schema.org",

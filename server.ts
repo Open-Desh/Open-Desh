@@ -1238,10 +1238,90 @@ async function startServer() {
     res.send(xml);
   });
 
+  // Explicit Direct Static Logo Endpoint for Crawlers & Social Previews
+  app.get(["/logo.png", "/public/logo.png"], (req, res) => {
+    const logoPath = path.join(process.cwd(), "public", "logo.png");
+    if (fs.existsSync(logoPath)) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+      return res.sendFile(logoPath);
+    }
+    const svgPath = path.join(process.cwd(), "assets", "logo.svg");
+    if (fs.existsSync(svgPath)) {
+      res.setHeader("Content-Type", "image/svg+xml");
+      return res.sendFile(svgPath);
+    }
+    res.status(404).send("Logo not found");
+  });
+
+  // Dynamic Image Endpoint for OpenGraph / WhatsApp / Twitter previews: /api/post-image/:id
+  app.get("/api/post-image/:id", async (req, res) => {
+    const reportId = req.params.id;
+    let imageUrl = "";
+
+    // 1. Check in-memory database
+    const localReport = reportsDatabase.find((r) => r.id === reportId);
+    if (localReport) {
+      imageUrl = localReport.imageUrl || (localReport.images && localReport.images[0]) || "";
+    }
+
+    // 2. If not found in memory, query Firestore REST API
+    if (!imageUrl) {
+      try {
+        const firestoreResp = await fetch(
+          `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents/reports/${reportId}`
+        );
+        if (firestoreResp.ok) {
+          const docData = await firestoreResp.json();
+          if (docData?.fields) {
+            imageUrl = docData.fields.imageUrl?.stringValue || "";
+            if (!imageUrl && docData.fields.images?.arrayValue?.values?.length > 0) {
+              imageUrl = docData.fields.images.arrayValue.values[0]?.stringValue || "";
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Error fetching post image from Firestore for SSR:", err);
+      }
+    }
+
+    // 3. If image exists
+    if (imageUrl) {
+      // If external HTTP / Cloudflare R2 URL, redirect directly
+      if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+        return res.redirect(302, imageUrl);
+      }
+      // If base64 data URL
+      if (imageUrl.startsWith("data:image/")) {
+        try {
+          const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+          if (match) {
+            const mimeType = match[1];
+            const buffer = Buffer.from(match[2], "base64");
+            res.setHeader("Content-Type", mimeType);
+            res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+            return res.send(buffer);
+          }
+        } catch (err) {
+          console.warn("Failed to parse base64 image:", err);
+        }
+      }
+    }
+
+    // 4. Default Fallback: Always serve official Open Desh Header Logo
+    const defaultLogo = path.join(process.cwd(), "public", "logo.png");
+    if (fs.existsSync(defaultLogo)) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+      return res.sendFile(defaultLogo);
+    }
+    return res.redirect(302, "/logo.png");
+  });
+
   // SSR Open Graph & Twitter Card Pre-Renderer for Social Media Crawlers (WhatsApp, Facebook, Twitter/X, Telegram, LinkedIn, Discord)
-  app.get(["/post/:id", "/leader/:id", "/u/:username", "/help/:slug"], (req, res, next) => {
+  app.get(["/post/:id", "/leader/:id", "/u/:username", "/help/:slug"], async (req, res, next) => {
     const userAgent = (req.headers["user-agent"] || "").toLowerCase();
-    const isCrawler = /whatsapp|facebookexternalhit|twitterbot|telegrambot|linkedinbot|discordbot|slackbot|googlebot|bingbot|applebot/i.test(
+    const isCrawler = /whatsapp|facebookexternalhit|twitterbot|telegrambot|linkedinbot|discordbot|slackbot|googlebot|bingbot|applebot|meta-externalagent/i.test(
       userAgent
     );
 
@@ -1261,23 +1341,75 @@ async function startServer() {
       }
 
       let html = fs.readFileSync(htmlPath, "utf8");
-      const host = req.get("host") || "opendesh.in";
-      const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const host = (req.headers["x-forwarded-host"] as string) || req.get("host") || "opendesh.in";
+      const protocol = (req.headers["x-forwarded-proto"] as string) || (req.protocol === "https" ? "https" : "http");
       const fullUrl = `${protocol}://${host}${req.originalUrl}`;
 
       let metaTitle = "Open Desh — Open Voice, Open Desh";
       let metaDesc = "Open Voice, Open Desh. Track elected leaders, report real-time municipal grievances with live GPS, and audit public works transparently.";
       let metaImage = `${protocol}://${host}/logo.png`;
 
-      // 1. Post Preview
+      // 1. Post Preview (Query local or Firestore REST API)
       if (req.originalUrl.startsWith("/post/")) {
         const postId = req.params.id;
-        const report = reportsDatabase.find((r) => r.id === postId);
-        if (report) {
-          metaTitle = `[${report.category}] ${report.authorName} on Open Desh`;
-          metaDesc = `"${report.text}" — Reported at ${report.location?.address || "India"}. Track official government action on Open Desh.`;
-          if (report.images && report.images.length > 0) {
-            metaImage = report.images[0].startsWith("http") ? report.images[0] : `${protocol}://${host}${report.images[0]}`;
+        let reportText = "";
+        let reportCategory = "Civic Grievance";
+        let reportAuthor = "Citizen";
+        let reportLocation = "India";
+        let hasImage = false;
+        let directImageUrl = "";
+
+        // Check local memory first
+        const localReport = reportsDatabase.find((r) => r.id === postId);
+        if (localReport) {
+          reportText = localReport.text || "";
+          reportCategory = localReport.category || "Civic Grievance";
+          reportAuthor = localReport.authorName || "Citizen";
+          reportLocation = localReport.location?.address || localReport.location?.city || "India";
+          if (localReport.imageUrl || (localReport.images && localReport.images.length > 0)) {
+            hasImage = true;
+            directImageUrl = localReport.imageUrl || localReport.images?.[0] || "";
+          }
+        } else {
+          // Fetch from Firestore REST API
+          try {
+            const firestoreResp = await fetch(
+              `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents/reports/${postId}`
+            );
+            if (firestoreResp.ok) {
+              const docData = await firestoreResp.json();
+              if (docData?.fields) {
+                const f = docData.fields;
+                reportAuthor = f.authorName?.stringValue || "Citizen";
+                reportCategory = f.category?.stringValue || "Civic Grievance";
+                reportText = f.text?.stringValue || "";
+                reportLocation = f.location?.mapValue?.fields?.address?.stringValue || f.location?.mapValue?.fields?.city?.stringValue || "India";
+                const img = f.imageUrl?.stringValue || (f.images?.arrayValue?.values?.[0]?.stringValue) || "";
+                if (img) {
+                  hasImage = true;
+                  directImageUrl = img;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn("Firestore fetch error in SSR /post/:id:", err);
+          }
+        }
+
+        if (reportText || reportAuthor !== "Citizen") {
+          metaTitle = `[${reportCategory}] ${reportAuthor} on Open Desh`;
+          const cleanExcerpt = (reportText || `Civic grievance reported under ${reportCategory}`).replace(/[\r\n]+/g, " ").slice(0, 180);
+          metaDesc = `"${cleanExcerpt}" — Reported at ${reportLocation}. Track real-time government resolution on Open Desh.`;
+          
+          if (hasImage) {
+            if (directImageUrl.startsWith("http://") || directImageUrl.startsWith("https://")) {
+              metaImage = directImageUrl;
+            } else {
+              metaImage = `${protocol}://${host}/api/post-image/${postId}`;
+            }
+          } else {
+            // Explicit Fallback to Official Header Logo
+            metaImage = `${protocol}://${host}/logo.png`;
           }
         }
       }
@@ -1285,12 +1417,39 @@ async function startServer() {
       // 2. Leader Preview
       if (req.originalUrl.startsWith("/leader/")) {
         const leaderId = req.params.id;
-        const leader = leadersDatabase.find((l) => l.id === leaderId);
+        let leader = leadersDatabase.find((l) => l.id === leaderId);
+        if (!leader) {
+          try {
+            const firestoreResp = await fetch(
+              `https://firestore.googleapis.com/v1/projects/gen-lang-client-0513654546/databases/(default)/documents/leaders/${leaderId}`
+            );
+            if (firestoreResp.ok) {
+              const docData = await firestoreResp.json();
+              if (docData?.fields) {
+                const f = docData.fields;
+                leader = {
+                  id: leaderId,
+                  name: f.name?.stringValue || "Leader",
+                  party: f.party?.stringValue || "Independent",
+                  constituency: f.constituency?.stringValue || "Constituency",
+                  systemScore: Number(f.systemScore?.integerValue || f.systemScore?.doubleValue || 75),
+                  publicRating: Number(f.publicRating?.doubleValue || f.publicRating?.integerValue || 4.2),
+                  image: f.image?.stringValue || "",
+                } as any;
+              }
+            }
+          } catch (err) {
+            console.warn("Firestore leader fetch error:", err);
+          }
+        }
+
         if (leader) {
           metaTitle = `${leader.name} (${leader.constituency}, ${leader.party}) — Performance Scorecard`;
           metaDesc = `Official Score: ${leader.systemScore}/100 • Citizen Rating: ${leader.publicRating || 4.2}★ • Track public works and grievances on Open Desh.`;
           if (leader.image) {
-            metaImage = leader.image.startsWith("http") ? leader.image : `${protocol}://${host}${leader.image}`;
+            metaImage = leader.image.startsWith("http") ? leader.image : `${protocol}://${host}${leader.image.startsWith("/") ? "" : "/"}${leader.image}`;
+          } else {
+            metaImage = `${protocol}://${host}/logo.png`;
           }
         }
       }
@@ -1303,7 +1462,9 @@ async function startServer() {
           metaTitle = `${user.fullName} (@${user.username}) — Verified Profile`;
           metaDesc = user.bio || `View civic reports and activity by ${user.fullName} on Open Desh.`;
           if (user.avatarUrl) {
-            metaImage = user.avatarUrl.startsWith("http") ? user.avatarUrl : `${protocol}://${host}${user.avatarUrl}`;
+            metaImage = user.avatarUrl.startsWith("http") ? user.avatarUrl : `${protocol}://${host}${user.avatarUrl.startsWith("/") ? "" : "/"}${user.avatarUrl}`;
+          } else {
+            metaImage = `${protocol}://${host}/logo.png`;
           }
         }
       }
@@ -1315,18 +1476,35 @@ async function startServer() {
         if (article) {
           metaTitle = `${article.title} — Legal RTI & Civic Guide`;
           metaDesc = article.summary || article.englishSummary || "Citizen rights and municipal SLA guide on Open Desh.";
+          metaImage = `${protocol}://${host}/logo.png`;
         }
       }
 
+      // Sanitize text for HTML attributes
+      const escapeAttr = (str: string) =>
+        (str || "")
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      const safeTitle = escapeAttr(metaTitle);
+      const safeDesc = escapeAttr(metaDesc);
+      const safeImage = metaImage.startsWith("http")
+        ? metaImage
+        : `${protocol}://${host}${metaImage.startsWith("/") ? "" : "/"}${metaImage}`;
+
       // Inject dynamic meta tags into HTML
-      html = html.replace(/<title>.*?<\/title>/gi, `<title>${metaTitle} | Open Desh</title>`);
-      html = html.replace(/<meta property="og:title" content=".*?" \/>/gi, `<meta property="og:title" content="${metaTitle} | Open Desh" />`);
-      html = html.replace(/<meta property="og:description" content=".*?" \/>/gi, `<meta property="og:description" content="${metaDesc}" />`);
-      html = html.replace(/<meta property="og:image" content=".*?" \/>/gi, `<meta property="og:image" content="${metaImage}" />`);
+      html = html.replace(/<title>.*?<\/title>/gi, `<title>${safeTitle} | Open Desh</title>`);
+      html = html.replace(/<meta property="og:title" content=".*?" \/>/gi, `<meta property="og:title" content="${safeTitle} | Open Desh" />`);
+      html = html.replace(/<meta property="og:description" content=".*?" \/>/gi, `<meta property="og:description" content="${safeDesc}" />`);
+      html = html.replace(/<meta property="og:image" content=".*?" \/>/gi, `<meta property="og:image" content="${safeImage}" />`);
+      html = html.replace(/<meta property="og:image:secure_url" content=".*?" \/>/gi, `<meta property="og:image:secure_url" content="${safeImage}" />`);
       html = html.replace(/<meta property="og:url" content=".*?" \/>/gi, `<meta property="og:url" content="${fullUrl}" />`);
-      html = html.replace(/<meta name="twitter:title" content=".*?" \/>/gi, `<meta name="twitter:title" content="${metaTitle} | Open Desh" />`);
-      html = html.replace(/<meta name="twitter:description" content=".*?" \/>/gi, `<meta name="twitter:description" content="${metaDesc}" />`);
-      html = html.replace(/<meta name="twitter:image" content=".*?" \/>/gi, `<meta name="twitter:image" content="${metaImage}" />`);
+      html = html.replace(/<meta name="twitter:title" content=".*?" \/>/gi, `<meta name="twitter:title" content="${safeTitle} | Open Desh" />`);
+      html = html.replace(/<meta name="twitter:description" content=".*?" \/>/gi, `<meta name="twitter:description" content="${safeDesc}" />`);
+      html = html.replace(/<meta name="twitter:image" content=".*?" \/>/gi, `<meta name="twitter:image" content="${safeImage}" />`);
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(html);
