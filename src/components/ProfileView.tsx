@@ -1214,7 +1214,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                             })()}
 
                             {report.authorBadge &&
-                              isReportAuthorVerified(report) && (
+                              !["verified citizen", "citizen", "verified resident"].includes(
+                                report.authorBadge.toLowerCase()
+                              ) &&
+                              isReportAuthorVerified(report, userProfile) && (
                                 <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
                                   {report.authorBadge}
                                 </span>
@@ -1987,7 +1990,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       @{headerUsername}
                     </p>
                     {userProfile.verified && (
-                      <CategoryVerifiedTick category={userProfile.category} size="xs" />
+                      <CategoryVerifiedTick
+                        category={
+                          userProfile.verifiedCategory ||
+                          (userProfile.verified ? userProfile.category : undefined) ||
+                          "citizen"
+                        }
+                        size="xs"
+                      />
                     )}
                   </div>
                 </div>

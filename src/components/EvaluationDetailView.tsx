@@ -227,7 +227,14 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                 {t("eval.headerTitle", "Performance Index")}
               </h1>
               {targetProfile.verified === true && (
-                <CategoryVerifiedTick category={targetProfile.category} size="xs" />
+                <CategoryVerifiedTick
+                  category={
+                    targetProfile.verifiedCategory ||
+                    (targetProfile.verified ? targetProfile.category : undefined) ||
+                    "citizen"
+                  }
+                  size="xs"
+                />
               )}
             </div>
             <p className="text-xs text-slate-500 font-medium leading-none mt-0.5">
@@ -273,7 +280,14 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
                   {targetProfile.fullName}
                 </h2>
                 {targetProfile.verified === true && (
-                  <CategoryVerifiedTick category={targetProfile.category} size="xs" />
+                  <CategoryVerifiedTick
+                    category={
+                      targetProfile.verifiedCategory ||
+                      (targetProfile.verified ? targetProfile.category : undefined) ||
+                      "citizen"
+                    }
+                    size="xs"
+                  />
                 )}
               </div>
               <p className="text-xs text-blue-100 font-medium truncate">

@@ -264,6 +264,7 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
       location?: string;
       category: UserCategory;
       verified: boolean;
+      verifiedCategory?: UserCategory;
       positionTitle?: string;
       partyOrDept?: string;
       systemScore?: number;
@@ -307,8 +308,9 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
               l.constituency || l.location || "Constituency"
             }.`,
           location: l.constituency || l.location,
-          category: "representative",
+          category: "representative" as UserCategory,
           verified: isVerified,
+          verifiedCategory: "representative" as UserCategory,
           positionTitle: l.title || "Elected Representative",
           partyOrDept: l.party,
           systemScore: validatedSystemScore,
@@ -362,6 +364,7 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
               u.location,
           category: u.category,
           verified: isUserVerified,
+          verifiedCategory: u.verifiedCategory || (isUserVerified ? u.category : undefined),
           positionTitle: isDept
             ? u.departmentDetails?.officialBadge || "Govt Department"
             : u.representativeDetails?.position || "Representative",
@@ -542,7 +545,14 @@ export const ConnectHubView: React.FC<ConnectHubViewProps> = ({
                           <h2 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate flex items-center gap-1 leading-tight">
                             <span>{item.fullName}</span>
                             {item.verified && (
-                              <CategoryVerifiedTick category={item.category} size="xs" />
+                              <CategoryVerifiedTick
+                                category={
+                                  item.verifiedCategory ||
+                                  (item.verified ? item.category : undefined) ||
+                                  "citizen"
+                                }
+                                size="xs"
+                              />
                             )}
                           </h2>
                         </div>

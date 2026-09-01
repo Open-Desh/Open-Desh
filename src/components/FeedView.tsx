@@ -318,11 +318,15 @@ export const FeedView: React.FC<FeedViewProps> = ({
                           </div>
                         );
                       })()}
-                      {report.authorBadge && isReportAuthorVerified(report) && (
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
-                          {report.authorBadge}
-                        </span>
-                      )}
+                      {report.authorBadge &&
+                        !["verified citizen", "citizen", "verified resident"].includes(
+                          report.authorBadge.toLowerCase()
+                        ) &&
+                        isReportAuthorVerified(report, userProfile) && (
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
+                            {report.authorBadge}
+                          </span>
+                        )}
                       {report.urgencyLevel === "Critical Emergency" && (
                         <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5 shrink-0">
                           <Flame className="w-2.5 h-2.5" /> Urgent

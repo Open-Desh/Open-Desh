@@ -33,7 +33,7 @@ const DEFAULT_SEO: Required<Omit<SeoConfig, "publishedTime" | "modifiedTime" | "
     "MLA Rating",
     "MP Performance Tracker"
   ],
-  image: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=1200&auto=format&fit=crop&q=80",
+  image: "/logo.png",
   url: typeof window !== "undefined" ? window.location.href : "https://opendesh.in",
   type: "website",
   author: "Open Desh Civic Initiative"

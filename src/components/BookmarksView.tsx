@@ -156,7 +156,11 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                           />
                         )}
                       </span>
-                      {reply.authorBadge && isReportAuthorVerified(reply, userProfile) && (
+                      {reply.authorBadge &&
+                        !["verified citizen", "citizen", "verified resident"].includes(
+                          reply.authorBadge.toLowerCase()
+                        ) &&
+                        isReportAuthorVerified(reply, userProfile) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                             reply.isOfficialIntervention
@@ -314,7 +318,11 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                             />
                           )}
                         </span>
-                        {report.authorBadge && isReportAuthorVerified(report, userProfile) && (
+                        {report.authorBadge &&
+                          !["verified citizen", "citizen", "verified resident"].includes(
+                            report.authorBadge.toLowerCase()
+                          ) &&
+                          isReportAuthorVerified(report, userProfile) && (
                           <span
                             className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                               report.authorCategory === "department"

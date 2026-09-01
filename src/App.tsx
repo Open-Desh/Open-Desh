@@ -716,7 +716,10 @@ export default function App() {
       authorAvatar: userProfile.avatarUrl,
       authorCategory: userProfile.category,
       authorVerified: Boolean(userProfile.verified),
-      authorBadge: userProfile.verified ? (userProfile.category === "citizen" ? "Verified Citizen" : undefined) : undefined,
+      authorVerifiedCategory:
+        userProfile.verifiedCategory ||
+        (userProfile.verified ? userProfile.category : undefined),
+      authorBadge: undefined,
       category: newReportData.category,
       text: newReportData.text,
       imageUrl: newReportData.imageUrl || (newReportData.images && newReportData.images[0]) || "",
@@ -948,7 +951,10 @@ export default function App() {
         authorAvatar: userProfile.avatarUrl,
         authorCategory: userProfile.category,
         authorVerified: Boolean(userProfile.verified),
-        authorBadge: userProfile.verified ? (userProfile.category === "citizen" ? "Verified Citizen" : undefined) : undefined,
+        authorVerifiedCategory:
+          userProfile.verifiedCategory ||
+          (userProfile.verified ? userProfile.category : undefined),
+        authorBadge: undefined,
         text,
         imageUrl: replyImage || undefined,
         timestamp: new Date().toISOString(),

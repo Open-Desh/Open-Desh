@@ -33,6 +33,7 @@ export const isReportAuthorVerified = (
     username?: string;
     verified?: boolean;
     category?: string;
+    verifiedCategory?: string;
   } | null
 ): boolean => {
   if (!item) return false;
@@ -71,17 +72,6 @@ export const isReportAuthorVerified = (
   if (
     item.authorCategory === "department" ||
     item.authorCategory === "representative"
-  ) {
-    return true;
-  }
-
-  // 4. If authorBadge has explicit verified text
-  if (
-    item.authorBadge &&
-    (item.authorBadge.toLowerCase().includes("verified") ||
-      item.authorBadge.toLowerCase().includes("official") ||
-      item.authorBadge.toLowerCase().includes("authority") ||
-      item.authorBadge.toLowerCase().includes("officer"))
   ) {
     return true;
   }

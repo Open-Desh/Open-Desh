@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import {
@@ -454,12 +455,16 @@ async function startServer() {
         authorUsername: currentUserProfile.username,
         authorAvatar: currentUserProfile.avatarUrl,
         authorCategory: currentUserProfile.category,
+        authorVerified: Boolean(currentUserProfile.verified),
+        authorVerifiedCategory:
+          currentUserProfile.verifiedCategory ||
+          (currentUserProfile.verified ? currentUserProfile.category : undefined),
         authorBadge:
           currentUserProfile.category === "representative"
             ? "Representative"
             : currentUserProfile.category === "department"
             ? "Official Officer"
-            : "Verified Resident",
+            : undefined,
         category: category || "Infrastructure",
         text,
         imageUrl: imagesList[0] || undefined,
@@ -551,11 +556,15 @@ async function startServer() {
       authorUsername: currentUserProfile.username,
       authorAvatar: currentUserProfile.avatarUrl,
       authorCategory: currentUserProfile.category,
+      authorVerified: Boolean(currentUserProfile.verified),
+      authorVerifiedCategory:
+        currentUserProfile.verifiedCategory ||
+        (currentUserProfile.verified ? currentUserProfile.category : undefined),
       authorBadge: isDeptUser
         ? deptBadge
         : currentUserProfile.category === "representative"
         ? "Representative"
-        : "Citizen",
+        : undefined,
       text,
       timestamp: "Just now",
       likesCount: 0,
@@ -1227,6 +1236,104 @@ async function startServer() {
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.send(xml);
+  });
+
+  // SSR Open Graph & Twitter Card Pre-Renderer for Social Media Crawlers (WhatsApp, Facebook, Twitter/X, Telegram, LinkedIn, Discord)
+  app.get(["/post/:id", "/leader/:id", "/u/:username", "/help/:slug"], (req, res, next) => {
+    const userAgent = (req.headers["user-agent"] || "").toLowerCase();
+    const isCrawler = /whatsapp|facebookexternalhit|twitterbot|telegrambot|linkedinbot|discordbot|slackbot|googlebot|bingbot|applebot/i.test(
+      userAgent
+    );
+
+    // If regular browser user in dev mode, let Vite handle client-side routing
+    if (!isCrawler && process.env.NODE_ENV !== "production") {
+      return next();
+    }
+
+    try {
+      const htmlPath =
+        process.env.NODE_ENV === "production"
+          ? path.join(process.cwd(), "dist", "index.html")
+          : path.join(process.cwd(), "index.html");
+
+      if (!fs.existsSync(htmlPath)) {
+        return next();
+      }
+
+      let html = fs.readFileSync(htmlPath, "utf8");
+      const host = req.get("host") || "opendesh.in";
+      const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const fullUrl = `${protocol}://${host}${req.originalUrl}`;
+
+      let metaTitle = "Open Desh — Open Voice, Open Desh";
+      let metaDesc = "Open Voice, Open Desh. Track elected leaders, report real-time municipal grievances with live GPS, and audit public works transparently.";
+      let metaImage = `${protocol}://${host}/logo.png`;
+
+      // 1. Post Preview
+      if (req.originalUrl.startsWith("/post/")) {
+        const postId = req.params.id;
+        const report = reportsDatabase.find((r) => r.id === postId);
+        if (report) {
+          metaTitle = `[${report.category}] ${report.authorName} on Open Desh`;
+          metaDesc = `"${report.text}" — Reported at ${report.location?.address || "India"}. Track official government action on Open Desh.`;
+          if (report.images && report.images.length > 0) {
+            metaImage = report.images[0].startsWith("http") ? report.images[0] : `${protocol}://${host}${report.images[0]}`;
+          }
+        }
+      }
+
+      // 2. Leader Preview
+      if (req.originalUrl.startsWith("/leader/")) {
+        const leaderId = req.params.id;
+        const leader = leadersDatabase.find((l) => l.id === leaderId);
+        if (leader) {
+          metaTitle = `${leader.name} (${leader.constituency}, ${leader.party}) — Performance Scorecard`;
+          metaDesc = `Official Score: ${leader.systemScore}/100 • Citizen Rating: ${leader.publicRating || 4.2}★ • Track public works and grievances on Open Desh.`;
+          if (leader.image) {
+            metaImage = leader.image.startsWith("http") ? leader.image : `${protocol}://${host}${leader.image}`;
+          }
+        }
+      }
+
+      // 3. User Profile Preview
+      if (req.originalUrl.startsWith("/u/")) {
+        const username = req.params.username;
+        const user = Object.values(usersDatabase).find((u) => u.username?.toLowerCase() === username?.toLowerCase());
+        if (user) {
+          metaTitle = `${user.fullName} (@${user.username}) — Verified Profile`;
+          metaDesc = user.bio || `View civic reports and activity by ${user.fullName} on Open Desh.`;
+          if (user.avatarUrl) {
+            metaImage = user.avatarUrl.startsWith("http") ? user.avatarUrl : `${protocol}://${host}${user.avatarUrl}`;
+          }
+        }
+      }
+
+      // 4. Help Article Preview
+      if (req.originalUrl.startsWith("/help/")) {
+        const slug = req.params.slug;
+        const article = HELP_ARTICLES.find((a) => a.slug === slug);
+        if (article) {
+          metaTitle = `${article.title} — Legal RTI & Civic Guide`;
+          metaDesc = article.summary || article.englishSummary || "Citizen rights and municipal SLA guide on Open Desh.";
+        }
+      }
+
+      // Inject dynamic meta tags into HTML
+      html = html.replace(/<title>.*?<\/title>/gi, `<title>${metaTitle} | Open Desh</title>`);
+      html = html.replace(/<meta property="og:title" content=".*?" \/>/gi, `<meta property="og:title" content="${metaTitle} | Open Desh" />`);
+      html = html.replace(/<meta property="og:description" content=".*?" \/>/gi, `<meta property="og:description" content="${metaDesc}" />`);
+      html = html.replace(/<meta property="og:image" content=".*?" \/>/gi, `<meta property="og:image" content="${metaImage}" />`);
+      html = html.replace(/<meta property="og:url" content=".*?" \/>/gi, `<meta property="og:url" content="${fullUrl}" />`);
+      html = html.replace(/<meta name="twitter:title" content=".*?" \/>/gi, `<meta name="twitter:title" content="${metaTitle} | Open Desh" />`);
+      html = html.replace(/<meta name="twitter:description" content=".*?" \/>/gi, `<meta name="twitter:description" content="${metaDesc}" />`);
+      html = html.replace(/<meta name="twitter:image" content=".*?" \/>/gi, `<meta name="twitter:image" content="${metaImage}" />`);
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (err) {
+      console.warn("SSR meta tag injection error:", err);
+      return next();
+    }
   });
 
   // Vite middleware for development & static serving for production

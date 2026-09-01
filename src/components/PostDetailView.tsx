@@ -513,17 +513,21 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                           />
                         )}
                       </span>
-                      {reply.authorBadge && isReportAuthorVerified(reply, userProfile) && (
-                        <span
-                          className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
-                            reply.isOfficialIntervention
-                              ? "bg-amber-100 text-amber-900 border border-amber-200"
-                              : "bg-blue-50 text-blue-700 border border-blue-100"
-                          }`}
-                        >
-                          {reply.authorBadge}
-                        </span>
-                      )}
+                      {reply.authorBadge &&
+                        !["verified citizen", "citizen", "verified resident"].includes(
+                          reply.authorBadge.toLowerCase()
+                        ) &&
+                        isReportAuthorVerified(reply, userProfile) && (
+                          <span
+                            className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
+                              reply.isOfficialIntervention
+                                ? "bg-amber-100 text-amber-900 border border-amber-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-100"
+                            }`}
+                          >
+                            {reply.authorBadge}
+                          </span>
+                        )}
                       <span className="text-xs text-slate-400 shrink-0">
                         {formatReportTimestamp(reply.createdAt || reply.timestamp)}
                       </span>
@@ -703,11 +707,15 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                   );
                 })()}
 
-                {report.authorBadge && isReportAuthorVerified(report) && (
-                  <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
-                    {report.authorBadge}
-                  </span>
-                )}
+                {report.authorBadge &&
+                  !["verified citizen", "citizen", "verified resident"].includes(
+                    report.authorBadge.toLowerCase()
+                  ) &&
+                  isReportAuthorVerified(report, userProfile) && (
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 shrink-0">
+                      {report.authorBadge}
+                    </span>
+                  )}
 
                 {report.urgencyLevel === "Critical Emergency" && (
                   <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 flex items-center gap-0.5 shrink-0">
@@ -1267,7 +1275,10 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       >
                         {currentFocusedReply.authorName}
                       </span>
-                      {currentFocusedReply.authorBadge && (
+                      {currentFocusedReply.authorBadge &&
+                        !["verified citizen", "citizen", "verified resident"].includes(
+                          currentFocusedReply.authorBadge.toLowerCase()
+                        ) && (
                         <span
                           className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
                             currentFocusedReply.isOfficialIntervention
